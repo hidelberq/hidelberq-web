@@ -3,7 +3,13 @@ services:
   web:
     image: nginx:latest
     ports:
-        - "80:80"
+      - "80:80"
+    depends_on:
+      - wiki
     volumes:
       - ./web/default.conf:/etc/nginx/conf.d/default.conf
       - ./data/html:/var/www/html
+  wiki:
+    image: wiki
+    ports:
+      - "8083:8083"
