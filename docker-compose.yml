@@ -12,4 +12,7 @@ services:
   wiki:
     image: wiki
     ports:
-      - "8083:8083"
+      - "8080:8080"
+    volumes:
+      - /tmp/wiki-item:/data/wiki-item/
+

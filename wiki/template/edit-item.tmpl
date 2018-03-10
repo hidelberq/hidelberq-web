@@ -1,0 +1,36 @@
+{{define "edit-item"}}<!DOCTYPE html>
+<html lang="ja">
+<head>
+    {{template "head"}}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.css">
+    <script src="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.js"></script>
+
+    <title>編集 {{.Title}}</title>
+</head>
+<body>
+<div class="container">
+    <form action="/wiki/{{.Title}}/edit" method="post">
+        <textarea id="markdown" name="markdown"></textarea>
+        <button type="submit" class="btn btn-primary" id="save">Save</button>
+    </form>
+    <script>
+        var simplemde = new SimpleMDE({
+            autosave: {
+                enabled: true,
+                uniqueId: "MyUniqueID",
+                delay: 1000,
+            },
+            element: document.getElementById("markdown"),
+            initialValue: '# タイトル (必須)',
+            shortcuts: {
+                drawTable: "Cmd-Alt-T"
+            },
+            showIcons: ["code", "table"],
+            spellChecker: false,
+        });
+        simplemde.value({{.Body}})
+    </script>
+</div>
+</body>
+</html>
+{{end}}

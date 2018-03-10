@@ -1,0 +1,25 @@
+{{define "wiki"}}<!DOCTYPE html>
+<html lang="ja">
+<head>
+    {{template "head"}}
+    <title>HIDEL Wiki</title>
+</head>
+<body>
+<div class="container">
+    <h1>HIDEL Wiki</h1>
+    <a href="/wiki-new-item"><p>新規作成</p></a>
+    <h2>項目一覧</h2>
+    <div class="list-group">
+    {{range .Items}}
+        <a href="wiki/{{.Title}}" class="list-group-item list-group-action flex-column align-items-start">
+            <div class="d-flex w-100 justify-content-between">
+                <h5 class="mb-1">{{.Title}}</h5>
+                <small>{{.ModTime}}</small>
+            </div>
+        </a>
+    {{end}}
+    </div>
+</div>
+</body>
+</html>
+{{end}}

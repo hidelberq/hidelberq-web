@@ -1,0 +1,36 @@
+{{define "new-item"}}<!DOCTYPE html>
+<html lang="ja">
+<head>
+    {{template "head"}}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.css">
+    <script src="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.js"></script>
+
+    <title> Wiki<</title>
+</head>
+<body>
+<div class="container">
+    <form action="/wiki-new-item" method="post">
+        <textarea id="markdown" name="markdown"></textarea>
+        <button type="submit" class="btn btn-primary" id="save">Save</button>
+    </form>
+    <a href="/wiki"><p>一覧に戻る</p></a>
+    <script>
+        var simplemde = new SimpleMDE({
+            autosave: {
+                enabled: true,
+                uniqueId: "MyUniqueID",
+                delay: 1000,
+            },
+            element: document.getElementById("markdown"),
+            initialValue: '# タイトル (必須)',
+            shortcuts: {
+                drawTable: "Cmd-Alt-T"
+            },
+            showIcons: ["code", "table"],
+            spellChecker: false,
+        });
+    </script>
+</div>
+</body>
+</html>
+{{end}}
