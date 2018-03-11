@@ -40,8 +40,12 @@ func main() {
 	r.HandleFunc("/wiki-new-item", handler.WikiNewItem)
 	r.Handle("/wiki/{item}", &handler.ItemHandler{Tmpl: masterTmpl, Dir: *src})
 	r.HandleFunc("/wiki/{item}/edit", handler.EditItem)
-	fmt.Println("Webサーバーを起動します...", *addr)
 
+	r.PathPrefix("/static/").
+		Handler(
+			http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
+
+	fmt.Println("Webサーバーを起動します...", *addr)
 	if err := http.ListenAndServe(*addr, r); err != nil {
 		log.Fatalln("Webサーバーの起動に失敗しました:", err)
 	}

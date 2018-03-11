@@ -9,9 +9,12 @@
 </head>
 <body>
 <div class="container">
-    {{.Body}}
+    <div id="content"></div>
     <a href="/wiki">一覧に戻る</a>
     <a href="{{.Title}}/edit">編集</a>
+    <script>
+        $('#content').html(marked({{.Body}}));
+    </script>
 </div>
 </body>
 </html>

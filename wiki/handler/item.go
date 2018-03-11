@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"gopkg.in/russross/blackfriday.v2"
 )
 
 type ItemHandler struct {
@@ -30,12 +29,11 @@ func (h *ItemHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	md := blackfriday.Run(i.Text)
 	respond(w, r, http.StatusOK, h.Tmpl, "item", struct {
 		Title string
-		Body  template.HTML
+		Body  string
 	}{
 		Title: item,
-		Body:  template.HTML(string(md)),
+		Body:  string(i.Text),
 	})
 }

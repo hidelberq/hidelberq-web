@@ -2,33 +2,63 @@
 <html lang="ja">
 <head>
     {{template "head"}}
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.css">
-    <script src="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.js"></script>
-
     <title>編集 {{.Title}}</title>
 </head>
 <body>
 <div class="container">
+    <h1>編集 {{.Title}}</h1>
     <form action="/wiki/{{.Title}}/edit" method="post">
-        <textarea id="markdown" name="markdown"></textarea>
+        <button
+                type="button"
+                id="mobilePreview"
+                class="btn btn-secondary btn-sm"
+                data-toggle="button"
+                aria-pressed="false"
+                autocomplete="off"
+                style="display: none">
+            Preview
+        </button>
+        <textarea id="markdown" name="markdown" class="form-control togglePreview" rows="20"></textarea>
+        <div id="content" class="togglePreview" style="display: none"></div>
         <button type="submit" class="btn btn-primary" id="save">Save</button>
     </form>
+
+    <script src="/static/js/marked.min.js"></script>
     <script>
-        var simplemde = new SimpleMDE({
-            autosave: {
-                enabled: true,
-                uniqueId: "MyUniqueID",
-                delay: 1000,
-            },
-            element: document.getElementById("markdown"),
-            initialValue: '# タイトル (必須)',
-            shortcuts: {
-                drawTable: "Cmd-Alt-T"
-            },
-            showIcons: ["code", "table"],
-            spellChecker: false,
-        });
-        simplemde.value({{.Body}})
+        var onMobile = function () {
+            $('#markdown').val({{.Body}});
+            $('#mobilePreview').show();
+            $('#mobilePreview').click(function () {
+                $('.togglePreview').toggle();
+                var markdownText = $('#markdown').val();
+                $('#content')
+                        .html(marked(markdownText));
+            });
+
+        };
+
+        var onPc = function () {
+            var simplemde = new SimpleMDE({
+                autosave: {
+                    enabled: true,
+                    uniqueId: "{{.Title}}",
+                    delay: 1000,
+                },
+                element: document.getElementById("markdown"),
+                initialValue: '# タイトル (必須)',
+                shortcuts: {
+                    drawTable: "Cmd-Alt-T"
+                },
+                showIcons: ["code", "table"],
+                spellChecker: false,
+            });
+        };
+
+        if( /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ) {
+            onMobile();
+        } else {
+            onPc();
+        }
     </script>
 </div>
 </body>

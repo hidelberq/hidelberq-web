@@ -14,7 +14,7 @@
         <a href="wiki/{{.Title}}" class="list-group-item list-group-action flex-column align-items-start">
             <div class="d-flex w-100 justify-content-between">
                 <h5 class="mb-1">{{.Title}}</h5>
-                <small>{{.ModTime}}</small>
+                <small>{{.ModTime.Format "2006-01-02T15:04:05"}}</small>
             </div>
         </a>
     {{end}}
