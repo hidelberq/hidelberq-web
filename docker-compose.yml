@@ -14,5 +14,5 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - /var/db/hidel-wiki/var/db/hidel-wiki
+      - /usr/share/hidel-wiki/item:/usr/share/hidel-wiki/item
 

@@ -6,4 +6,4 @@ WORKDIR /go/src/github.com/hidelbreq/hidelberq-web/wiki/
 RUN go-wrapper download gopkg.in/russross/blackfriday.v2 github.com/gorilla/mux
 RUN go-wrapper install github.com/hidelbreq/hidelberq-web/wiki/...
 
-CMD ["go", "run", "main.go", "-src", "/var/db/hidel-wiki"]
+CMD ["go", "run", "main.go", "-src", "/usr/share/hidel-wiki/item"]
