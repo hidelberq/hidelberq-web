@@ -3,63 +3,39 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 
 	"html/template"
 
 	"os"
 
-	"errors"
+	log "github.com/sirupsen/logrus"
 
-	"github.com/gorilla/mux"
-	"github.com/hidelbreq/hidelberq-web/wiki/handler"
+	"github.com/hidelbreq/hidelberq-web/wiki/config"
+	"github.com/hidelbreq/hidelberq-web/wiki/infrastructure"
+	"github.com/hidelbreq/hidelberq-web/wiki/interfaces/controller"
 )
 
-func main() {
-	var addr = flag.String("addr", ":8080", "Webサーバーのポート番号")
-	var src = flag.String("src", "wiki-item", "wiki項目の保存先のパス")
-	flag.Parse()
+var cnfg config.Config
 
-	if err := initDir(*src); err != nil {
-		log.Fatalln("wiki項目の保存先の初期化に失敗しました:", err)
-	}
+func init() {
+	flag.StringVar(&cnfg.Addr, "addr", ":8081", "Webサーバーのアドレス")
+	flag.StringVar(&cnfg.ItemPath, "src", "hidel-wiki-item", "項目の保存先のリポジトリのパス")
+	log.SetOutput(os.Stdout)
 
-	fmt.Println("wiki項目の保存先:", *src)
-	if err := handler.LoadWikiItems(*src); err != nil {
-		log.Fatalln("wikiの項目の読み込みに失敗しました:", err)
-	}
-
-	masterTmpl := template.Must(template.ParseGlob("template/*.tmpl"))
-	handler.Templates = masterTmpl
-
-	handler.Dir = *src
-
-	r := mux.NewRouter()
-	r.Handle("/wiki", &handler.WikiHandler{Tmpl: masterTmpl, Dir: *src})
-	r.HandleFunc("/wiki-new-item", handler.WikiNewItem)
-	r.Handle("/wiki/{item}", &handler.ItemHandler{Tmpl: masterTmpl, Dir: *src})
-	r.HandleFunc("/wiki/{item}/edit", handler.EditItem)
-
-	r.PathPrefix("/static/").
-		Handler(
-			http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
-
-	fmt.Println("Webサーバーを起動します...", *addr)
-	if err := http.ListenAndServe(*addr, r); err != nil {
-		log.Fatalln("Webサーバーの起動に失敗しました:", err)
-	}
 }
 
-func initDir(dir string) error {
-	file, err := os.Stat(dir)
-	if err != nil {
-		return os.MkdirAll(dir, 0777)
-	}
+func main() {
+	fmt.Println("wiki項目の保存先:", cnfg.ItemPath)
 
-	if !file.IsDir() {
-		return errors.New("wiki項目の保存先がディレクトリではありません")
-	}
+	masterTmpl := template.Must(template.ParseGlob("template/*.tmpl"))
+	controller.Templates = masterTmpl
+	controller.Dir = cnfg.ItemPath
 
-	return nil
+	r := infrastructure.NewRouter(&cnfg)
+
+	fmt.Println("Webサーバーを起動します...", cnfg.Addr)
+	if err := http.ListenAndServe(cnfg.Addr, r); err != nil {
+		log.Fatalln("Webサーバーの起動に失敗しました:", err)
+	}
 }

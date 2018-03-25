@@ -14,6 +14,15 @@
     <a href="{{.Title}}/edit">編集</a>
     <script>
         $('#content').html(marked({{.Body}}));
+
+        var iframe = document.createElement('iframe');
+        iframe.setAttribute("style", "display:none");
+        document.getElementById("content").appendChild(iframe);
+
+        var doc = iframe.contentWindow.document;
+        doc.open();
+        doc.write({{.Body}});
+        doc.close();
     </script>
 </div>
 </body>
