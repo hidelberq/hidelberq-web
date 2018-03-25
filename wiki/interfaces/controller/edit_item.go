@@ -45,13 +45,7 @@ func (c *EditController) getEditItem(w http.ResponseWriter, r *http.Request) {
 		log.Infoln("edit path not found", item)
 	}
 
-	respond(w, r, http.StatusOK, "edit-item", struct {
-		Title string
-		Body  string
-	}{
-		Title: i.Title,
-		Body:  string(i.Text),
-	})
+	respond(w, r, http.StatusOK, "edit-item", i)
 }
 
 func (c *EditController) updateItem(w http.ResponseWriter, r *http.Request) {
