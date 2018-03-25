@@ -19,7 +19,7 @@ import (
 var cnfg config.Config
 
 func init() {
-	flag.StringVar(&cnfg.Addr, "addr", ":8081", "Webサーバーのアドレス")
+	flag.StringVar(&cnfg.Addr, "addr", ":8080", "Webサーバーのアドレス")
 	flag.StringVar(&cnfg.ItemPath, "src", "/usr/share/hidel-wiki/item", "項目の保存先のリポジトリのパス")
 	log.SetOutput(os.Stdout)
 
