@@ -117,8 +117,8 @@ var (
 	ErrInvalidTitle = errors.New("# タイトル の形式でタイトルの指定がありません")
 )
 
-func (ir *ItemRepository) Update(new *domain.Item, oldPath string, user *domain.User) error {
-	if new.Path == "" {
+func (ir *ItemRepository) Update(i *domain.Item, oldPath string, user *domain.User) error {
+	if i.Path == "" {
 		return ErrNoTitle
 	}
 
@@ -127,18 +127,31 @@ func (ir *ItemRepository) Update(new *domain.Item, oldPath string, user *domain.
 		return ErrInvalidTitle
 	}
 
-	data := []byte(new.Text)
-	oldFilePath := filepath.Join(ir.Cnf.ItemPath, oldPath+".md")
-	if err := os.Remove(oldFilePath); err != nil {
-		return err
+	data := []byte(i.Text)
+	if oldPath != i.Path {
+		oldFileName := oldPath + ".md"
+		oldFilePath := filepath.Join(ir.Cnf.ItemPath, oldFileName)
+		if err := os.Remove(oldFilePath); err != nil {
+			return err
+		}
+
+		if err := ir.Add(oldFileName); err != nil {
+			return err
+		}
 	}
 
-	newFilePath := filepath.Join(ir.Cnf.ItemPath, new.Path+".md")
-	if err := ioutil.WriteFile(newFilePath, data, 775); err != nil {
+	newFileName := i.Path + ".md"
+	newFilePath := filepath.Join(ir.Cnf.ItemPath, newFileName)
+	if err := ioutil.WriteFile(newFilePath, data, 0644); err != nil {
+		return err
+	}
+	if err := ir.Add(newFileName); err != nil {
+		log.Println("new", newFileName, err)
 		return err
 	}
 
 	delete(itemMap, oldPath)
-	itemMap[new.Path] = new
-	return ir.Commit("Update "+new.Path+".md", user, time.Now())
+	itemMap[i.Path] = i
+
+	return ir.Commit("Update "+newFileName, user, time.Now())
 }
