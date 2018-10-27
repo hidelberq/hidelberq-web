@@ -6,8 +6,7 @@ import (
 	"net/http"
 )
 
-var Templates *template.Template
-var Dir string
+var templates = template.Must(template.ParseGlob("presentation/view/template/*.tmpl"))
 
 func respond(
 	w http.ResponseWriter,
@@ -17,7 +16,7 @@ func respond(
 	data interface{},
 ) {
 	w.WriteHeader(status)
-	if err := Templates.ExecuteTemplate(w, name, data); err != nil {
+	if err := templates.ExecuteTemplate(w, name, data); err != nil {
 		log.Println(err)
 	}
 }
@@ -37,7 +36,7 @@ func respondErr(w http.ResponseWriter, status int, message string) {
 		Message: message,
 	}
 
-	if err := Templates.ExecuteTemplate(w, "error", data); err != nil {
+	if err := templates.ExecuteTemplate(w, "error", data); err != nil {
 		log.Println(err)
 	}
 }

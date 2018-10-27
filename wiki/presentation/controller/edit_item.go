@@ -3,27 +3,18 @@ package controller
 import (
 	"net/http"
 
+	"github.com/hidelbreq/hidelberq-web/wiki/application"
+
 	"github.com/gorilla/mux"
-	"github.com/hidelbreq/hidelberq-web/wiki/config"
 	"github.com/hidelbreq/hidelberq-web/wiki/domain"
-	"github.com/hidelbreq/hidelberq-web/wiki/interfaces/database"
-	"github.com/hidelbreq/hidelberq-web/wiki/usecase"
 	log "github.com/sirupsen/logrus"
 )
 
 type EditController struct {
-	Interactor usecase.ItemInteractor
 }
 
-func NewEditController(cnf *config.Config, handler database.GitHandler) *EditController {
-	return &EditController{
-		Interactor: usecase.ItemInteractor{
-			ItemRepository: &database.ItemRepository{
-				GitHandler: handler,
-				Cnf:        cnf,
-			},
-		},
-	}
+func NewEditController() *EditController {
+	return &EditController{}
 }
 
 func (c *EditController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +31,7 @@ func (c *EditController) getEditItem(w http.ResponseWriter, r *http.Request) {
 	v := mux.Vars(r)
 	item := v["item"]
 
-	i := c.Interactor.FundByPath(item)
+	i := application.ItemFindByPath(item)
 	if i == nil {
 		log.Infoln("edit path not found", item)
 	}
@@ -55,11 +46,11 @@ func (c *EditController) updateItem(w http.ResponseWriter, r *http.Request) {
 	markdown := r.FormValue("markdown")
 	newItem, _ := domain.NewItem(markdown)
 
-	err := c.Interactor.Update(newItem, oldTitle, user)
-	if err == database.ErrNoTitle {
+	err := application.ItemUpdate(newItem, oldTitle, user)
+	if err == domain.ErrNoTitle {
 		respondErr(w, http.StatusInternalServerError, "タイトルがありません")
 		return
-	} else if err == database.ErrInvalidTitle {
+	} else if err == domain.ErrInvalidTitle {
 		respondErr(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
 		return
 	} else if err != nil {

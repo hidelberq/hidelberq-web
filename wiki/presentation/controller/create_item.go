@@ -3,27 +3,18 @@ package controller
 import (
 	"net/http"
 
-	"github.com/hidelbreq/hidelberq-web/wiki/config"
+	"github.com/hidelbreq/hidelberq-web/wiki/application"
+
 	"github.com/hidelbreq/hidelberq-web/wiki/domain"
-	"github.com/hidelbreq/hidelberq-web/wiki/interfaces/database"
-	"github.com/hidelbreq/hidelberq-web/wiki/usecase"
 	"github.com/hidelbreq/hidelberq-web/wiki/util"
 	log "github.com/sirupsen/logrus"
 )
 
 type CreateItemController struct {
-	Interactor usecase.ItemInteractor
 }
 
-func NewCreateItemController(cnf *config.Config, handler database.GitHandler) *CreateItemController {
-	return &CreateItemController{
-		Interactor: usecase.ItemInteractor{
-			ItemRepository: &database.ItemRepository{
-				GitHandler: handler,
-				Cnf:        cnf,
-			},
-		},
-	}
+func NewCreateItemController() *CreateItemController {
+	return &CreateItemController{}
 }
 
 func (controller *CreateItemController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +46,7 @@ func (controller *CreateItemController) createNewItem(w http.ResponseWriter, r *
 		return
 	}
 
-	if err := controller.Interactor.Add(item, user); err != nil {
+	if err := application.ItemAdd(item, user); err != nil {
 		log.Warnln(err)
 		respondErr(w, http.StatusInternalServerError, "記事の保存に失敗しました。")
 		return

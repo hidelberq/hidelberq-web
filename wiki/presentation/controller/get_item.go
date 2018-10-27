@@ -3,25 +3,18 @@ package controller
 import (
 	"net/http"
 
+	"github.com/hidelbreq/hidelberq-web/wiki/application"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gorilla/mux"
-	"github.com/hidelbreq/hidelberq-web/wiki/interfaces/database"
-	"github.com/hidelbreq/hidelberq-web/wiki/usecase"
 )
 
 type ItemController struct {
-	Interactor usecase.ItemInteractor
 }
 
-func NewItemController(handler database.GitHandler) *ItemController {
-	return &ItemController{
-		Interactor: usecase.ItemInteractor{
-			ItemRepository: &database.ItemRepository{
-				GitHandler: handler,
-			},
-		},
-	}
+func NewItemController() *ItemController {
+	return &ItemController{}
 }
 
 func (h *ItemController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +29,7 @@ func (h *ItemController) Get(w http.ResponseWriter, r *http.Request) {
 	item := v["item"]
 
 	log.Infoln(item)
-	i := h.Interactor.FundByPath(item)
+	i := application.ItemFindByPath(item)
 
 	if i == nil {
 		respondErr(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
