@@ -84,7 +84,7 @@ func (ir *ItemRepository) Store(item *Item, user *User) error {
 		return err
 	}
 
-	//itemMap[item.Path] = item
+	itemMap[item.Path] = item
 	msg := "Add " + fileName
 	_, err = w.Commit(msg, &git.CommitOptions{
 		Author: &object.Signature{
