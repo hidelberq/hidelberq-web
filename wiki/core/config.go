@@ -1,29 +1,37 @@
 package core
 
 import (
-	"encoding/json"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Addr     string `json:"addr"`
-	ItemPath string `json:"item_path"`
-	GitURL   string `json:"git_url"`
+	Addr                    string
+	Domain                  string
+	ItemPath                string
+	SlackIncomingWebhookURL string
 }
 
 var cnf Config
 
-func InitConfig(path string) {
-	file, err := os.Open(path)
-	if err != nil {
-		panic(err)
+func InitConfig() {
+	if os.Getenv("DOCKER") == "" {
+		godotenv.Load()
 	}
 
-	defer file.Close()
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&cnf)
-	if err != nil {
-		panic(err)
+	cnf = Config{
+		Addr:                    os.Getenv("ADDR"),
+		Domain:                  os.Getenv("DOMAIN"),
+		ItemPath:                os.Getenv("ITEM_PATH"),
+		SlackIncomingWebhookURL: os.Getenv("SLACK_INCOMING_WEBHOOK_URL"),
+	}
+
+	if cnf.Addr == "" ||
+		cnf.Domain == "" ||
+		cnf.ItemPath == "" ||
+		cnf.SlackIncomingWebhookURL == "" {
+		panic(cnf)
 	}
 }
 

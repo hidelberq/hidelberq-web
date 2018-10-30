@@ -10,9 +10,12 @@ services:
       - ./web/default.conf:/etc/nginx/conf.d/default.conf
       - ./data/html:/var/www/html
   wiki:
-    image: wiki
+    image: hidelberq/wiki
     ports:
       - "8080:8080"
+    env_file: ./wiki/.env
+    environment:
+      DOCKER: "true"
     volumes:
-      - /usr/share/hidel-wiki/item:/usr/share/hidel-wiki/item
+      - /usr/share/hidel-wiki-item:/usr/share/hidel-wiki-item
 

@@ -1,0 +1,4 @@
+ADDR=:8080
+DOMAIN=http://wiki.hidelberq.com/
+ITEM_PATH=/usr/share/hidel-wiki-item
+SLACK_INCOMING_WEBHOOK_URL=https://hooks.slack.com/services/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

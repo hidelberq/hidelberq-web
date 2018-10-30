@@ -19,7 +19,7 @@ func init() {
 	flag.StringVar(&configPath, "config", "config.json", "config file")
 	log.SetOutput(os.Stdout)
 
-	core.InitConfig(configPath)
+	core.InitConfig()
 	core.InitGit()
 
 	ir := infrastructure.NewItemRepository(core.GetGitRepository())

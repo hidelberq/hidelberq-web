@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -19,6 +20,8 @@ type Item struct {
 	Data    []byte
 }
 
+const SumUpLength = 200
+
 func NewItem(text string) (*Item, error) {
 	title, err := util.GetTitle(text)
 	if err == util.ErrNoTitle {
@@ -33,6 +36,17 @@ func NewItem(text string) (*Item, error) {
 		Text:    text,
 		Data:    []byte(text),
 	}, nil
+}
+
+func (i *Item) GetURL() string {
+	return fmt.Sprintf("%swiki/%s", core.GetConfig().Domain, i.Title)
+}
+
+func (i *Item) GetSumUp() string {
+	if len(i.Text) > SumUpLength {
+		return i.Text[0:SumUpLength]
+	}
+	return i.Text
 }
 
 func NewItemWithTime(text string, time time.Time) (*Item, error) {
