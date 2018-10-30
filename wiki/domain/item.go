@@ -66,6 +66,10 @@ func NewItemWithTime(text string, time time.Time) (*Item, error) {
 }
 
 func NewItemFromRepository(i *infrastructure.Item) *Item {
+	if i == nil {
+		return nil
+	}
+
 	return &Item{
 		Path:    i.Path,
 		Title:   i.Title,
@@ -119,6 +123,9 @@ func ItemFindAll() []*Item {
 	var is []*Item
 	for _, item := range items {
 		i := NewItemFromRepository(item)
+		if i == nil {
+			continue
+		}
 		is = append(is, i)
 	}
 	return is
