@@ -40,3 +40,7 @@ func respondErr(w http.ResponseWriter, status int, message string) {
 		log.Println(err)
 	}
 }
+
+func respondErrStatus(w http.ResponseWriter, status int) {
+	respondErr(w, status, http.StatusText(status))
+}

@@ -34,8 +34,8 @@ func (controller *CreateItemController) getNewItem(w http.ResponseWriter, r *htt
 
 // FIXME
 var user = &domain.User{
-	Name:  "hidelberq",
-	Email: "hide.seaweed@gmail.com",
+	Username: "hidelberq",
+	Email:    "hide.seaweed@gmail.com",
 }
 
 func (controller *CreateItemController) createNewItem(w http.ResponseWriter, r *http.Request) {

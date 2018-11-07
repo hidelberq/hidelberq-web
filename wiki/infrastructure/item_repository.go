@@ -41,11 +41,6 @@ func NewItem(text string) (*Item, error) {
 	}, nil
 }
 
-type User struct {
-	Name  string
-	Email string
-}
-
 type ItemRepository struct {
 	git *git.Repository
 }
@@ -88,8 +83,8 @@ func (ir *ItemRepository) Store(item *Item, user *User) error {
 	msg := "Add " + fileName
 	_, err = w.Commit(msg, &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  user.Name,
-			Email: user.Email,
+			Name:  user.Username,
+			Email: user.Password,
 			When:  time.Now(),
 		},
 	})
@@ -245,8 +240,8 @@ func (ir *ItemRepository) Update(i *Item, oldPath string, user *User) error {
 
 	_, err = w.Commit("Update "+newFileName, &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  user.Name,
-			Email: user.Email,
+			Name:  user.Username,
+			Email: user.Password,
 			When:  time.Now(),
 		},
 	})

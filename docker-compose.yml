@@ -17,5 +17,25 @@ services:
     environment:
       DOCKER: "true"
     volumes:
-      - /usr/share/hidel-wiki-item:/usr/share/hidel-wiki-item
-
+      - /Users/h-ogawa/.ghq/github.com/hidelberq/hidel-wiki-item:/usr/share/hidel-wiki-item
+    depends_on:
+      - mysql
+  mysql:
+    image: hidelberq/wiki-mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    expose:
+      - 3306
+    environment:
+      MYSQL_ROOT_PASSWORD: pass
+    volumes:
+      - "./mysql/my.cnf:/etc/mysql/my.cnf"
+      - "./mysql/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d"
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 9090:8080
+    links:
+      - mysql

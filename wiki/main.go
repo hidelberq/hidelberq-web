@@ -24,9 +24,13 @@ func init() {
 
 	ir := infrastructure.NewItemRepository(core.GetGitRepository())
 	ir.Init()
+
 }
 
 func main() {
+	db := core.InitDB()
+	defer db.Close()
+
 	r := controller.NewRouter()
 	fmt.Println("Webサーバーを起動します...", core.GetConfig())
 	if err := http.ListenAndServe(core.GetConfig().Addr, r); err != nil {

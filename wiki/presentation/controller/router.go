@@ -8,10 +8,12 @@ import (
 
 func NewRouter() *mux.Router {
 	r := mux.NewRouter()
-	r.Handle("/wiki", NewWikiController())
-	r.Handle("/wiki-new-item", NewCreateItemController())
-	r.Handle("/wiki/{item}", NewItemController())
-	r.Handle("/wiki/{item}/edit", NewEditController())
+	r.Handle("/wiki", MustAuth(NewWikiController()))
+	r.Handle("/wiki-new-item", MustAuth(NewCreateItemController()))
+	r.Handle("/wiki/{item}", MustAuth(NewItemController()))
+	r.Handle("/wiki/{item}/edit", MustAuth(NewEditController()))
+	r.HandleFunc("/login", LoginHandle)
+	r.HandleFunc("/logout", LogoutHandler)
 
 	r.PathPrefix("/static/").
 		Handler(

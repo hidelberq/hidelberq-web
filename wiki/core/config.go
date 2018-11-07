@@ -11,6 +11,7 @@ type Config struct {
 	Domain                  string
 	ItemPath                string
 	SlackIncomingWebhookURL string
+	MysqlArg                string
 }
 
 var cnf Config
@@ -25,6 +26,7 @@ func InitConfig() {
 		Domain:                  os.Getenv("DOMAIN"),
 		ItemPath:                os.Getenv("ITEM_PATH"),
 		SlackIncomingWebhookURL: os.Getenv("SLACK_INCOMING_WEBHOOK_URL"),
+		MysqlArg:                os.Getenv("MYSQL_ARG"),
 	}
 
 	if cnf.Addr == "" ||
