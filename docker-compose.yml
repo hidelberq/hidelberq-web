@@ -22,6 +22,7 @@ services:
       - mysql
   mysql:
     image: hidelberq/wiki-mysql
+    mem_limit: 100M
     restart: always
     ports:
       - "3306:3306"
