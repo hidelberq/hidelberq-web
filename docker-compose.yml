@@ -17,7 +17,7 @@ services:
     environment:
       DOCKER: "true"
     volumes:
-      - ./:/usr/share/hidel-wiki-item
+      - ../hidel-wiki-item:/usr/share/hidel-wiki-item
     depends_on:
       - mysql
   mysql:
