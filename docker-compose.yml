@@ -17,12 +17,11 @@ services:
     environment:
       DOCKER: "true"
     volumes:
-      - /Users/h-ogawa/.ghq/github.com/hidelberq/hidel-wiki-item:/usr/share/hidel-wiki-item
+      - ./:/usr/share/hidel-wiki-item
     depends_on:
       - mysql
   mysql:
     image: hidelberq/wiki-mysql
-    mem_limit: 100M
     restart: always
     ports:
       - "3306:3306"

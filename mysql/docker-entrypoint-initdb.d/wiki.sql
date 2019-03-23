@@ -1,9 +1,14 @@
--- Adminer 4.6.3 MySQL dump
+-- Adminer 4.7.1 MySQL dump
 
 SET NAMES utf8;
 SET time_zone = '+00:00';
 SET foreign_key_checks = 0;
 SET sql_mode = 'NO_AUTO_VALUE_ON_ZERO';
+
+SET NAMES utf8mb4;
+
+CREATE DATABASE `wiki` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;
+USE `wiki`;
 
 DROP TABLE IF EXISTS `item`;
 CREATE TABLE `item` (
@@ -26,4 +31,4 @@ INSERT INTO `users` (`username`, `password`) VALUES
 ('hisanori',	'hidanori'),
 ('yokushiryoku',	'yokushiryoku');
 
--- 2018-11-06 14:00:45
+-- 2019-03-23 19:00:20
