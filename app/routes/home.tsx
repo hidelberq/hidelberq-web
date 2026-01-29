@@ -19,7 +19,7 @@ interface GeneratedTweet {
 	authorHandle: string;
 	authorEmoji: string;
 	category: string;
-	sourceUrl: string | null;
+	sourceUrl: string;
 }
 
 // --- Gemini batch generation ---
@@ -106,19 +106,15 @@ JSON以外のテキストは一切出力しないでください。配列の要�
 			.trim();
 		const parsed = JSON.parse(jsonStr) as GeneratedTweet[];
 
-		return parsed
-			.filter(
-				(t) =>
-					t.content &&
-					t.authorName &&
-					t.authorHandle &&
-					t.authorEmoji &&
-					t.category,
-			)
-			.map((t) => ({
-				...t,
-				sourceUrl: t.sourceUrl || null,
-			}));
+		return parsed.filter(
+			(t) =>
+				t.content &&
+				t.authorName &&
+				t.authorHandle &&
+				t.authorEmoji &&
+				t.category &&
+				t.sourceUrl,
+		);
 	} catch (e) {
 		console.error("Gemini generation error:", e);
 		return [];
@@ -135,7 +131,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "tech_breaking",
 			authorEmoji: "⚡",
 			category: "tech",
-			sourceUrl: null,
+			sourceUrl: "https://blog.cloudflare.com/",
 		},
 		{
 			content:
@@ -144,7 +140,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "politics_watch",
 			authorEmoji: "🏛️",
 			category: "politics",
-			sourceUrl: null,
+			sourceUrl: "https://www3.nhk.or.jp/news/cat04.html",
 		},
 		{
 			content:
@@ -153,7 +149,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "buzz_collector",
 			authorEmoji: "🔥",
 			category: "buzz",
-			sourceUrl: null,
+			sourceUrl: "https://x.com/",
 		},
 		{
 			content:
@@ -162,7 +158,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "drama_addict",
 			authorEmoji: "🎬",
 			category: "entertainment",
-			sourceUrl: null,
+			sourceUrl: "https://tver.jp/",
 		},
 		{
 			content:
@@ -171,7 +167,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "seikatsu_bouei",
 			authorEmoji: "📊",
 			category: "society",
-			sourceUrl: null,
+			sourceUrl: "https://www3.nhk.or.jp/news/cat01.html",
 		},
 		{
 			content:
@@ -180,7 +176,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "space_fan_jp",
 			authorEmoji: "🚀",
 			category: "science",
-			sourceUrl: null,
+			sourceUrl: "https://www.jaxa.jp/projects/sas/slim/",
 		},
 		{
 			content:
@@ -189,7 +185,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "urayasu_life",
 			authorEmoji: "🏠",
 			category: "urayasu",
-			sourceUrl: null,
+			sourceUrl: "https://www.city.urayasu.lg.jp/",
 		},
 		{
 			content:
@@ -198,7 +194,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "tokyo_walker",
 			authorEmoji: "🗼",
 			category: "tokyo",
-			sourceUrl: null,
+			sourceUrl: "https://www.metro.tokyo.lg.jp/",
 		},
 		{
 			content:
@@ -207,7 +203,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "saijo_love",
 			authorEmoji: "💧",
 			category: "saijo",
-			sourceUrl: null,
+			sourceUrl: "https://www.city.saijo.ehime.jp/",
 		},
 		{
 			content:
@@ -216,7 +212,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "cafe_nomad",
 			authorEmoji: "☕",
 			category: "life",
-			sourceUrl: null,
+			sourceUrl: "https://tabelog.com/",
 		},
 		{
 			content:
@@ -225,7 +221,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "thinking_dev",
 			authorEmoji: "🤔",
 			category: "opinion",
-			sourceUrl: null,
+			sourceUrl: "https://zenn.dev/",
 		},
 		{
 			content:
@@ -234,7 +230,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "infra_guardian",
 			authorEmoji: "🛡️",
 			category: "dev",
-			sourceUrl: null,
+			sourceUrl: "https://qiita.com/",
 		},
 	];
 }
