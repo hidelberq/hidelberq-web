@@ -10,9 +10,18 @@
 	"vars": {
 		"VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare"
 	},
+	"compatibility_flags": [ "nodejs_compat" ],
 	"observability": {
 		"enabled": true
-	}
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "hidelberq-web-db",
+			"database_id": "c042ae60-03f7-4950-aed3-9fa3dd534b4c",
+			"migrations_dir": "drizzle" // ← これを追加！
+		}
+	]
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
