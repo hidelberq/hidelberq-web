@@ -5,11 +5,11 @@
 	"scripts": {
 		"build": "react-router build",
 		"cf-typegen": "wrangler types",
-		"deploy": "npm run build && wrangler deploy",
+		"deploy": "react-router build && wrangler deploy",
 		"dev": "react-router dev",
-		"postinstall": "npm run cf-typegen",
-		"preview": "npm run build && vite preview",
-		"typecheck": "npm run cf-typegen && react-router typegen && tsc -b"
+		"postinstall": "wrangler types",
+		"preview": "react-router build && vite preview",
+		"typecheck": "wrangler types && react-router typegen && tsc -b"
 	},
 	"dependencies": {
 		"@google/genai": "^1.38.0",
