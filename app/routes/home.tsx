@@ -19,6 +19,7 @@ interface GeneratedTweet {
 	authorHandle: string;
 	authorEmoji: string;
 	category: string;
+	sourceUrl: string | null;
 }
 
 // --- Gemini batch generation ---
@@ -80,7 +81,8 @@ ${pastTweetsSection}
     "authorName": "表示名",
     "authorHandle": "handle_name",
     "authorEmoji": "絵文字1つ(アバター代わり)",
-    "category": "カテゴリ名"
+    "category": "カテゴリ名",
+    "sourceUrl": "参考にしたニュース記事やツイートのURL（ある場合のみ。なければnull）"
   }
 ]
 
@@ -103,14 +105,19 @@ JSON以外のテキストは一切出力しないでください。配列の要�
 			.trim();
 		const parsed = JSON.parse(jsonStr) as GeneratedTweet[];
 
-		return parsed.filter(
-			(t) =>
-				t.content &&
-				t.authorName &&
-				t.authorHandle &&
-				t.authorEmoji &&
-				t.category,
-		);
+		return parsed
+			.filter(
+				(t) =>
+					t.content &&
+					t.authorName &&
+					t.authorHandle &&
+					t.authorEmoji &&
+					t.category,
+			)
+			.map((t) => ({
+				...t,
+				sourceUrl: t.sourceUrl || null,
+			}));
 	} catch (e) {
 		console.error("Gemini generation error:", e);
 		return [];
@@ -127,6 +134,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "tech_breaking",
 			authorEmoji: "⚡",
 			category: "tech",
+			sourceUrl: null,
 		},
 		{
 			content:
@@ -135,6 +143,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "politics_watch",
 			authorEmoji: "🏛️",
 			category: "politics",
+			sourceUrl: null,
 		},
 		{
 			content:
@@ -143,6 +152,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "buzz_collector",
 			authorEmoji: "🔥",
 			category: "buzz",
+			sourceUrl: null,
 		},
 		{
 			content:
@@ -151,6 +161,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "drama_addict",
 			authorEmoji: "🎬",
 			category: "entertainment",
+			sourceUrl: null,
 		},
 		{
 			content:
@@ -159,6 +170,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "seikatsu_bouei",
 			authorEmoji: "📊",
 			category: "society",
+			sourceUrl: null,
 		},
 		{
 			content:
@@ -167,6 +179,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "space_fan_jp",
 			authorEmoji: "🚀",
 			category: "science",
+			sourceUrl: null,
 		},
 		{
 			content:
@@ -175,6 +188,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "urayasu_life",
 			authorEmoji: "🏠",
 			category: "urayasu",
+			sourceUrl: null,
 		},
 		{
 			content:
@@ -183,6 +197,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "tokyo_walker",
 			authorEmoji: "🗼",
 			category: "tokyo",
+			sourceUrl: null,
 		},
 		{
 			content:
@@ -191,6 +206,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "saijo_love",
 			authorEmoji: "💧",
 			category: "saijo",
+			sourceUrl: null,
 		},
 		{
 			content:
@@ -199,6 +215,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "cafe_nomad",
 			authorEmoji: "☕",
 			category: "life",
+			sourceUrl: null,
 		},
 		{
 			content:
@@ -207,6 +224,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "thinking_dev",
 			authorEmoji: "🤔",
 			category: "opinion",
+			sourceUrl: null,
 		},
 		{
 			content:
@@ -215,6 +233,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "infra_guardian",
 			authorEmoji: "🛡️",
 			category: "dev",
+			sourceUrl: null,
 		},
 	];
 }
@@ -300,6 +319,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 						authorHandle: tweet.authorHandle,
 						authorEmoji: tweet.authorEmoji,
 						category: tweet.category,
+						sourceUrl: tweet.sourceUrl,
 						...engagement,
 						displayed: false,
 						createdAt,
@@ -361,6 +381,15 @@ function formatNumber(n: number): string {
 	if (n >= 10000) return `${(n / 10000).toFixed(1)}万`;
 	if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
 	return n.toString();
+}
+
+// --- Extract hostname safely ---
+function extractHostname(url: string): string {
+	try {
+		return new URL(url).hostname;
+	} catch {
+		return url;
+	}
 }
 
 // --- Category badge ---
@@ -494,6 +523,31 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 										<p className="mt-1 text-[15px] leading-relaxed whitespace-pre-wrap break-words text-gray-100">
 											{tweet.content}
 										</p>
+
+										{/* Source link */}
+										{tweet.sourceUrl && (
+											<a
+												href={tweet.sourceUrl}
+												target="_blank"
+												rel="noopener noreferrer"
+												className="mt-1.5 inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+											>
+												<svg
+													className="w-3.5 h-3.5"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+													strokeWidth={1.5}
+												>
+													<path
+														strokeLinecap="round"
+														strokeLinejoin="round"
+														d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.04a4.5 4.5 0 00-6.364-6.364L4.5 8.257"
+													/>
+												</svg>
+												{extractHostname(tweet.sourceUrl)}
+											</a>
+										)}
 
 										{/* Engagement bar */}
 										<div className="flex items-center gap-6 mt-2.5 text-gray-500 text-xs">
