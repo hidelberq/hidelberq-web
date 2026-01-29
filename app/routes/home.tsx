@@ -3,7 +3,7 @@ import { useRevalidator } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { tweets } from "../db/schema";
 import { desc, eq, sql } from "drizzle-orm";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 // --- Configuration ---
 const GENERATION_COOLDOWN_MS = 2 * 60 * 1000; // 2分間のクールダウン
@@ -24,10 +24,10 @@ interface GeneratedTweet {
 // --- Gemini batch generation ---
 async function generateTweetBatch(
 	apiKey: string,
+	pastTweets: string[],
 ): Promise<GeneratedTweet[]> {
 	try {
-		const genAI = new GoogleGenerativeAI(apiKey);
-		const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+		const ai = new GoogleGenAI({ apiKey });
 
 		const today = new Date().toLocaleDateString("ja-JP", {
 			year: "numeric",
@@ -36,10 +36,18 @@ async function generateTweetBatch(
 			weekday: "long",
 		});
 
+		const pastTweetsSection =
+			pastTweets.length > 0
+				? `\n【過去に生成済みのツイート（これらと内容が被らないようにしてください）】\n${pastTweets.map((t, i) => `${i + 1}. ${t}`).join("\n")}\n`
+				: "";
+
 		const prompt = `あなたはSNS「X (旧Twitter)」のリアルなタイムラインを生成するAIです。
 多様でリアルなツイートを${BATCH_SIZE}件生成してください。
 
 【今日の日付】${today}
+
+まずGoogle検索を使って、今日の日本と世界の最新ニュース・話題のトピックを調べてください。
+検索結果に基づいて、リアルタイムの出来事を反映したツイートを生成してください。
 
 【カテゴリ（均等に分配）】
 - tech_news: 最新テクノロジーニュース（AI、Web開発、スタートアップ、ガジェット）
@@ -47,12 +55,13 @@ async function generateTweetBatch(
 - opinion: 社会・文化・働き方に関する鋭い個人的見解
 - life: 日常の気づき、仕事あるある、人間観察、グルメ
 - dev: プログラミング・エンジニアリングの日常、技術ネタ
-
+${pastTweetsSection}
 【条件】
 - 日本語
 - 各ツイート100〜280文字
 - リアルなSNS口調（キャラごとに文体を変える。敬語、タメ口、独り言風など）
-- 今日の日付を踏まえ、最新ニュースや季節の話題を想像して書く
+- Google検索で取得した最新ニュースや実際の出来事を反映して書く
+- 過去のツイートと同じ話題・内容・表現を避け、常に新鮮なツイートを生成する
 - ハッシュタグは0〜2個（使わないツイートもあり）
 - 各ツイートに異なるBOTキャラクター（毎回新しいユニークなキャラを考案）
 - リプライ風（「これマジ？」）、感想ツイート、ニュース速報風、日記風など多様なスタイルを混ぜる
@@ -70,9 +79,15 @@ async function generateTweetBatch(
 
 JSON以外のテキストは一切出力しないでください。配列の要素数は必ず${BATCH_SIZE}件にしてください。`.trim();
 
-		const result = await model.generateContent(prompt);
-		const response = result.response;
-		const text = response.text();
+		const response = await ai.models.generateContent({
+			model: "gemini-2.5-flash",
+			contents: prompt,
+			config: {
+				tools: [{ googleSearch: {} }],
+			},
+		});
+
+		const text = response.text ?? "";
 
 		// JSONパース（マークダウンコードブロック除去）
 		const jsonStr = text
@@ -241,11 +256,19 @@ export async function loader({ context }: Route.LoaderArgs) {
 		const elapsed = now - lastCreated;
 
 		if (elapsed > GENERATION_COOLDOWN_MS || !mostRecent) {
+			// 過去のツイート内容を取得（重複防止用）
+			const recentTweets = await db
+				.select({ content: tweets.content })
+				.from(tweets)
+				.orderBy(desc(tweets.createdAt))
+				.limit(50);
+			const pastTweetContents = recentTweets.map((t) => t.content);
+
 			let generated: GeneratedTweet[] = [];
 
 			if (apiKey) {
 				console.log("Generating tweet batch via Gemini...");
-				generated = await generateTweetBatch(apiKey);
+				generated = await generateTweetBatch(apiKey, pastTweetContents);
 			}
 
 			// Gemini失敗時またはAPIキー未設定時はフォールバック
