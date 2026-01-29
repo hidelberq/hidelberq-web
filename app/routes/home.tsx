@@ -22,7 +22,7 @@ interface GeneratedTweet {
 	sourceUrl: string;
 }
 
-// --- Gemini batch generation ---
+// --- Gemini batch generation (2段階: 検索→JSON生成) ---
 async function generateTweetBatch(
 	apiKey: string,
 	pastTweets: string[],
@@ -37,19 +37,71 @@ async function generateTweetBatch(
 			weekday: "long",
 		});
 
+		// ステップ1: Google検索で最新ニュースを取得
+		console.log("Step 1: Fetching latest news via Google Search grounding...");
+		const searchPrompt = `今日は${today}です。
+以下のカテゴリごとに、今日の日本と世界の最新ニュース・話題を1〜2件ずつ箇条書きで教えてください。
+各ニュースには元のニュース記事のURLも必ず含めてください。
+
+カテゴリ:
+- テクノロジー（AI、Web開発、ガジェット、スタートアップ）
+- 政治（国内外の政治動向、選挙、政策）
+- バズ（SNSで話題の投稿、面白ネタ）
+- 芸能（芸能人、ドラマ、映画、音楽）
+- 社会（社会問題、事件・事故、経済）
+- 科学（科学技術、宇宙、医療、環境）
+- 浦安（浦安市のニュース、ディズニーリゾート）
+- 東京（東京のイベント、再開発、グルメ）
+- 西条・愛媛（西条市の話題、石鎚山、だんじり）
+- ライフ（日常の話題、トレンド）
+- 開発（プログラミング、エンジニアリング）`;
+
+		const searchResponse = await ai.models.generateContent({
+			model: "gemini-2.5-flash",
+			contents: searchPrompt,
+			config: {
+				tools: [{ googleSearch: {} }],
+			},
+		});
+
+		let newsContext = "";
+		try {
+			newsContext = searchResponse.text ?? "";
+		} catch {
+			const parts = searchResponse.candidates?.[0]?.content?.parts;
+			if (parts) {
+				newsContext = parts
+					.filter((p: { text?: string }) => typeof p.text === "string")
+					.map((p: { text?: string }) => p.text)
+					.join("");
+			}
+		}
+
+		console.log(`Step 1 done: news context length = ${newsContext.length}`);
+		if (newsContext.length > 0) {
+			console.log(
+				`News context (first 300 chars): ${newsContext.substring(0, 300)}`,
+			);
+		}
+
+		// ステップ2: ニュースコンテキストを基にJSON形式でツイート生成
+		console.log("Step 2: Generating tweets as JSON...");
+
 		const pastTweetsSection =
 			pastTweets.length > 0
 				? `\n【過去に生成済みのツイート（これらと内容が被らないようにしてください）】\n${pastTweets.map((t, i) => `${i + 1}. ${t}`).join("\n")}\n`
 				: "";
 
-		const prompt = `あなたはSNS「X (旧Twitter)」のリアルなタイムラインを生成するAIです。
+		const newsSection =
+			newsContext.length > 0
+				? `\n【最新ニュース・話題（これらを基にツイートを作成してください）】\n${newsContext}\n`
+				: "";
+
+		const generatePrompt = `あなたはSNS「X (旧Twitter)」のリアルなタイムラインを生成するAIです。
 多様でリアルなツイートを${BATCH_SIZE}件生成してください。
 
 【今日の日付】${today}
-
-まずGoogle検索を使って、今日の日本と世界の最新ニュース・話題のトピックを調べてください。
-検索結果に基づいて、リアルタイムの出来事を反映したツイートを生成してください。
-
+${newsSection}
 【カテゴリ（均等に分配）】
 - tech: テクノロジー（AI、Web開発、ガジェット、スタートアップ）
 - politics: 政治（国内外の政治動向、選挙、政策、国会）
@@ -68,93 +120,57 @@ ${pastTweetsSection}
 - 日本語
 - 各ツイート100〜280文字
 - リアルなSNS口調（キャラごとに文体を変える。敬語、タメ口、独り言風など）
-- Google検索で取得した最新ニュースや実際の出来事を反映して書く
+- 最新ニュースや実際の出来事を反映して書く
 - 過去のツイートと同じ話題・内容・表現を避け、常に新鮮なツイートを生成する
-- 必ず各ツイートに元ネタとなるニュース記事やソースのURLをsourceUrlとして含める（Google検索結果から実在するURLを使うこと）
+- 必ず各ツイートに元ネタとなるニュース記事やソースのURLをsourceUrlとして含める
 - ハッシュタグは0〜2個（使わないツイートもあり）
 - 各ツイートに異なるBOTキャラクター（毎回新しいユニークなキャラを考案）
 - リプライ風（「これマジ？」）、感想ツイート、ニュース速報風、日記風など多様なスタイルを混ぜる
 
-【出力形式】以下のJSON配列のみを返してください。
-[
-  {
-    "content": "ツイート本文",
-    "authorName": "表示名",
-    "authorHandle": "handle_name",
-    "authorEmoji": "絵文字1つ(アバター代わり)",
-    "category": "カテゴリ名",
-    "sourceUrl": "元ネタのニュース記事やツイートのURL（必須。Google検索結果から実在するURLを必ず含めること）"
-  }
-]
-
-JSON以外のテキストは一切出力しないでください。配列の要素数は必ず${BATCH_SIZE}件にしてください。`.trim();
+以下のJSON配列のみを返してください。配列の要素数は必ず${BATCH_SIZE}件にしてください。`;
 
 		const response = await ai.models.generateContent({
 			model: "gemini-2.5-flash",
-			contents: prompt,
+			contents: generatePrompt,
 			config: {
-				tools: [{ googleSearch: {} }],
+				responseMimeType: "application/json",
+				responseSchema: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							content: { type: "string" },
+							authorName: { type: "string" },
+							authorHandle: { type: "string" },
+							authorEmoji: { type: "string" },
+							category: { type: "string" },
+							sourceUrl: { type: "string" },
+						},
+						required: [
+							"content",
+							"authorName",
+							"authorHandle",
+							"authorEmoji",
+							"category",
+							"sourceUrl",
+						],
+					},
+				},
 			},
 		});
 
-		// レスポンスからテキストを抽出
-		let text = "";
-		try {
-			text = response.text ?? "";
-		} catch {
-			// response.text getter may throw if response has no text parts
-			// Try to extract text from candidates directly
-			const parts = response.candidates?.[0]?.content?.parts;
-			if (parts) {
-				text = parts
-					.filter((p: { text?: string }) => typeof p.text === "string")
-					.map((p: { text?: string }) => p.text)
-					.join("");
-			}
-		}
-
-		console.log(`Gemini raw response length: ${text.length}`);
+		const text = response.text ?? "";
+		console.log(`Step 2 done: response length = ${text.length}`);
 		console.log(
-			`Gemini raw response (first 500 chars): ${text.substring(0, 500)}`,
+			`Step 2 response (first 300 chars): ${text.substring(0, 300)}`,
 		);
 
 		if (!text.trim()) {
-			console.error("Gemini returned empty text response");
+			console.error("Gemini returned empty JSON response");
 			return [];
 		}
 
-		// JSON配列を抽出（複数の方法を試行）
-		let parsed: GeneratedTweet[] = [];
-
-		// 方法1: マークダウンコードブロック除去してパース
-		try {
-			const jsonStr = text
-				.replace(/```json\n?/g, "")
-				.replace(/```\n?/g, "")
-				.trim();
-			parsed = JSON.parse(jsonStr) as GeneratedTweet[];
-		} catch {
-			console.log(
-				"Method 1 (strip markdown) failed, trying bracket extraction...",
-			);
-
-			// 方法2: テキスト内から最初の [ と最後の ] を見つけてJSON配列を抽出
-			try {
-				const firstBracket = text.indexOf("[");
-				const lastBracket = text.lastIndexOf("]");
-				if (firstBracket !== -1 && lastBracket > firstBracket) {
-					const jsonStr = text.substring(firstBracket, lastBracket + 1);
-					parsed = JSON.parse(jsonStr) as GeneratedTweet[];
-				} else {
-					console.error("No JSON array brackets found in response");
-				}
-			} catch (e2) {
-				console.error("Method 2 (bracket extraction) also failed:", e2);
-				console.error(`Full response text: ${text}`);
-				return [];
-			}
-		}
-
+		const parsed = JSON.parse(text) as GeneratedTweet[];
 		console.log(`Parsed ${parsed.length} tweets from Gemini response`);
 
 		const filtered = parsed.filter(
@@ -398,7 +414,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 		.select()
 		.from(tweets)
 		.where(eq(tweets.displayed, false))
-		.orderBy(desc(tweets.id))
+		.orderBy(desc(tweets.createdAt))
 		.limit(NEW_PER_LOAD);
 
 	if (newTweets.length > 0) {
@@ -411,12 +427,12 @@ export async function loader({ context }: Route.LoaderArgs) {
 		}
 	}
 
-	// 4. 表示済みツイートを取得してタイムラインに返す（ID順で安定したソート）
+	// 4. 表示済みツイートを取得してタイムラインに返す（新しい順）
 	const timeline = await db
 		.select()
 		.from(tweets)
 		.where(eq(tweets.displayed, true))
-		.orderBy(desc(tweets.id))
+		.orderBy(desc(tweets.createdAt))
 		.limit(DISPLAY_COUNT);
 
 	return { tweets: timeline };
