@@ -70,6 +70,7 @@ ${pastTweetsSection}
 - リアルなSNS口調（キャラごとに文体を変える。敬語、タメ口、独り言風など）
 - Google検索で取得した最新ニュースや実際の出来事を反映して書く
 - 過去のツイートと同じ話題・内容・表現を避け、常に新鮮なツイートを生成する
+- 必ず各ツイートに元ネタとなるニュース記事やソースのURLをsourceUrlとして含める（Google検索結果から実在するURLを使うこと）
 - ハッシュタグは0〜2個（使わないツイートもあり）
 - 各ツイートに異なるBOTキャラクター（毎回新しいユニークなキャラを考案）
 - リプライ風（「これマジ？」）、感想ツイート、ニュース速報風、日記風など多様なスタイルを混ぜる
@@ -82,7 +83,7 @@ ${pastTweetsSection}
     "authorHandle": "handle_name",
     "authorEmoji": "絵文字1つ(アバター代わり)",
     "category": "カテゴリ名",
-    "sourceUrl": "参考にしたニュース記事やツイートのURL（ある場合のみ。なければnull）"
+    "sourceUrl": "元ネタのニュース記事やツイートのURL（必須。Google検索結果から実在するURLを必ず含めること）"
   }
 ]
 
@@ -303,13 +304,13 @@ export async function loader({ context }: Route.LoaderArgs) {
 				generated = getFallbackTweets();
 			}
 
-			// タイムスタンプを過去数時間にランダム分散させてリアルに見せる
-			const baseTime = now;
+			// タイムスタンプを等間隔に割り当て（最初のツイートが最新、最後が最古）
+			// バッチ内の順番は配列順で安定し、既存ツイートより常に新しくなる
+			const intervalMs = 60 * 1000; // 1分間隔
 			for (let i = 0; i < generated.length; i++) {
 				const tweet = generated[i];
 				const engagement = randomEngagement();
-				const offsetMs = Math.floor(Math.random() * 3 * 60 * 60 * 1000); // 過去3時間以内
-				const createdAt = new Date(baseTime - offsetMs);
+				const createdAt = new Date(now - i * intervalMs);
 
 				await db
 					.insert(tweets)
@@ -335,7 +336,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 		.select()
 		.from(tweets)
 		.where(eq(tweets.displayed, false))
-		.orderBy(desc(tweets.createdAt))
+		.orderBy(desc(tweets.id))
 		.limit(NEW_PER_LOAD);
 
 	if (newTweets.length > 0) {
@@ -348,12 +349,12 @@ export async function loader({ context }: Route.LoaderArgs) {
 		}
 	}
 
-	// 4. 表示済みツイートを取得してタイムラインに返す
+	// 4. 表示済みツイートを取得してタイムラインに返す（ID順で安定したソート）
 	const timeline = await db
 		.select()
 		.from(tweets)
 		.where(eq(tweets.displayed, true))
-		.orderBy(desc(tweets.createdAt))
+		.orderBy(desc(tweets.id))
 		.limit(DISPLAY_COUNT);
 
 	return { tweets: timeline };
