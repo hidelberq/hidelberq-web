@@ -47,8 +47,10 @@ jobs:
       - name: Deploy Preview
         id: deploy
         run: |
-          bun wrangler deploy \
-            --name hidelberq-web-pr-${{ github.event.pull_request.number }}
+          OUTPUT=$(bun wrangler deploy --name hidelberq-web-pr-${{ github.event.pull_request.number }} 2>&1)
+          echo "$OUTPUT"
+          URL=$(echo "$OUTPUT" | grep -oP 'https://[^\s]+\.workers\.dev' | head -1)
+          echo "preview_url=$URL" >> "$GITHUB_OUTPUT"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
@@ -57,14 +59,14 @@ jobs:
         with:
           script: |
             const prNumber = context.payload.pull_request.number;
-            const previewUrl = `https://hidelberq-web-pr-${prNumber}.${process.env.CF_WORKERS_SUBDOMAIN}.workers.dev`;
-            const body = `🔗 Preview deployed: ${previewUrl}`;
+            const previewUrl = '${{ steps.deploy.outputs.preview_url }}';
+            const body = `Preview deployed: ${previewUrl}`;
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
             });
-            const existing = comments.find(c => c.body.startsWith('🔗 Preview deployed:'));
+            const existing = comments.find(c => c.body.startsWith('Preview deployed:'));
             if (existing) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
@@ -80,5 +82,3 @@ jobs:
                 body,
               });
             }
-        env:
-          CF_WORKERS_SUBDOMAIN: ${{ vars.CF_WORKERS_SUBDOMAIN }}
