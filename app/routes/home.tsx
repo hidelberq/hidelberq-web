@@ -50,11 +50,18 @@ async function generateTweetBatch(
 検索結果に基づいて、リアルタイムの出来事を反映したツイートを生成してください。
 
 【カテゴリ（均等に分配）】
-- tech_news: 最新テクノロジーニュース（AI、Web開発、スタートアップ、ガジェット）
-- trending: 今話題のトピック（エンタメ、スポーツ、社会現象、バズった出来事）
-- opinion: 社会・文化・働き方に関する鋭い個人的見解
-- life: 日常の気づき、仕事あるある、人間観察、グルメ
-- dev: プログラミング・エンジニアリングの日常、技術ネタ
+- tech: テクノロジー（AI、Web開発、ガジェット、スタートアップ）
+- politics: 政治（国内外の政治動向、選挙、政策、国会）
+- buzz: バズ（SNSでバズっている話題、面白ネタ、拡散中の投稿）
+- entertainment: 芸能（芸能人、ドラマ、映画、音楽、アイドル）
+- society: 社会（社会問題、事件・事故、経済ニュース）
+- science: 科学（科学技術、宇宙、医療、環境、研究成果）
+- urayasu: 浦安（浦安市のローカルニュース、ディズニーリゾート、地域イベント）
+- tokyo: 東京（東京の話題、イベント、再開発、グルメ、交通）
+- saijo: 西条（愛媛県西条市のローカル話題、石鎚山、うちぬき、だんじり祭り）
+- life: ライフ（日常の気づき、仕事あるある、人間観察、グルメ）
+- opinion: オピニオン（社会・文化・働き方に関する鋭い個人的見解）
+- dev: 開発（プログラミング・エンジニアリングの日常、技術ネタ）
 ${pastTweetsSection}
 【条件】
 - 日本語
@@ -115,35 +122,75 @@ function getFallbackTweets(): GeneratedTweet[] {
 	return [
 		{
 			content:
-				"TypeScriptの型システム、触れば触るほど奥が深い。Conditional Typesとinferの組み合わせでやりたいことが表現できた時の快感よ。型レベルプログラミングは知的パズルだ。 #TypeScript",
-			authorName: "型パズラー",
-			authorHandle: "type_puzzler",
-			authorEmoji: "🧩",
-			category: "dev",
-		},
-		{
-			content:
-				"AIコーディングアシスタント使い始めて半年。生産性は確実に上がったけど、自分でゼロから考える力が鈍ってきてる気がする。ツールとの距離感、定期的に見直さないとまずいかも。",
-			authorName: "考えるエンジニア",
-			authorHandle: "thinking_dev",
-			authorEmoji: "🤔",
-			category: "opinion",
-		},
-		{
-			content:
 				"【速報】大手テック企業がエッジコンピューティング分野に大型投資を発表。クラウドからエッジへのシフトが本格化。開発者にとってはCloudflare Workersのようなプラットフォームの重要性がますます高まりそう。",
 			authorName: "テックニュース速報",
 			authorHandle: "tech_breaking",
 			authorEmoji: "⚡",
-			category: "tech_news",
+			category: "tech",
 		},
 		{
 			content:
-				"金曜の夜にデプロイする勇者、今週もお疲れ様でした。本番環境は無事ですか？我々の週末の平和は、あなたのロールバック計画にかかっています。",
-			authorName: "インフラの番人",
-			authorHandle: "infra_guardian",
-			authorEmoji: "🛡️",
-			category: "dev",
+				"与党の新しい経済対策案、減税と給付金の組み合わせか。野党は「規模が不十分」と批判してるけど、財源の議論が一番大事なのでは。国会中継ちゃんと見てる人どれくらいいるんだろう。",
+			authorName: "政治ウォッチャー",
+			authorHandle: "politics_watch",
+			authorEmoji: "🏛️",
+			category: "politics",
+		},
+		{
+			content:
+				"「上司に有給の理由聞かれて『私用です』って答えたら『私用って何？』って聞き返された」ってポスト、10万いいね超えてて笑う。みんな同じ経験してるんだな。 #あるある",
+			authorName: "バズ収集家",
+			authorHandle: "buzz_collector",
+			authorEmoji: "🔥",
+			category: "buzz",
+		},
+		{
+			content:
+				"今期ドラマの視聴率ランキング見たけど、配信時代に視聴率で語る意味あるのかな。TVerの再生数込みで評価しないと実態と乖離しすぎてる。推しの出てるドラマが低視聴率扱いされるの納得いかん。",
+			authorName: "ドラマ垢",
+			authorHandle: "drama_addict",
+			authorEmoji: "🎬",
+			category: "entertainment",
+		},
+		{
+			content:
+				"物価上昇が止まらない。スーパーの卵、1年前の1.5倍になってない？実質賃金のマイナスが続く中、「景気は緩やかに回復」という政府発表との温度差がすごい。",
+			authorName: "生活防衛隊",
+			authorHandle: "seikatsu_bouei",
+			authorEmoji: "📊",
+			category: "society",
+		},
+		{
+			content:
+				"JAXAの小型月着陸実証機SLIMの成果が論文に。ピンポイント着陸の精度がすごい。日本の宇宙技術、予算少ない中でこの成果出せるの本当にすごいと思う。もっと予算つけてほしい。 #JAXA",
+			authorName: "宇宙好きのひと",
+			authorHandle: "space_fan_jp",
+			authorEmoji: "🚀",
+			category: "science",
+		},
+		{
+			content:
+				"浦安の市民祭り、今年もすごい人出だった。地元の飲食店の屋台が充実してて最高。新浦安駅前の再開発も進んでるし、住みやすさランキング上位なの納得。 #浦安",
+			authorName: "浦安市民",
+			authorHandle: "urayasu_life",
+			authorEmoji: "🏠",
+			category: "urayasu",
+		},
+		{
+			content:
+				"渋谷の再開発、また新しいビルできるらしい。もう何がどこだかわからなくなってきた。東京駅周辺も変わりすぎて、数年前のGoogle Mapの方が役に立つまである。 #東京",
+			authorName: "東京散歩",
+			authorHandle: "tokyo_walker",
+			authorEmoji: "🗼",
+			category: "tokyo",
+		},
+		{
+			content:
+				"西条のうちぬきの水、やっぱり最高に美味い。名水百選なの伊達じゃない。東京に戻ると水道水飲めなくなるのが唯一の欠点。石鎚山の恵みに感謝。 #西条市 #うちぬき",
+			authorName: "西条っ子",
+			authorHandle: "saijo_love",
+			authorEmoji: "💧",
+			category: "saijo",
 		},
 		{
 			content:
@@ -155,59 +202,19 @@ function getFallbackTweets(): GeneratedTweet[] {
 		},
 		{
 			content:
-				"今年の新語・流行語、ノミネート見たけど半分くらい知らない言葉だった。SNSのタイムラインだけで世の中を理解した気になってたけど、全然フィルターバブルの中だったわ。",
-			authorName: "社会観察日記",
-			authorHandle: "social_watcher",
-			authorEmoji: "👁️",
-			category: "trending",
-		},
-		{
-			content:
-				"リモートワーク3年目にして悟ったこと。「通勤時間がなくなった分」は仕事に吸収されるのではなく、睡眠に吸収される。人間の本能は正直。",
-			authorName: "リモワの真実",
-			authorHandle: "remote_truth",
-			authorEmoji: "🏠",
-			category: "life",
-		},
-		{
-			content:
-				"Rustの学習曲線がキツいって言われるけど、所有権システム理解した後のコード書いてる時の安心感は異常。コンパイラが通ったらほぼバグなしという体験、他の言語では味わえない。 #Rust",
-			authorName: "Rustacean見習い",
-			authorHandle: "rust_learner",
-			authorEmoji: "🦀",
-			category: "dev",
-		},
-		{
-			content:
-				"地方のスーパーで売ってた地元の日本酒が衝撃的に美味かった。東京では絶対手に入らないやつ。こういう出会いがあるから出張も悪くない。",
-			authorName: "出張グルメ部",
-			authorHandle: "business_gourmet",
-			authorEmoji: "🍶",
-			category: "life",
-		},
-		{
-			content:
-				"Web開発のトレンド、毎年「今年こそサーバーサイドの復権」って言われ続けてるけど、今年はガチだと思う。RSCもhtmxもSSRも、結局サーバーで処理する方が合理的なケースは多い。",
-			authorName: "フロントエンド考古学",
-			authorHandle: "frontend_arch",
-			authorEmoji: "🏛️",
-			category: "tech_news",
-		},
-		{
-			content:
-				"会議が多い日に限ってコードが書きたくなるの、あれ何なんだろう。逆に丸一日コーディングデーだと昼過ぎには集中力切れてる。人間の脳は天邪鬼すぎる。",
-			authorName: "矛盾するエンジニア",
-			authorHandle: "paradox_eng",
-			authorEmoji: "🔄",
+				"AIコーディングアシスタント使い始めて半年。生産性は確実に上がったけど、自分でゼロから考える力が鈍ってきてる気がする。ツールとの距離感、定期的に見直さないとまずいかも。",
+			authorName: "考えるエンジニア",
+			authorHandle: "thinking_dev",
+			authorEmoji: "🤔",
 			category: "opinion",
 		},
 		{
 			content:
-				"深夜2時のコンビニ、なぜか異様に落ち着く。蛍光灯の白い光と、微かに聞こえるBGMと、他に客がいない空間。現代の禅寺はコンビニかもしれない。",
-			authorName: "深夜徘徊部",
-			authorHandle: "midnight_walk",
-			authorEmoji: "🌙",
-			category: "life",
+				"金曜の夜にデプロイする勇者、今週もお疲れ様でした。本番環境は無事ですか？我々の週末の平和は、あなたのロールバック計画にかかっています。",
+			authorName: "インフラの番人",
+			authorHandle: "infra_guardian",
+			authorEmoji: "🛡️",
+			category: "dev",
 		},
 	];
 }
@@ -359,10 +366,17 @@ function formatNumber(n: number): string {
 // --- Category badge ---
 function categoryLabel(category: string): string | null {
 	const map: Record<string, string> = {
-		tech_news: "テック",
-		trending: "トレンド",
-		opinion: "オピニオン",
+		tech: "テック",
+		politics: "政治",
+		buzz: "バズ",
+		entertainment: "芸能",
+		society: "社会",
+		science: "科学",
+		urayasu: "浦安",
+		tokyo: "東京",
+		saijo: "西条",
 		life: "ライフ",
+		opinion: "オピニオン",
 		dev: "開発",
 	};
 	return map[category] ?? null;
@@ -370,10 +384,17 @@ function categoryLabel(category: string): string | null {
 
 function categoryColor(category: string): string {
 	const map: Record<string, string> = {
-		tech_news: "bg-blue-500/20 text-blue-400",
-		trending: "bg-purple-500/20 text-purple-400",
-		opinion: "bg-amber-500/20 text-amber-400",
+		tech: "bg-blue-500/20 text-blue-400",
+		politics: "bg-red-500/20 text-red-400",
+		buzz: "bg-pink-500/20 text-pink-400",
+		entertainment: "bg-fuchsia-500/20 text-fuchsia-400",
+		society: "bg-orange-500/20 text-orange-400",
+		science: "bg-emerald-500/20 text-emerald-400",
+		urayasu: "bg-sky-500/20 text-sky-400",
+		tokyo: "bg-violet-500/20 text-violet-400",
+		saijo: "bg-lime-500/20 text-lime-400",
 		life: "bg-green-500/20 text-green-400",
+		opinion: "bg-amber-500/20 text-amber-400",
 		dev: "bg-cyan-500/20 text-cyan-400",
 	};
 	return map[category] ?? "bg-gray-500/20 text-gray-400";
