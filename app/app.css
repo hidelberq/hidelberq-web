@@ -1,14 +1,221 @@
-@import "tailwindcss" source(".");
-
-@plugin "@tailwindcss/typography";
+@import "tailwindcss";
 
 @theme {
-    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif,
-    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  /* カスタム幅 */
+  --width-700: 700px;
+
+  /* フォントファミリーの追加 */
+  --font-sg: "Sawarabi Gothic", "Inter", sans-serif;
+  --font-vt323: "VT323", "Inter", monospace;
+  --font-dot-gothic: "DotGothic16", sans-serif;
 }
 
-html,
-body {
-    @apply bg-black text-white;
-    color-scheme: dark;
+/* HTMLクラスベースのダークモード */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* カーソルの高速点滅アニメーション */
+@keyframes cursor-blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+.animate-cursor-blink {
+  animation: cursor-blink 0.7s infinite;
+}
+
+/* ------------------------------------------------------- */
+/* ---------- 以下、markdown ページ用のスタイル ---------- */
+/* ------------------------------------------------------- */
+/* Headers */
+.md-body h1 {
+  @apply text-2xl py-14 my-2 text-center text-gray-800 dark:text-gray-300;
+}
+.md-body h2 {
+  @apply text-xl pt-10 pb-2 my-4 border-b border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-300;
+}
+.md-body h3,
+.md-body h4 {
+  @apply text-lg pt-8 pb-2 text-gray-800 dark:text-gray-300;
+}
+
+/* Links */
+.md-body a {
+  @apply text-blue-600 dark:text-cyan-400;
+}
+.md-body a:hover {
+  @apply underline text-blue-700 dark:text-cyan-300;
+}
+
+/* Paragraph */
+.md-body p {
+  @apply mb-6 text-justify hyphens-auto text-gray-700 dark:text-gray-300;
+}
+
+/* Lists */
+.md-body li {
+  @apply m-1 text-gray-700 dark:text-gray-300;
+}
+.md-body li p {
+  @apply mb-2 text-justify hyphens-auto text-gray-700 dark:text-gray-300;
+}
+.md-body ol {
+  @apply list-decimal mb-4 ml-8 text-gray-700 dark:text-gray-300;
+}
+.md-body ul {
+  @apply list-disc mb-4 ml-5 text-gray-700 dark:text-gray-300;
+}
+
+/* Blockquotes */
+.md-body blockquote {
+  @apply p-2 mx-6 bg-gray-100 dark:bg-gray-800 mb-4 border-l-4 border-blue-500 dark:border-green-400 italic text-gray-700 dark:text-gray-300;
+}
+.md-body blockquote > p {
+  @apply mb-0 text-gray-700 dark:text-gray-300;
+}
+
+/* Tables */
+.md-body td,
+.md-body th {
+  @apply px-2 py-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300;
+}
+.md-body thead tr {
+  @apply bg-gray-100 dark:bg-gray-800;
+}
+.md-body tbody tr:nth-child(even) {
+  @apply bg-gray-50 dark:bg-gray-800;
+}
+.md-body table {
+  @apply mb-6 bg-white dark:bg-gray-900;
+}
+
+/* Code */
+.md-body :not(pre) > code {
+  @apply bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm text-red-600 dark:text-green-400;
+}
+.md-body pre {
+  @apply bg-gray-50 dark:bg-gray-900 rounded overflow-x-auto mb-6 border border-gray-200 dark:border-gray-700;
+}
+.md-body pre code {
+  @apply block text-sm p-4 text-gray-800 dark:text-green-400 bg-transparent;
+}
+
+/* YouTube embeds (iframes) - Responsive with 16:9 aspect ratio */
+.md-body iframe[src*="youtube.com"],
+.md-body iframe[src*="youtu.be"] {
+  @apply w-full max-w-full my-6 mx-auto block;
+  aspect-ratio: 16 / 9;
+  height: auto !important;
+}
+
+/* TipTap YouTube wrapper responsive styling with 16:9 aspect ratio */
+.md-body div[data-youtube-video] {
+  @apply w-full my-6;
+}
+
+.md-body div[data-youtube-video] iframe {
+  @apply w-full;
+  aspect-ratio: 16 / 9;
+  height: auto !important;
+}
+
+/* ------------------------------------------------------- */
+/* ---------- TipTap Image Resize Handles ---------- */
+/* ------------------------------------------------------- */
+/*
+.tiptap :first-child {
+  margin-top: 0;
+}
+*/
+
+.tiptap img {
+  display: block;
+}
+
+.tiptap [data-resize-handle] {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.tiptap [data-resize-handle]:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+/* Corner handles */
+.tiptap [data-resize-handle='top-left'],
+.tiptap [data-resize-handle='top-right'],
+.tiptap [data-resize-handle='bottom-left'],
+.tiptap [data-resize-handle='bottom-right'] {
+  width: 8px;
+  height: 8px;
+}
+
+.tiptap [data-resize-handle='top-left'] {
+  top: -4px;
+  left: -4px;
+  cursor: nwse-resize;
+}
+
+.tiptap [data-resize-handle='top-right'] {
+  top: -4px;
+  right: -4px;
+  cursor: nesw-resize;
+}
+
+.tiptap [data-resize-handle='bottom-left'] {
+  bottom: -4px;
+  left: -4px;
+  cursor: nesw-resize;
+}
+
+.tiptap [data-resize-handle='bottom-right'] {
+  bottom: -4px;
+  right: -4px;
+  cursor: nwse-resize;
+}
+
+/* Edge handles */
+.tiptap [data-resize-handle='top'],
+.tiptap [data-resize-handle='bottom'] {
+  height: 6px;
+  left: 8px;
+  right: 8px;
+}
+
+.tiptap [data-resize-handle='top'] {
+  top: -3px;
+  cursor: ns-resize;
+}
+
+.tiptap [data-resize-handle='bottom'] {
+  bottom: -3px;
+  cursor: ns-resize;
+}
+
+.tiptap [data-resize-handle='left'],
+.tiptap [data-resize-handle='right'] {
+  width: 6px;
+  top: 8px;
+  bottom: 8px;
+}
+
+.tiptap [data-resize-handle='left'] {
+  left: -3px;
+  cursor: ew-resize;
+}
+
+.tiptap [data-resize-handle='right'] {
+  right: -3px;
+  cursor: ew-resize;
+}
+
+.tiptap [data-resize-state='true'] [data-resize-wrapper] {
+  outline: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 0.125rem;
 }

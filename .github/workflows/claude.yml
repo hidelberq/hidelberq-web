@@ -1,0 +1,19 @@
+name: Claude
+on:
+  pull_request:
+  pull_request_review:
+  pull_request_review_comment:
+  issue_comment:
+  issues:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+  id-token: write
+
+jobs:
+  claude:
+    uses: nw-union/.github/.github/workflows/claude.yml@main
+    secrets: inherit
+
