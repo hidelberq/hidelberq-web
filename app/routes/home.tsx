@@ -3,7 +3,7 @@ import { useRevalidator } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { tweets } from "../db/schema";
 import { desc, eq, sql } from "drizzle-orm";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 // --- Configuration ---
 const GENERATION_COOLDOWN_MS = 2 * 60 * 1000; // 2分間のクールダウン
@@ -19,15 +19,16 @@ interface GeneratedTweet {
 	authorHandle: string;
 	authorEmoji: string;
 	category: string;
+	sourceUrl: string;
 }
 
-// --- Gemini batch generation ---
+// --- Gemini batch generation (2段階: 検索→JSON生成) ---
 async function generateTweetBatch(
 	apiKey: string,
+	pastTweets: string[],
 ): Promise<GeneratedTweet[]> {
 	try {
-		const genAI = new GoogleGenerativeAI(apiKey);
-		const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+		const ai = new GoogleGenAI({ apiKey });
 
 		const today = new Date().toLocaleDateString("ja-JP", {
 			year: "numeric",
@@ -36,59 +37,157 @@ async function generateTweetBatch(
 			weekday: "long",
 		});
 
-		const prompt = `あなたはSNS「X (旧Twitter)」のリアルなタイムラインを生成するAIです。
+		// ステップ1: Google検索で最新ニュースを取得
+		console.log("Step 1: Fetching latest news via Google Search grounding...");
+		const searchPrompt = `今日は${today}です。
+以下のカテゴリごとに、今日の日本と世界の最新ニュース・話題を1〜2件ずつ箇条書きで教えてください。
+各ニュースには元のニュース記事のURLも必ず含めてください。
+
+カテゴリ:
+- テクノロジー（AI、Web開発、ガジェット、スタートアップ）
+- 政治（国内外の政治動向、選挙、政策）
+- バズ（SNSで話題の投稿、面白ネタ）
+- 芸能（芸能人、ドラマ、映画、音楽）
+- 社会（社会問題、事件・事故、経済）
+- 科学（科学技術、宇宙、医療、環境）
+- 浦安（浦安市のニュース、ディズニーリゾート）
+- 東京（東京のイベント、再開発、グルメ）
+- 西条・愛媛（西条市の話題、石鎚山、だんじり）
+- ライフ（日常の話題、トレンド）
+- 開発（プログラミング、エンジニアリング）`;
+
+		const searchResponse = await ai.models.generateContent({
+			model: "gemini-2.5-flash",
+			contents: searchPrompt,
+			config: {
+				tools: [{ googleSearch: {} }],
+			},
+		});
+
+		let newsContext = "";
+		try {
+			newsContext = searchResponse.text ?? "";
+		} catch {
+			const parts = searchResponse.candidates?.[0]?.content?.parts;
+			if (parts) {
+				newsContext = parts
+					.filter((p: { text?: string }) => typeof p.text === "string")
+					.map((p: { text?: string }) => p.text)
+					.join("");
+			}
+		}
+
+		console.log(`Step 1 done: news context length = ${newsContext.length}`);
+		if (newsContext.length > 0) {
+			console.log(
+				`News context (first 300 chars): ${newsContext.substring(0, 300)}`,
+			);
+		}
+
+		// ステップ2: ニュースコンテキストを基にJSON形式でツイート生成
+		console.log("Step 2: Generating tweets as JSON...");
+
+		const pastTweetsSection =
+			pastTweets.length > 0
+				? `\n【過去に生成済みのツイート（これらと内容が被らないようにしてください）】\n${pastTweets.map((t, i) => `${i + 1}. ${t}`).join("\n")}\n`
+				: "";
+
+		const newsSection =
+			newsContext.length > 0
+				? `\n【最新ニュース・話題（これらを基にツイートを作成してください）】\n${newsContext}\n`
+				: "";
+
+		const generatePrompt = `あなたはSNS「X (旧Twitter)」のリアルなタイムラインを生成するAIです。
 多様でリアルなツイートを${BATCH_SIZE}件生成してください。
 
 【今日の日付】${today}
-
+${newsSection}
 【カテゴリ（均等に分配）】
-- tech_news: 最新テクノロジーニュース（AI、Web開発、スタートアップ、ガジェット）
-- trending: 今話題のトピック（エンタメ、スポーツ、社会現象、バズった出来事）
-- opinion: 社会・文化・働き方に関する鋭い個人的見解
-- life: 日常の気づき、仕事あるある、人間観察、グルメ
-- dev: プログラミング・エンジニアリングの日常、技術ネタ
-
+- tech: テクノロジー（AI、Web開発、ガジェット、スタートアップ）
+- politics: 政治（国内外の政治動向、選挙、政策、国会）
+- buzz: バズ（SNSでバズっている話題、面白ネタ、拡散中の投稿）
+- entertainment: 芸能（芸能人、ドラマ、映画、音楽、アイドル）
+- society: 社会（社会問題、事件・事故、経済ニュース）
+- science: 科学（科学技術、宇宙、医療、環境、研究成果）
+- urayasu: 浦安（浦安市のローカルニュース、ディズニーリゾート、地域イベント）
+- tokyo: 東京（東京の話題、イベント、再開発、グルメ、交通）
+- saijo: 西条（愛媛県西条市のローカル話題、石鎚山、うちぬき、だんじり祭り）
+- life: ライフ（日常の気づき、仕事あるある、人間観察、グルメ）
+- opinion: オピニオン（社会・文化・働き方に関する鋭い個人的見解）
+- dev: 開発（プログラミング・エンジニアリングの日常、技術ネタ）
+${pastTweetsSection}
 【条件】
 - 日本語
 - 各ツイート100〜280文字
 - リアルなSNS口調（キャラごとに文体を変える。敬語、タメ口、独り言風など）
-- 今日の日付を踏まえ、最新ニュースや季節の話題を想像して書く
+- 最新ニュースや実際の出来事を反映して書く
+- 過去のツイートと同じ話題・内容・表現を避け、常に新鮮なツイートを生成する
+- 必ず各ツイートに元ネタとなるニュース記事やソースのURLをsourceUrlとして含める
 - ハッシュタグは0〜2個（使わないツイートもあり）
 - 各ツイートに異なるBOTキャラクター（毎回新しいユニークなキャラを考案）
 - リプライ風（「これマジ？」）、感想ツイート、ニュース速報風、日記風など多様なスタイルを混ぜる
 
-【出力形式】以下のJSON配列のみを返してください。
-[
-  {
-    "content": "ツイート本文",
-    "authorName": "表示名",
-    "authorHandle": "handle_name",
-    "authorEmoji": "絵文字1つ(アバター代わり)",
-    "category": "カテゴリ名"
-  }
-]
+以下のJSON配列のみを返してください。配列の要素数は必ず${BATCH_SIZE}件にしてください。`;
 
-JSON以外のテキストは一切出力しないでください。配列の要素数は必ず${BATCH_SIZE}件にしてください。`.trim();
+		const response = await ai.models.generateContent({
+			model: "gemini-2.5-flash",
+			contents: generatePrompt,
+			config: {
+				responseMimeType: "application/json",
+				responseSchema: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							content: { type: "string" },
+							authorName: { type: "string" },
+							authorHandle: { type: "string" },
+							authorEmoji: { type: "string" },
+							category: { type: "string" },
+							sourceUrl: { type: "string" },
+						},
+						required: [
+							"content",
+							"authorName",
+							"authorHandle",
+							"authorEmoji",
+							"category",
+							"sourceUrl",
+						],
+					},
+				},
+			},
+		});
 
-		const result = await model.generateContent(prompt);
-		const response = result.response;
-		const text = response.text();
+		const text = response.text ?? "";
+		console.log(`Step 2 done: response length = ${text.length}`);
+		console.log(
+			`Step 2 response (first 300 chars): ${text.substring(0, 300)}`,
+		);
 
-		// JSONパース（マークダウンコードブロック除去）
-		const jsonStr = text
-			.replace(/```json\n?/g, "")
-			.replace(/```\n?/g, "")
-			.trim();
-		const parsed = JSON.parse(jsonStr) as GeneratedTweet[];
+		if (!text.trim()) {
+			console.error("Gemini returned empty JSON response");
+			return [];
+		}
 
-		return parsed.filter(
+		const parsed = JSON.parse(text) as GeneratedTweet[];
+		console.log(`Parsed ${parsed.length} tweets from Gemini response`);
+
+		const filtered = parsed.filter(
 			(t) =>
 				t.content &&
 				t.authorName &&
 				t.authorHandle &&
 				t.authorEmoji &&
-				t.category,
+				t.category &&
+				t.sourceUrl,
 		);
+
+		console.log(
+			`After filtering: ${filtered.length} valid tweets (removed ${parsed.length - filtered.length})`,
+		);
+
+		return filtered;
 	} catch (e) {
 		console.error("Gemini generation error:", e);
 		return [];
@@ -100,35 +199,84 @@ function getFallbackTweets(): GeneratedTweet[] {
 	return [
 		{
 			content:
-				"TypeScriptの型システム、触れば触るほど奥が深い。Conditional Typesとinferの組み合わせでやりたいことが表現できた時の快感よ。型レベルプログラミングは知的パズルだ。 #TypeScript",
-			authorName: "型パズラー",
-			authorHandle: "type_puzzler",
-			authorEmoji: "🧩",
-			category: "dev",
-		},
-		{
-			content:
-				"AIコーディングアシスタント使い始めて半年。生産性は確実に上がったけど、自分でゼロから考える力が鈍ってきてる気がする。ツールとの距離感、定期的に見直さないとまずいかも。",
-			authorName: "考えるエンジニア",
-			authorHandle: "thinking_dev",
-			authorEmoji: "🤔",
-			category: "opinion",
-		},
-		{
-			content:
 				"【速報】大手テック企業がエッジコンピューティング分野に大型投資を発表。クラウドからエッジへのシフトが本格化。開発者にとってはCloudflare Workersのようなプラットフォームの重要性がますます高まりそう。",
 			authorName: "テックニュース速報",
 			authorHandle: "tech_breaking",
 			authorEmoji: "⚡",
-			category: "tech_news",
+			category: "tech",
+			sourceUrl: "https://blog.cloudflare.com/",
 		},
 		{
 			content:
-				"金曜の夜にデプロイする勇者、今週もお疲れ様でした。本番環境は無事ですか？我々の週末の平和は、あなたのロールバック計画にかかっています。",
-			authorName: "インフラの番人",
-			authorHandle: "infra_guardian",
-			authorEmoji: "🛡️",
-			category: "dev",
+				"与党の新しい経済対策案、減税と給付金の組み合わせか。野党は「規模が不十分」と批判してるけど、財源の議論が一番大事なのでは。国会中継ちゃんと見てる人どれくらいいるんだろう。",
+			authorName: "政治ウォッチャー",
+			authorHandle: "politics_watch",
+			authorEmoji: "🏛️",
+			category: "politics",
+			sourceUrl: "https://www3.nhk.or.jp/news/cat04.html",
+		},
+		{
+			content:
+				"「上司に有給の理由聞かれて『私用です』って答えたら『私用って何？』って聞き返された」ってポスト、10万いいね超えてて笑う。みんな同じ経験してるんだな。 #あるある",
+			authorName: "バズ収集家",
+			authorHandle: "buzz_collector",
+			authorEmoji: "🔥",
+			category: "buzz",
+			sourceUrl: "https://x.com/",
+		},
+		{
+			content:
+				"今期ドラマの視聴率ランキング見たけど、配信時代に視聴率で語る意味あるのかな。TVerの再生数込みで評価しないと実態と乖離しすぎてる。推しの出てるドラマが低視聴率扱いされるの納得いかん。",
+			authorName: "ドラマ垢",
+			authorHandle: "drama_addict",
+			authorEmoji: "🎬",
+			category: "entertainment",
+			sourceUrl: "https://tver.jp/",
+		},
+		{
+			content:
+				"物価上昇が止まらない。スーパーの卵、1年前の1.5倍になってない？実質賃金のマイナスが続く中、「景気は緩やかに回復」という政府発表との温度差がすごい。",
+			authorName: "生活防衛隊",
+			authorHandle: "seikatsu_bouei",
+			authorEmoji: "📊",
+			category: "society",
+			sourceUrl: "https://www3.nhk.or.jp/news/cat01.html",
+		},
+		{
+			content:
+				"JAXAの小型月着陸実証機SLIMの成果が論文に。ピンポイント着陸の精度がすごい。日本の宇宙技術、予算少ない中でこの成果出せるの本当にすごいと思う。もっと予算つけてほしい。 #JAXA",
+			authorName: "宇宙好きのひと",
+			authorHandle: "space_fan_jp",
+			authorEmoji: "🚀",
+			category: "science",
+			sourceUrl: "https://www.jaxa.jp/projects/sas/slim/",
+		},
+		{
+			content:
+				"浦安の市民祭り、今年もすごい人出だった。地元の飲食店の屋台が充実してて最高。新浦安駅前の再開発も進んでるし、住みやすさランキング上位なの納得。 #浦安",
+			authorName: "浦安市民",
+			authorHandle: "urayasu_life",
+			authorEmoji: "🏠",
+			category: "urayasu",
+			sourceUrl: "https://www.city.urayasu.lg.jp/",
+		},
+		{
+			content:
+				"渋谷の再開発、また新しいビルできるらしい。もう何がどこだかわからなくなってきた。東京駅周辺も変わりすぎて、数年前のGoogle Mapの方が役に立つまである。 #東京",
+			authorName: "東京散歩",
+			authorHandle: "tokyo_walker",
+			authorEmoji: "🗼",
+			category: "tokyo",
+			sourceUrl: "https://www.metro.tokyo.lg.jp/",
+		},
+		{
+			content:
+				"西条のうちぬきの水、やっぱり最高に美味い。名水百選なの伊達じゃない。東京に戻ると水道水飲めなくなるのが唯一の欠点。石鎚山の恵みに感謝。 #西条市 #うちぬき",
+			authorName: "西条っ子",
+			authorHandle: "saijo_love",
+			authorEmoji: "💧",
+			category: "saijo",
+			sourceUrl: "https://www.city.saijo.ehime.jp/",
 		},
 		{
 			content:
@@ -137,62 +285,25 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "cafe_nomad",
 			authorEmoji: "☕",
 			category: "life",
+			sourceUrl: "https://tabelog.com/",
 		},
 		{
 			content:
-				"今年の新語・流行語、ノミネート見たけど半分くらい知らない言葉だった。SNSのタイムラインだけで世の中を理解した気になってたけど、全然フィルターバブルの中だったわ。",
-			authorName: "社会観察日記",
-			authorHandle: "social_watcher",
-			authorEmoji: "👁️",
-			category: "trending",
-		},
-		{
-			content:
-				"リモートワーク3年目にして悟ったこと。「通勤時間がなくなった分」は仕事に吸収されるのではなく、睡眠に吸収される。人間の本能は正直。",
-			authorName: "リモワの真実",
-			authorHandle: "remote_truth",
-			authorEmoji: "🏠",
-			category: "life",
-		},
-		{
-			content:
-				"Rustの学習曲線がキツいって言われるけど、所有権システム理解した後のコード書いてる時の安心感は異常。コンパイラが通ったらほぼバグなしという体験、他の言語では味わえない。 #Rust",
-			authorName: "Rustacean見習い",
-			authorHandle: "rust_learner",
-			authorEmoji: "🦀",
-			category: "dev",
-		},
-		{
-			content:
-				"地方のスーパーで売ってた地元の日本酒が衝撃的に美味かった。東京では絶対手に入らないやつ。こういう出会いがあるから出張も悪くない。",
-			authorName: "出張グルメ部",
-			authorHandle: "business_gourmet",
-			authorEmoji: "🍶",
-			category: "life",
-		},
-		{
-			content:
-				"Web開発のトレンド、毎年「今年こそサーバーサイドの復権」って言われ続けてるけど、今年はガチだと思う。RSCもhtmxもSSRも、結局サーバーで処理する方が合理的なケースは多い。",
-			authorName: "フロントエンド考古学",
-			authorHandle: "frontend_arch",
-			authorEmoji: "🏛️",
-			category: "tech_news",
-		},
-		{
-			content:
-				"会議が多い日に限ってコードが書きたくなるの、あれ何なんだろう。逆に丸一日コーディングデーだと昼過ぎには集中力切れてる。人間の脳は天邪鬼すぎる。",
-			authorName: "矛盾するエンジニア",
-			authorHandle: "paradox_eng",
-			authorEmoji: "🔄",
+				"AIコーディングアシスタント使い始めて半年。生産性は確実に上がったけど、自分でゼロから考える力が鈍ってきてる気がする。ツールとの距離感、定期的に見直さないとまずいかも。",
+			authorName: "考えるエンジニア",
+			authorHandle: "thinking_dev",
+			authorEmoji: "🤔",
 			category: "opinion",
+			sourceUrl: "https://zenn.dev/",
 		},
 		{
 			content:
-				"深夜2時のコンビニ、なぜか異様に落ち着く。蛍光灯の白い光と、微かに聞こえるBGMと、他に客がいない空間。現代の禅寺はコンビニかもしれない。",
-			authorName: "深夜徘徊部",
-			authorHandle: "midnight_walk",
-			authorEmoji: "🌙",
-			category: "life",
+				"金曜の夜にデプロイする勇者、今週もお疲れ様でした。本番環境は無事ですか？我々の週末の平和は、あなたのロールバック計画にかかっています。",
+			authorName: "インフラの番人",
+			authorHandle: "infra_guardian",
+			authorEmoji: "🛡️",
+			category: "dev",
+			sourceUrl: "https://qiita.com/",
 		},
 	];
 }
@@ -218,7 +329,7 @@ export function meta(): Route.MetaDescriptors {
 // --- Loader ---
 export async function loader({ context }: Route.LoaderArgs) {
 	const db = drizzle(context.cloudflare.env.DB);
-	const apiKey = context.cloudflare.env.GEMINI_API_KEY;
+	const apiKey = context.cloudflare.env.GEMINI_API_KEY as string;
 
 	// 1. 未表示ツイートの件数を取得
 	const [unshownResult] = await db
@@ -241,11 +352,28 @@ export async function loader({ context }: Route.LoaderArgs) {
 		const elapsed = now - lastCreated;
 
 		if (elapsed > GENERATION_COOLDOWN_MS || !mostRecent) {
+			// 過去のツイート内容を取得（重複防止用）
+			const recentTweets = await db
+				.select({ content: tweets.content })
+				.from(tweets)
+				.orderBy(desc(tweets.createdAt))
+				.limit(50);
+			const pastTweetContents = recentTweets.map((t) => t.content);
+
 			let generated: GeneratedTweet[] = [];
 
 			if (apiKey) {
-				console.log("Generating tweet batch via Gemini...");
-				generated = await generateTweetBatch(apiKey);
+				console.log(
+					`Generating tweet batch via Gemini... (API key length: ${apiKey.length})`,
+				);
+				generated = await generateTweetBatch(apiKey, pastTweetContents);
+				console.log(
+					`Gemini returned ${generated.length} tweets`,
+				);
+			} else {
+				console.log(
+					"GEMINI_API_KEY is not set or empty, skipping Gemini generation",
+				);
 			}
 
 			// Gemini失敗時またはAPIキー未設定時はフォールバック
@@ -254,13 +382,13 @@ export async function loader({ context }: Route.LoaderArgs) {
 				generated = getFallbackTweets();
 			}
 
-			// タイムスタンプを過去数時間にランダム分散させてリアルに見せる
-			const baseTime = now;
+			// タイムスタンプを等間隔に割り当て（最初のツイートが最新、最後が最古）
+			// バッチ内の順番は配列順で安定し、既存ツイートより常に新しくなる
+			const intervalMs = 60 * 1000; // 1分間隔
 			for (let i = 0; i < generated.length; i++) {
 				const tweet = generated[i];
 				const engagement = randomEngagement();
-				const offsetMs = Math.floor(Math.random() * 3 * 60 * 60 * 1000); // 過去3時間以内
-				const createdAt = new Date(baseTime - offsetMs);
+				const createdAt = new Date(now - i * intervalMs);
 
 				await db
 					.insert(tweets)
@@ -270,6 +398,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 						authorHandle: tweet.authorHandle,
 						authorEmoji: tweet.authorEmoji,
 						category: tweet.category,
+						sourceUrl: tweet.sourceUrl,
 						...engagement,
 						displayed: false,
 						createdAt,
@@ -298,7 +427,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 		}
 	}
 
-	// 4. 表示済みツイートを取得してタイムラインに返す
+	// 4. 表示済みツイートを取得してタイムラインに返す（新しい順）
 	const timeline = await db
 		.select()
 		.from(tweets)
@@ -333,13 +462,29 @@ function formatNumber(n: number): string {
 	return n.toString();
 }
 
+// --- Extract hostname safely ---
+function extractHostname(url: string): string {
+	try {
+		return new URL(url).hostname;
+	} catch {
+		return url;
+	}
+}
+
 // --- Category badge ---
 function categoryLabel(category: string): string | null {
 	const map: Record<string, string> = {
-		tech_news: "テック",
-		trending: "トレンド",
-		opinion: "オピニオン",
+		tech: "テック",
+		politics: "政治",
+		buzz: "バズ",
+		entertainment: "芸能",
+		society: "社会",
+		science: "科学",
+		urayasu: "浦安",
+		tokyo: "東京",
+		saijo: "西条",
 		life: "ライフ",
+		opinion: "オピニオン",
 		dev: "開発",
 	};
 	return map[category] ?? null;
@@ -347,10 +492,17 @@ function categoryLabel(category: string): string | null {
 
 function categoryColor(category: string): string {
 	const map: Record<string, string> = {
-		tech_news: "bg-blue-500/20 text-blue-400",
-		trending: "bg-purple-500/20 text-purple-400",
-		opinion: "bg-amber-500/20 text-amber-400",
+		tech: "bg-blue-500/20 text-blue-400",
+		politics: "bg-red-500/20 text-red-400",
+		buzz: "bg-pink-500/20 text-pink-400",
+		entertainment: "bg-fuchsia-500/20 text-fuchsia-400",
+		society: "bg-orange-500/20 text-orange-400",
+		science: "bg-emerald-500/20 text-emerald-400",
+		urayasu: "bg-sky-500/20 text-sky-400",
+		tokyo: "bg-violet-500/20 text-violet-400",
+		saijo: "bg-lime-500/20 text-lime-400",
 		life: "bg-green-500/20 text-green-400",
+		opinion: "bg-amber-500/20 text-amber-400",
 		dev: "bg-cyan-500/20 text-cyan-400",
 	};
 	return map[category] ?? "bg-gray-500/20 text-gray-400";
@@ -450,6 +602,31 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 										<p className="mt-1 text-[15px] leading-relaxed whitespace-pre-wrap break-words text-gray-100">
 											{tweet.content}
 										</p>
+
+										{/* Source link */}
+										{tweet.sourceUrl && (
+											<a
+												href={tweet.sourceUrl}
+												target="_blank"
+												rel="noopener noreferrer"
+												className="mt-1.5 inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+											>
+												<svg
+													className="w-3.5 h-3.5"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+													strokeWidth={1.5}
+												>
+													<path
+														strokeLinecap="round"
+														strokeLinejoin="round"
+														d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.04a4.5 4.5 0 00-6.364-6.364L4.5 8.257"
+													/>
+												</svg>
+												{extractHostname(tweet.sourceUrl)}
+											</a>
+										)}
 
 										{/* Engagement bar */}
 										<div className="flex items-center gap-6 mt-2.5 text-gray-500 text-xs">
