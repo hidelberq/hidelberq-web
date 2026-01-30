@@ -399,6 +399,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 						authorEmoji: tweet.authorEmoji,
 						category: tweet.category,
 						sourceUrl: `https://www.google.com/search?q=${encodeURIComponent(tweet.searchKeyword)}`,
+						searchKeyword: tweet.searchKeyword,
 						...engagement,
 						displayed: false,
 						createdAt,
