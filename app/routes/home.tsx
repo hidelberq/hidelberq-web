@@ -1,723 +1,324 @@
+import { useEffect, useRef } from "react";
+import { Link } from "react-router";
+import { GlitchText } from "../components/GlitchText";
+import {
+  DiscordIcon,
+  GitHubIcon,
+  NoteIcon,
+  ShopIcon,
+  SignInIcon,
+  YouTubeIcon,
+} from "../components/Icons";
+import { createMetaTags } from "../util";
 import type { Route } from "./+types/home";
-import { useRevalidator } from "react-router";
-import { drizzle } from "drizzle-orm/d1";
-import { tweets } from "../db/schema";
-import { desc, eq, sql } from "drizzle-orm";
-import { GoogleGenAI } from "@google/genai";
 
-// --- Configuration ---
-const GENERATION_COOLDOWN_MS = 2 * 60 * 1000; // 2分間のクールダウン
-const BATCH_SIZE = 12; // 1回のGemini呼び出しで生成するツイート数
-const DISPLAY_COUNT = 25; // タイムラインに表示するツイート数
-const NEW_PER_LOAD = 5; // リロードごとに新たに表示するツイート数
-const UNSHOWN_THRESHOLD = 8; // この数を下回ったらGeminiでバッチ生成
+const ASCII_ART = ` ███╗   ██╗ ██╗    ██╗ ██╗   ██╗
+ ████╗  ██║ ██║    ██║ ██║   ██║
+ ██╔██╗ ██║ ██║ █╗ ██║ ██║   ██║
+ ██║╚██╗██║ ██║███╗██║ ██║   ██║
+ ██║ ╚████║ ╚███╔███╔╝ ╚██████╔╝
+ ╚═╝  ╚═══╝  ╚══╝╚══╝   ╚═════╝`;
 
-// --- Types ---
-interface GeneratedTweet {
-	content: string;
-	authorName: string;
-	authorHandle: string;
-	authorEmoji: string;
-	category: string;
-	sourceUrl: string;
+const ABOUT_TEXT = "Hangout crew. Lovers of Culture, Art and Tech!";
+const SIGNIN_NOTE_TEXT =
+  "※ NWUメンバーは、ここからサインインできます\n※ メンバーでない方は、まずは気軽に Discord に入ってください。一緒に遊びましょう!";
+
+export async function loader({ context, request }: Route.LoaderArgs) {
+  const { log, auth } = context;
+
+  log.info(`🔄 ホーム Loader`);
+
+  // 認証チェック
+  return (await auth.auth(request)).isOk();
 }
 
-// --- Gemini batch generation (2段階: 検索→JSON生成) ---
-async function generateTweetBatch(
-	apiKey: string,
-	pastTweets: string[],
-): Promise<GeneratedTweet[]> {
-	try {
-		const ai = new GoogleGenAI({ apiKey });
+export const meta = (_: Route.MetaArgs) =>
+  createMetaTags({
+    title: "NWU",
+    description: "We are Hangout crew. Lovers of Culture, Art and Tech!",
+  });
 
-		const today = new Date().toLocaleDateString("ja-JP", {
-			year: "numeric",
-			month: "long",
-			day: "numeric",
-			weekday: "long",
-		});
-
-		// ステップ1: Google検索で最新ニュースを取得
-		console.log("Step 1: Fetching latest news via Google Search grounding...");
-		const searchPrompt = `今日は${today}です。
-以下のカテゴリごとに、今日の日本と世界の最新ニュース・話題を1〜2件ずつ箇条書きで教えてください。
-各ニュースには元のニュース記事のURLも必ず含めてください。
-
-カテゴリ:
-- テクノロジー（AI、Web開発、ガジェット、スタートアップ）
-- 政治（国内外の政治動向、選挙、政策）
-- バズ（SNSで話題の投稿、面白ネタ）
-- 芸能（芸能人、ドラマ、映画、音楽）
-- 社会（社会問題、事件・事故、経済）
-- 科学（科学技術、宇宙、医療、環境）
-- 浦安（浦安市のニュース、ディズニーリゾート）
-- 東京（東京のイベント、再開発、グルメ）
-- 西条・愛媛（西条市の話題、石鎚山、だんじり）
-- ライフ（日常の話題、トレンド）
-- 開発（プログラミング、エンジニアリング）`;
-
-		const searchResponse = await ai.models.generateContent({
-			model: "gemini-2.5-flash",
-			contents: searchPrompt,
-			config: {
-				tools: [{ googleSearch: {} }],
-			},
-		});
-
-		let newsContext = "";
-		try {
-			newsContext = searchResponse.text ?? "";
-		} catch {
-			const parts = searchResponse.candidates?.[0]?.content?.parts;
-			if (parts) {
-				newsContext = parts
-					.filter((p: { text?: string }) => typeof p.text === "string")
-					.map((p: { text?: string }) => p.text)
-					.join("");
-			}
-		}
-
-		console.log(`Step 1 done: news context length = ${newsContext.length}`);
-		if (newsContext.length > 0) {
-			console.log(
-				`News context (first 300 chars): ${newsContext.substring(0, 300)}`,
-			);
-		}
-
-		// ステップ2: ニュースコンテキストを基にJSON形式でツイート生成
-		console.log("Step 2: Generating tweets as JSON...");
-
-		const pastTweetsSection =
-			pastTweets.length > 0
-				? `\n【過去に生成済みのツイート（これらと内容が被らないようにしてください）】\n${pastTweets.map((t, i) => `${i + 1}. ${t}`).join("\n")}\n`
-				: "";
-
-		const newsSection =
-			newsContext.length > 0
-				? `\n【最新ニュース・話題（これらを基にツイートを作成してください）】\n${newsContext}\n`
-				: "";
-
-		const generatePrompt = `あなたはSNS「X (旧Twitter)」のリアルなタイムラインを生成するAIです。
-多様でリアルなツイートを${BATCH_SIZE}件生成してください。
-
-【今日の日付】${today}
-${newsSection}
-【カテゴリ（均等に分配）】
-- tech: テクノロジー（AI、Web開発、ガジェット、スタートアップ）
-- politics: 政治（国内外の政治動向、選挙、政策、国会）
-- buzz: バズ（SNSでバズっている話題、面白ネタ、拡散中の投稿）
-- entertainment: 芸能（芸能人、ドラマ、映画、音楽、アイドル）
-- society: 社会（社会問題、事件・事故、経済ニュース）
-- science: 科学（科学技術、宇宙、医療、環境、研究成果）
-- urayasu: 浦安（浦安市のローカルニュース、ディズニーリゾート、地域イベント）
-- tokyo: 東京（東京の話題、イベント、再開発、グルメ、交通）
-- saijo: 西条（愛媛県西条市のローカル話題、石鎚山、うちぬき、だんじり祭り）
-- life: ライフ（日常の気づき、仕事あるある、人間観察、グルメ）
-- opinion: オピニオン（社会・文化・働き方に関する鋭い個人的見解）
-- dev: 開発（プログラミング・エンジニアリングの日常、技術ネタ）
-${pastTweetsSection}
-【条件】
-- 日本語
-- 各ツイート100〜280文字
-- リアルなSNS口調（キャラごとに文体を変える。敬語、タメ口、独り言風など）
-- 最新ニュースや実際の出来事を反映して書く
-- 過去のツイートと同じ話題・内容・表現を避け、常に新鮮なツイートを生成する
-- 必ず各ツイートに元ネタとなるニュース記事やソースのURLをsourceUrlとして含める
-- ハッシュタグは0〜2個（使わないツイートもあり）
-- 各ツイートに異なるBOTキャラクター（毎回新しいユニークなキャラを考案）
-- リプライ風（「これマジ？」）、感想ツイート、ニュース速報風、日記風など多様なスタイルを混ぜる
-
-以下のJSON配列のみを返してください。配列の要素数は必ず${BATCH_SIZE}件にしてください。`;
-
-		const response = await ai.models.generateContent({
-			model: "gemini-2.5-flash",
-			contents: generatePrompt,
-			config: {
-				responseMimeType: "application/json",
-				responseSchema: {
-					type: "array",
-					items: {
-						type: "object",
-						properties: {
-							content: { type: "string" },
-							authorName: { type: "string" },
-							authorHandle: { type: "string" },
-							authorEmoji: { type: "string" },
-							category: { type: "string" },
-							sourceUrl: { type: "string" },
-						},
-						required: [
-							"content",
-							"authorName",
-							"authorHandle",
-							"authorEmoji",
-							"category",
-							"sourceUrl",
-						],
-					},
-				},
-			},
-		});
-
-		const text = response.text ?? "";
-		console.log(`Step 2 done: response length = ${text.length}`);
-		console.log(
-			`Step 2 response (first 300 chars): ${text.substring(0, 300)}`,
-		);
-
-		if (!text.trim()) {
-			console.error("Gemini returned empty JSON response");
-			return [];
-		}
-
-		const parsed = JSON.parse(text) as GeneratedTweet[];
-		console.log(`Parsed ${parsed.length} tweets from Gemini response`);
-
-		const filtered = parsed.filter(
-			(t) =>
-				t.content &&
-				t.authorName &&
-				t.authorHandle &&
-				t.authorEmoji &&
-				t.category &&
-				t.sourceUrl,
-		);
-
-		console.log(
-			`After filtering: ${filtered.length} valid tweets (removed ${parsed.length - filtered.length})`,
-		);
-
-		return filtered;
-	} catch (e) {
-		console.error("Gemini generation error:", e);
-		return [];
-	}
-}
-
-// --- Fallback tweets (Gemini未設定/失敗時) ---
-function getFallbackTweets(): GeneratedTweet[] {
-	return [
-		{
-			content:
-				"【速報】大手テック企業がエッジコンピューティング分野に大型投資を発表。クラウドからエッジへのシフトが本格化。開発者にとってはCloudflare Workersのようなプラットフォームの重要性がますます高まりそう。",
-			authorName: "テックニュース速報",
-			authorHandle: "tech_breaking",
-			authorEmoji: "⚡",
-			category: "tech",
-			sourceUrl: "https://blog.cloudflare.com/",
-		},
-		{
-			content:
-				"与党の新しい経済対策案、減税と給付金の組み合わせか。野党は「規模が不十分」と批判してるけど、財源の議論が一番大事なのでは。国会中継ちゃんと見てる人どれくらいいるんだろう。",
-			authorName: "政治ウォッチャー",
-			authorHandle: "politics_watch",
-			authorEmoji: "🏛️",
-			category: "politics",
-			sourceUrl: "https://www3.nhk.or.jp/news/cat04.html",
-		},
-		{
-			content:
-				"「上司に有給の理由聞かれて『私用です』って答えたら『私用って何？』って聞き返された」ってポスト、10万いいね超えてて笑う。みんな同じ経験してるんだな。 #あるある",
-			authorName: "バズ収集家",
-			authorHandle: "buzz_collector",
-			authorEmoji: "🔥",
-			category: "buzz",
-			sourceUrl: "https://x.com/",
-		},
-		{
-			content:
-				"今期ドラマの視聴率ランキング見たけど、配信時代に視聴率で語る意味あるのかな。TVerの再生数込みで評価しないと実態と乖離しすぎてる。推しの出てるドラマが低視聴率扱いされるの納得いかん。",
-			authorName: "ドラマ垢",
-			authorHandle: "drama_addict",
-			authorEmoji: "🎬",
-			category: "entertainment",
-			sourceUrl: "https://tver.jp/",
-		},
-		{
-			content:
-				"物価上昇が止まらない。スーパーの卵、1年前の1.5倍になってない？実質賃金のマイナスが続く中、「景気は緩やかに回復」という政府発表との温度差がすごい。",
-			authorName: "生活防衛隊",
-			authorHandle: "seikatsu_bouei",
-			authorEmoji: "📊",
-			category: "society",
-			sourceUrl: "https://www3.nhk.or.jp/news/cat01.html",
-		},
-		{
-			content:
-				"JAXAの小型月着陸実証機SLIMの成果が論文に。ピンポイント着陸の精度がすごい。日本の宇宙技術、予算少ない中でこの成果出せるの本当にすごいと思う。もっと予算つけてほしい。 #JAXA",
-			authorName: "宇宙好きのひと",
-			authorHandle: "space_fan_jp",
-			authorEmoji: "🚀",
-			category: "science",
-			sourceUrl: "https://www.jaxa.jp/projects/sas/slim/",
-		},
-		{
-			content:
-				"浦安の市民祭り、今年もすごい人出だった。地元の飲食店の屋台が充実してて最高。新浦安駅前の再開発も進んでるし、住みやすさランキング上位なの納得。 #浦安",
-			authorName: "浦安市民",
-			authorHandle: "urayasu_life",
-			authorEmoji: "🏠",
-			category: "urayasu",
-			sourceUrl: "https://www.city.urayasu.lg.jp/",
-		},
-		{
-			content:
-				"渋谷の再開発、また新しいビルできるらしい。もう何がどこだかわからなくなってきた。東京駅周辺も変わりすぎて、数年前のGoogle Mapの方が役に立つまである。 #東京",
-			authorName: "東京散歩",
-			authorHandle: "tokyo_walker",
-			authorEmoji: "🗼",
-			category: "tokyo",
-			sourceUrl: "https://www.metro.tokyo.lg.jp/",
-		},
-		{
-			content:
-				"西条のうちぬきの水、やっぱり最高に美味い。名水百選なの伊達じゃない。東京に戻ると水道水飲めなくなるのが唯一の欠点。石鎚山の恵みに感謝。 #西条市 #うちぬき",
-			authorName: "西条っ子",
-			authorHandle: "saijo_love",
-			authorEmoji: "💧",
-			category: "saijo",
-			sourceUrl: "https://www.city.saijo.ehime.jp/",
-		},
-		{
-			content:
-				"最近のカフェ、Wi-Fiとコンセント完備なのは嬉しいけど、居心地良すぎて気づいたら5時間経ってる。コーヒー1杯で粘る自分に罪悪感を感じつつ、2杯目を注文する日常。",
-			authorName: "カフェ難民",
-			authorHandle: "cafe_nomad",
-			authorEmoji: "☕",
-			category: "life",
-			sourceUrl: "https://tabelog.com/",
-		},
-		{
-			content:
-				"AIコーディングアシスタント使い始めて半年。生産性は確実に上がったけど、自分でゼロから考える力が鈍ってきてる気がする。ツールとの距離感、定期的に見直さないとまずいかも。",
-			authorName: "考えるエンジニア",
-			authorHandle: "thinking_dev",
-			authorEmoji: "🤔",
-			category: "opinion",
-			sourceUrl: "https://zenn.dev/",
-		},
-		{
-			content:
-				"金曜の夜にデプロイする勇者、今週もお疲れ様でした。本番環境は無事ですか？我々の週末の平和は、あなたのロールバック計画にかかっています。",
-			authorName: "インフラの番人",
-			authorHandle: "infra_guardian",
-			authorEmoji: "🛡️",
-			category: "dev",
-			sourceUrl: "https://qiita.com/",
-		},
-	];
-}
-
-// --- Random engagement numbers ---
-function randomEngagement() {
-	return {
-		likes: Math.floor(Math.random() * 800) + 1,
-		retweets: Math.floor(Math.random() * 150),
-		replies: Math.floor(Math.random() * 60),
-		views: Math.floor(Math.random() * 80000) + 100,
-	};
-}
-
-// --- Meta ---
-export function meta(): Route.MetaDescriptors {
-	return [
-		{ title: "タイムライン" },
-		{ name: "description", content: "AIが生成するSNSタイムライン" },
-	];
-}
-
-// --- Loader ---
-export async function loader({ context }: Route.LoaderArgs) {
-	const db = drizzle(context.cloudflare.env.DB);
-	const apiKey = context.cloudflare.env.GEMINI_API_KEY as string;
-
-	// 1. 未表示ツイートの件数を取得
-	const [unshownResult] = await db
-		.select({ count: sql<number>`count(*)` })
-		.from(tweets)
-		.where(eq(tweets.displayed, false));
-	const unshownCount = unshownResult?.count ?? 0;
-
-	// 2. 未表示ストックが閾値以下なら新規バッチ生成を検討
-	if (unshownCount < UNSHOWN_THRESHOLD) {
-		// クールダウンチェック: 最新ツイートの作成日時を確認
-		const [mostRecent] = await db
-			.select({ createdAt: tweets.createdAt })
-			.from(tweets)
-			.orderBy(desc(tweets.createdAt))
-			.limit(1);
-
-		const now = Date.now();
-		const lastCreated = mostRecent?.createdAt?.getTime() ?? 0;
-		const elapsed = now - lastCreated;
-
-		if (elapsed > GENERATION_COOLDOWN_MS || !mostRecent) {
-			// 過去のツイート内容を取得（重複防止用）
-			const recentTweets = await db
-				.select({ content: tweets.content })
-				.from(tweets)
-				.orderBy(desc(tweets.createdAt))
-				.limit(50);
-			const pastTweetContents = recentTweets.map((t) => t.content);
-
-			let generated: GeneratedTweet[] = [];
-
-			if (apiKey) {
-				console.log(
-					`Generating tweet batch via Gemini... (API key length: ${apiKey.length})`,
-				);
-				generated = await generateTweetBatch(apiKey, pastTweetContents);
-				console.log(
-					`Gemini returned ${generated.length} tweets`,
-				);
-			} else {
-				console.log(
-					"GEMINI_API_KEY is not set or empty, skipping Gemini generation",
-				);
-			}
-
-			// Gemini失敗時またはAPIキー未設定時はフォールバック
-			if (generated.length === 0) {
-				console.log("Using fallback tweets.");
-				generated = getFallbackTweets();
-			}
-
-			// タイムスタンプを等間隔に割り当て（最初のツイートが最新、最後が最古）
-			// バッチ内の順番は配列順で安定し、既存ツイートより常に新しくなる
-			const intervalMs = 60 * 1000; // 1分間隔
-			for (let i = 0; i < generated.length; i++) {
-				const tweet = generated[i];
-				const engagement = randomEngagement();
-				const createdAt = new Date(now - i * intervalMs);
-
-				await db
-					.insert(tweets)
-					.values({
-						content: tweet.content,
-						authorName: tweet.authorName,
-						authorHandle: tweet.authorHandle,
-						authorEmoji: tweet.authorEmoji,
-						category: tweet.category,
-						sourceUrl: tweet.sourceUrl,
-						...engagement,
-						displayed: false,
-						createdAt,
-					})
-					.execute();
-			}
-			console.log(`Saved ${generated.length} tweets to DB`);
-		}
-	}
-
-	// 3. 未表示ツイートの一部を「表示済み」に切り替える（新着感を演出）
-	const newTweets = await db
-		.select()
-		.from(tweets)
-		.where(eq(tweets.displayed, false))
-		.orderBy(desc(tweets.createdAt))
-		.limit(NEW_PER_LOAD);
-
-	if (newTweets.length > 0) {
-		for (const t of newTweets) {
-			await db
-				.update(tweets)
-				.set({ displayed: true })
-				.where(eq(tweets.id, t.id))
-				.execute();
-		}
-	}
-
-	// 4. 表示済みツイートを取得してタイムラインに返す（新しい順）
-	const timeline = await db
-		.select()
-		.from(tweets)
-		.where(eq(tweets.displayed, true))
-		.orderBy(desc(tweets.createdAt))
-		.limit(DISPLAY_COUNT);
-
-	return { tweets: timeline };
-}
-
-// --- Relative time helper ---
-function relativeTime(date: Date | null): string {
-	if (!date) return "";
-	const now = Date.now();
-	const diff = now - date.getTime();
-	const seconds = Math.floor(diff / 1000);
-	const minutes = Math.floor(seconds / 60);
-	const hours = Math.floor(minutes / 60);
-	const days = Math.floor(hours / 24);
-
-	if (seconds < 60) return `${seconds}秒`;
-	if (minutes < 60) return `${minutes}分`;
-	if (hours < 24) return `${hours}時間`;
-	if (days < 30) return `${days}日`;
-	return date.toLocaleDateString("ja-JP", { month: "short", day: "numeric" });
-}
-
-// --- Format large numbers ---
-function formatNumber(n: number): string {
-	if (n >= 10000) return `${(n / 10000).toFixed(1)}万`;
-	if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-	return n.toString();
-}
-
-// --- Extract hostname safely ---
-function extractHostname(url: string): string {
-	try {
-		return new URL(url).hostname;
-	} catch {
-		return url;
-	}
-}
-
-// --- Category badge ---
-function categoryLabel(category: string): string | null {
-	const map: Record<string, string> = {
-		tech: "テック",
-		politics: "政治",
-		buzz: "バズ",
-		entertainment: "芸能",
-		society: "社会",
-		science: "科学",
-		urayasu: "浦安",
-		tokyo: "東京",
-		saijo: "西条",
-		life: "ライフ",
-		opinion: "オピニオン",
-		dev: "開発",
-	};
-	return map[category] ?? null;
-}
-
-function categoryColor(category: string): string {
-	const map: Record<string, string> = {
-		tech: "bg-blue-500/20 text-blue-400",
-		politics: "bg-red-500/20 text-red-400",
-		buzz: "bg-pink-500/20 text-pink-400",
-		entertainment: "bg-fuchsia-500/20 text-fuchsia-400",
-		society: "bg-orange-500/20 text-orange-400",
-		science: "bg-emerald-500/20 text-emerald-400",
-		urayasu: "bg-sky-500/20 text-sky-400",
-		tokyo: "bg-violet-500/20 text-violet-400",
-		saijo: "bg-lime-500/20 text-lime-400",
-		life: "bg-green-500/20 text-green-400",
-		opinion: "bg-amber-500/20 text-amber-400",
-		dev: "bg-cyan-500/20 text-cyan-400",
-	};
-	return map[category] ?? "bg-gray-500/20 text-gray-400";
-}
-
-// --- Component ---
 export default function Home({ loaderData }: Route.ComponentProps) {
-	const revalidator = useRevalidator();
+  const isLogin = loaderData;
+  const aboutTextRef = useRef<HTMLDivElement>(null);
+  const signinNoteRef = useRef<HTMLDivElement>(null);
 
-	return (
-		<div className="min-h-screen bg-black text-white font-sans">
-			{/* Header */}
-			<header className="sticky top-0 z-10 bg-black/80 backdrop-blur-md border-b border-gray-800">
-				<div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
-					<div className="flex items-center gap-2">
-						<svg
-							className="w-6 h-6 text-white"
-							viewBox="0 0 24 24"
-							fill="currentColor"
-						>
-							<path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-						</svg>
-						<h1 className="text-lg font-bold">タイムライン</h1>
-					</div>
-					<button
-						type="button"
-						onClick={() => revalidator.revalidate()}
-						disabled={revalidator.state === "loading"}
-						className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50 px-3 py-1.5 rounded-full hover:bg-blue-400/10"
-					>
-						<svg
-							className={`w-4 h-4 ${revalidator.state === "loading" ? "animate-spin" : ""}`}
-							fill="none"
-							viewBox="0 0 24 24"
-							stroke="currentColor"
-						>
-							<path
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								strokeWidth={2}
-								d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-							/>
-						</svg>
-						更新
-					</button>
-				</div>
-			</header>
+  useEffect(() => {
+    // prefers-reduced-motionをチェック
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
 
-			{/* Timeline */}
-			<main className="max-w-xl mx-auto divide-y divide-gray-800">
-				{loaderData.tweets.length === 0 ? (
-					<div className="p-12 text-center text-gray-500">
-						<div className="text-4xl mb-4">📡</div>
-						<p className="text-lg mb-2">タイムラインは空です</p>
-						<p className="text-sm">
-							更新ボタンを押してフィードを読み込みましょう
-						</p>
-					</div>
-				) : (
-					loaderData.tweets.map((tweet) => {
-						const label = categoryLabel(tweet.category);
-						return (
-							<article
-								key={tweet.id}
-								className="px-4 py-3 hover:bg-white/[0.03] transition-colors"
-							>
-								<div className="flex gap-3">
-									{/* Avatar */}
-									<div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center text-lg select-none">
-										{tweet.authorEmoji}
-									</div>
+    if (prefersReducedMotion) {
+      // アニメーションなしで即座にすべて表示
+      const elementIds = [
+        "terminal-output-1",
+        "terminal-name",
+        "terminal-about",
+        "terminal-output-3",
+        "terminal-links",
+        "terminal-signin-note",
+      ];
 
-									{/* Content */}
-									<div className="flex-grow min-w-0">
-										{/* Author row */}
-										<div className="flex items-center gap-1 text-sm flex-wrap">
-											<span className="font-bold text-gray-100 truncate">
-												{tweet.authorName}
-											</span>
-											<span className="text-gray-500 truncate">
-												@{tweet.authorHandle}
-											</span>
-											<span className="text-gray-600">·</span>
-											<span className="text-gray-500 whitespace-nowrap">
-												{relativeTime(tweet.createdAt)}
-											</span>
-											{label && (
-												<span
-													className={`ml-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${categoryColor(tweet.category)}`}
-												>
-													{label}
-												</span>
-											)}
-										</div>
+      elementIds.forEach((id) => {
+        const element = document.getElementById(id);
+        if (element) {
+          element.style.opacity = "1";
+        }
+      });
 
-										{/* Tweet body */}
-										<p className="mt-1 text-[15px] leading-relaxed whitespace-pre-wrap break-words text-gray-100">
-											{tweet.content}
-										</p>
+      // テキストコンテンツも即座に設定
+      const name = document.getElementById("terminal-name");
+      const about = document.getElementById("terminal-about");
+      const signinNote = document.getElementById("terminal-signin-note");
 
-										{/* Source link */}
-										{tweet.sourceUrl && (
-											<a
-												href={tweet.sourceUrl}
-												target="_blank"
-												rel="noopener noreferrer"
-												className="mt-1.5 inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline transition-colors"
-											>
-												<svg
-													className="w-3.5 h-3.5"
-													fill="none"
-													viewBox="0 0 24 24"
-													stroke="currentColor"
-													strokeWidth={1.5}
-												>
-													<path
-														strokeLinecap="round"
-														strokeLinejoin="round"
-														d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.04a4.5 4.5 0 00-6.364-6.364L4.5 8.257"
-													/>
-												</svg>
-												{extractHostname(tweet.sourceUrl)}
-											</a>
-										)}
+      if (name) {
+        name.textContent = ASCII_ART;
+      }
+      if (about) {
+        about.textContent = ABOUT_TEXT;
+      }
+      if (signinNote) {
+        signinNote.textContent = SIGNIN_NOTE_TEXT;
+      }
 
-										{/* Engagement bar */}
-										<div className="flex items-center gap-6 mt-2.5 text-gray-500 text-xs">
-											{/* Reply */}
-											<span className="flex items-center gap-1.5 hover:text-blue-400 transition-colors cursor-default">
-												<svg
-													className="w-4 h-4"
-													fill="none"
-													viewBox="0 0 24 24"
-													stroke="currentColor"
-													strokeWidth={1.5}
-												>
-													<path
-														strokeLinecap="round"
-														strokeLinejoin="round"
-														d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 1.59.466 3.072 1.264 4.32L3 20.25l3.68-1.263A9.559 9.559 0 0012 20.25z"
-													/>
-												</svg>
-												{formatNumber(tweet.replies)}
-											</span>
+      return; // クリーンアップ不要
+    }
 
-											{/* Repost */}
-											<span className="flex items-center gap-1.5 hover:text-green-400 transition-colors cursor-default">
-												<svg
-													className="w-4 h-4"
-													fill="none"
-													viewBox="0 0 24 24"
-													stroke="currentColor"
-													strokeWidth={1.5}
-												>
-													<path
-														strokeLinecap="round"
-														strokeLinejoin="round"
-														d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"
-													/>
-												</svg>
-												{formatNumber(tweet.retweets)}
-											</span>
+    // コンテナ要素を即座に表示
+    const containerIds = ["terminal-output-1", "terminal-output-3"];
 
-											{/* Like */}
-											<span className="flex items-center gap-1.5 hover:text-pink-400 transition-colors cursor-default">
-												<svg
-													className="w-4 h-4"
-													fill="none"
-													viewBox="0 0 24 24"
-													stroke="currentColor"
-													strokeWidth={1.5}
-												>
-													<path
-														strokeLinecap="round"
-														strokeLinejoin="round"
-														d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
-													/>
-												</svg>
-												{formatNumber(tweet.likes)}
-											</span>
+    containerIds.forEach((id) => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.style.opacity = "1";
+      }
+    });
 
-											{/* Views */}
-											<span className="flex items-center gap-1.5 hover:text-blue-400 transition-colors cursor-default">
-												<svg
-													className="w-4 h-4"
-													fill="none"
-													viewBox="0 0 24 24"
-													stroke="currentColor"
-													strokeWidth={1.5}
-												>
-													<path
-														strokeLinecap="round"
-														strokeLinejoin="round"
-														d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"
-													/>
-												</svg>
-												{formatNumber(tweet.views)}
-											</span>
-										</div>
-									</div>
-								</div>
-							</article>
-						);
-					})
-				)}
-			</main>
+    let shouldStop = false;
+    const timeouts: number[] = [];
+    let glitchSigninNote: GlitchText | null = null;
 
-			{/* Footer */}
-			<footer className="max-w-xl mx-auto px-4 py-8 text-center text-gray-600 text-xs">
-				<p>
-					このタイムラインはAIによって生成されたフィクションです。
-					<br />
-					実在の人物・団体・出来事とは関係ありません。
-				</p>
-			</footer>
-		</div>
-	);
+    // 全ての要素にフェードインアニメーションを適用
+    const fadeElements = ["terminal-name", "terminal-links"];
+
+    fadeElements.forEach((id) => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.style.transition = "opacity 1.0s ease-in-out";
+        element.style.opacity = "0";
+
+        const timeout = window.setTimeout(() => {
+          if (!shouldStop && element) {
+            element.style.opacity = "1";
+          }
+        }, 50);
+        timeouts.push(timeout);
+      }
+    });
+
+    // ASCIIアートのテキストを設定
+    const nameElement = document.getElementById("terminal-name");
+    if (nameElement) {
+      nameElement.textContent = ASCII_ART;
+    }
+
+    // テキストのタイプライティングアニメーション
+    const aboutElement = document.getElementById("terminal-about");
+    if (aboutElement) {
+      aboutElement.style.opacity = "1";
+      aboutElement.textContent = "";
+
+      let charIndex = 0;
+      const typeSpeed = 50;
+
+      const typeInterval = window.setInterval(() => {
+        if (shouldStop) {
+          clearInterval(typeInterval);
+          return;
+        }
+
+        if (charIndex < ABOUT_TEXT.length) {
+          aboutElement.textContent = ABOUT_TEXT.substring(0, charIndex + 1);
+          charIndex++;
+        } else {
+          clearInterval(typeInterval);
+        }
+      }, typeSpeed);
+
+      timeouts.push(typeInterval);
+    }
+
+    // 文字化けアニメーション
+    const glitchAbout = new GlitchText(ABOUT_TEXT);
+    const glitchTimeout = window.setTimeout(() => {
+      if (!shouldStop) {
+        glitchAbout.init(aboutTextRef.current);
+      }
+    }, 3000);
+    timeouts.push(glitchTimeout);
+
+    // 注意書きのタイプライティングアニメーション（ログインしていない場合のみ）
+    if (!isLogin) {
+      const signinNoteElement = document.getElementById("terminal-signin-note");
+      if (signinNoteElement) {
+        signinNoteElement.style.opacity = "1";
+        signinNoteElement.textContent = "";
+
+        let charIndex = 0;
+        const typeSpeed = 50;
+        const startDelay = 1000; // ABOUT_TEXTの後に開始
+
+        const typeTimeout = window.setTimeout(() => {
+          const typeInterval = window.setInterval(() => {
+            if (shouldStop) {
+              clearInterval(typeInterval);
+              return;
+            }
+
+            if (charIndex < SIGNIN_NOTE_TEXT.length) {
+              signinNoteElement.textContent = SIGNIN_NOTE_TEXT.substring(
+                0,
+                charIndex + 1,
+              );
+              charIndex++;
+            } else {
+              clearInterval(typeInterval);
+            }
+          }, typeSpeed);
+
+          timeouts.push(typeInterval);
+        }, startDelay);
+
+        timeouts.push(typeTimeout);
+
+        // 注意書きの文字化けアニメーション
+        glitchSigninNote = new GlitchText(SIGNIN_NOTE_TEXT);
+        const glitchSigninTimeout = window.setTimeout(
+          () => {
+            if (!shouldStop && glitchSigninNote) {
+              glitchSigninNote.init(signinNoteRef.current);
+            }
+          },
+          startDelay + SIGNIN_NOTE_TEXT.length * 50 + 3000,
+        );
+        timeouts.push(glitchSigninTimeout);
+      }
+    }
+
+    // クリーンアップ関数
+    return () => {
+      shouldStop = true;
+      glitchAbout.destroy();
+      if (glitchSigninNote) {
+        glitchSigninNote.destroy();
+      }
+      for (const id of timeouts) {
+        clearTimeout(id);
+        clearInterval(id);
+      }
+    };
+  }, [isLogin]);
+
+  return (
+    <div className="min-h-screen pb-20 bg-white dark:bg-gray-900">
+      <main className="font-vt323 text-xl md:text-2xl md:w-[700px] w-full p-8 mx-auto leading-relaxed">
+        <div>
+          <div className="mt-10 mb-6 opacity-0" id="terminal-output-1">
+            <div
+              className="text-green-600 dark:text-green-400 opacity-0 whitespace-pre font-mono text-xs md:text-sm"
+              id="terminal-name"
+            ></div>
+            <div
+              className="text-green-600 dark:text-green-400 opacity-0 mt-4 overflow-hidden whitespace-nowrap"
+              id="terminal-about"
+              ref={aboutTextRef}
+            ></div>
+          </div>
+
+          <div className="my-4 mb-6 opacity-0" id="terminal-output-3">
+            <div
+              className="text-green-600 dark:text-green-400 opacity-0"
+              id="terminal-links"
+            >
+              <div className="flex flex-wrap gap-4 md:gap-8">
+                <a
+                  href="/discord"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-green-600 dark:text-green-400 no-underline flex flex-col items-center gap-1 p-1 md:p-3 transition-all duration-300 hover:text-cyan-600 dark:hover:text-cyan-400 hover:scale-105 w-18 md:w-24"
+                >
+                  <DiscordIcon className="w-8 h-8 md:w-10 md:h-10 fill-current" />
+                  <span className="text-lg md:text-xl">Discord</span>
+                </a>
+                <a
+                  href="/youtube"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-green-600 dark:text-green-400 no-underline flex flex-col items-center gap-1 p-1 md:p-3 transition-all duration-300 hover:text-cyan-600 dark:hover:text-cyan-400 hover:scale-105 w-18 md:w-24"
+                >
+                  <YouTubeIcon className="w-8 h-8 md:w-10 md:h-10 fill-current" />
+                  <span className="text-lg md:text-xl">YouTube</span>
+                </a>
+                <a
+                  href="/note"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-green-600 dark:text-green-400 no-underline flex flex-col items-center gap-1 p-1 md:p-3 transition-all duration-300 hover:text-cyan-600 dark:hover:text-cyan-400 hover:scale-105 w-18 md:w-24"
+                >
+                  <NoteIcon className="w-8 h-8 md:w-10 md:h-10 fill-current" />
+                  <span className="text-lg md:text-xl">note</span>
+                </a>
+                <a
+                  href="/shop"
+                  className="text-green-600 dark:text-green-400 no-underline flex flex-col items-center gap-1 p-1 md:p-3 transition-all duration-300 hover:text-cyan-600 dark:hover:text-cyan-400 hover:scale-105 w-18 md:w-24"
+                >
+                  <ShopIcon className="w-8 h-8 md:w-10 md:h-10 stroke-current" />
+                  <span className="text-lg md:text-xl">Shop</span>
+                </a>
+                <a
+                  href="/github"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-green-600 dark:text-green-400 no-underline flex flex-col items-center gap-1 p-1 md:p-3 transition-all duration-300 hover:text-cyan-600 dark:hover:text-cyan-400 hover:scale-105 w-18 md:w-24"
+                >
+                  <GitHubIcon className="w-8 h-8 md:w-10 md:h-10 fill-current" />
+                  <span className="text-lg md:text-xl">GitHub</span>
+                </a>
+              </div>
+              {isLogin && (
+                <div className="mt-12 flex justify-start">
+                  <a href="https://lin.ee/P7c9lgo">
+                    <img
+                      src="https://scdn.line-apps.com/n/line_add_friends/btn/ja.png"
+                      alt="友だち追加"
+                      height="18"
+                      className="border-0"
+                    />
+                  </a>
+                </div>
+              )}
+              {!isLogin && (
+                <>
+                  <Link
+                    to="/signin"
+                    reloadDocument
+                    className="mt-12 text-green-600 dark:text-green-400 no-underline flex flex-col items-center gap-1 p-1 md:p-3 transition-all duration-300 hover:text-cyan-600 dark:hover:text-cyan-400 hover:scale-105 w-18 md:w-24"
+                  >
+                    <SignInIcon className="w-8 h-8 md:w-10 md:h-10 stroke-current" />
+                    <span className="text-lg md:text-xl">SignIn</span>
+                  </Link>
+                  <div
+                    className="text-green-600 dark:text-green-400 font-dot-gothic text-xs whitespace-pre-line opacity-0 overflow-hidden"
+                    id="terminal-signin-note"
+                    ref={signinNoteRef}
+                  ></div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
 }

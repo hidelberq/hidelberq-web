@@ -1,1 +1,0 @@
-ALTER TABLE `tweets` ADD `source_url` text;

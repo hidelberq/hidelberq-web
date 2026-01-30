@@ -1,0 +1,16 @@
+name: Push Main
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    uses: nw-union/.github/.github/workflows/deploy_workers_with_bun.yml@main
+    secrets: inherit
+    with:
+      envs: '["development","production"]'

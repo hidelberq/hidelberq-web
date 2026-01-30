@@ -1,0 +1,60 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.10/schema.json",
+  "files": {
+    "includes": [
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.json",
+      "**/*.jsonc"
+    ],
+    "maxSize": 10485760
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "nursery": {},
+      "correctness": {
+        "noNestedComponentDefinitions": "off" // コンポーネント内でローカルコンポーネントを定義する場合があるため
+      }
+    },
+    "includes": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "includes": [
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.json",
+      "**/*.jsonc"
+    ]
+  },
+  "javascript": {
+    "globals": ["Env", "ExecutionContext"]
+  },
+  "overrides": [
+    // Lint, format を行わない
+    {
+      "includes": [
+        "build/**",
+        "workers/**",
+        ".react-router/**",
+        ".wrangler/**",
+        "node_modules/**",
+        "app/entry.server.tsx",
+        "worker-configuration.d.ts"
+      ],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
+    }
+  ]
+}

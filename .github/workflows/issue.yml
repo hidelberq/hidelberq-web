@@ -1,0 +1,8 @@
+name: Issue
+
+on: [issues]
+
+jobs:
+  chores:
+    uses: nw-union/.github/.github/workflows/issue_chores.yml@main
+    secrets: inherit
