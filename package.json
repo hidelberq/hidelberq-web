@@ -9,7 +9,11 @@
 		"dev": "react-router dev",
 		"postinstall": "wrangler types",
 		"preview": "react-router build && vite preview",
-		"typecheck": "wrangler types && react-router typegen && tsc -b"
+		"typecheck": "wrangler types && react-router typegen && tsc -b",
+		"db:generate": "drizzle-kit generate",
+		"db:migrate:local": "wrangler d1 migrations apply hidelberq-web-db --local",
+		"db:migrate:production": "wrangler d1 migrations apply hidelberq-web-db --remote",
+		"typegen": "wrangler types"
 	},
 	"dependencies": {
 		"@google/genai": "^1.38.0",
