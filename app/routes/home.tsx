@@ -80,7 +80,7 @@ async function generateTweetBatch(
 		console.log(`Step 1 done: news context length = ${newsContext.length}`);
 		if (newsContext.length > 0) {
 			console.log(
-				`News context (first 300 chars): ${newsContext.substring(0, 300)}`,
+				`News context: ${newsContext}`,
 			);
 		}
 
