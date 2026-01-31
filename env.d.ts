@@ -1,0 +1,7 @@
+// Cloudflare Workers シークレットの型定義
+// wrangler secret で管理される変数は wrangler types で生成されないため手動で宣言
+declare namespace Cloudflare {
+	interface Env {
+		GEMINI_API_KEY: string;
+	}
+}

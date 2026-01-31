@@ -9,6 +9,7 @@ export const tweets = sqliteTable("tweets", {
 	authorEmoji: text("author_emoji").notNull(),
 	category: text("category").notNull(),
 	sourceUrl: text("source_url").notNull(),
+	searchKeyword: text("search_keyword").notNull().default(""),
 	likes: integer("likes").notNull().default(0),
 	retweets: integer("retweets").notNull().default(0),
 	replies: integer("replies").notNull().default(0),

@@ -1,0 +1,1 @@
+ALTER TABLE `tweets` ADD `search_keyword` text DEFAULT '' NOT NULL;

@@ -1,9 +1,9 @@
-import type { Route } from "./+types/home";
-import { useRevalidator } from "react-router";
-import { drizzle } from "drizzle-orm/d1";
-import { tweets } from "../db/schema";
-import { desc, eq, sql } from "drizzle-orm";
-import { GoogleGenAI } from "@google/genai";
+import type {Route} from "./+types/home";
+import {useRevalidator} from "react-router";
+import {drizzle} from "drizzle-orm/d1";
+import {tweets} from "../db/schema";
+import {desc, eq, sql} from "drizzle-orm";
+import {GoogleGenAI} from "@google/genai";
 
 // --- Configuration ---
 const GENERATION_COOLDOWN_MS = 2 * 60 * 1000; // 2分間のクールダウン
@@ -19,7 +19,7 @@ interface GeneratedTweet {
 	authorHandle: string;
 	authorEmoji: string;
 	category: string;
-	sourceUrl: string;
+	searchKeyword: string;
 }
 
 // --- Gemini batch generation (2段階: 検索→JSON生成) ---
@@ -30,7 +30,7 @@ async function generateTweetBatch(
 	try {
 		const ai = new GoogleGenAI({ apiKey });
 
-		const today = new Date().toLocaleDateString("ja-JP", {
+		const yesterday = new Date(Date.now() - 86400000).toLocaleDateString("ja-JP", {
 			year: "numeric",
 			month: "long",
 			day: "numeric",
@@ -39,7 +39,7 @@ async function generateTweetBatch(
 
 		// ステップ1: Google検索で最新ニュースを取得
 		console.log("Step 1: Fetching latest news via Google Search grounding...");
-		const searchPrompt = `今日は${today}です。
+		const searchPrompt = `今日は${yesterday}です。
 以下のカテゴリごとに、今日の日本と世界の最新ニュース・話題を1〜2件ずつ箇条書きで教えてください。
 各ニュースには元のニュース記事のURLも必ず含めてください。
 
@@ -80,7 +80,7 @@ async function generateTweetBatch(
 		console.log(`Step 1 done: news context length = ${newsContext.length}`);
 		if (newsContext.length > 0) {
 			console.log(
-				`News context (first 300 chars): ${newsContext.substring(0, 300)}`,
+				`News context: ${newsContext}`,
 			);
 		}
 
@@ -100,11 +100,11 @@ async function generateTweetBatch(
 		const generatePrompt = `あなたはSNS「X (旧Twitter)」のリアルなタイムラインを生成するAIです。
 多様でリアルなツイートを${BATCH_SIZE}件生成してください。
 
-【今日の日付】${today}
+【今日の日付】${yesterday}
 ${newsSection}
 【カテゴリ（均等に分配）】
 - tech: テクノロジー（AI、Web開発、ガジェット、スタートアップ）
-- politics: 政治（国内外の政治動向、選挙、政策、国会）
+- politics: 政治（国内外の政治動向、選挙、政策、国会。権力に対して批判的・懐疑的な市民目線で、政府や与党の発表を鵜呑みにせず問題点を指摘するトーン）
 - buzz: バズ（SNSでバズっている話題、面白ネタ、拡散中の投稿）
 - entertainment: 芸能（芸能人、ドラマ、映画、音楽、アイドル）
 - society: 社会（社会問題、事件・事故、経済ニュース）
@@ -122,7 +122,7 @@ ${pastTweetsSection}
 - リアルなSNS口調（キャラごとに文体を変える。敬語、タメ口、独り言風など）
 - 最新ニュースや実際の出来事を反映して書く
 - 過去のツイートと同じ話題・内容・表現を避け、常に新鮮なツイートを生成する
-- 必ず各ツイートに元ネタとなるニュース記事やソースのURLをsourceUrlとして含める
+- 各ツイートに元ネタを検索できる短い検索キーワード（2〜5語）をsearchKeywordとして含める（URLではなくキーワードのみ）
 - ハッシュタグは0〜2個（使わないツイートもあり）
 - 各ツイートに異なるBOTキャラクター（毎回新しいユニークなキャラを考案）
 - リプライ風（「これマジ？」）、感想ツイート、ニュース速報風、日記風など多様なスタイルを混ぜる
@@ -144,7 +144,7 @@ ${pastTweetsSection}
 							authorHandle: { type: "string" },
 							authorEmoji: { type: "string" },
 							category: { type: "string" },
-							sourceUrl: { type: "string" },
+							searchKeyword: { type: "string" },
 						},
 						required: [
 							"content",
@@ -152,7 +152,7 @@ ${pastTweetsSection}
 							"authorHandle",
 							"authorEmoji",
 							"category",
-							"sourceUrl",
+							"searchKeyword",
 						],
 					},
 				},
@@ -180,7 +180,7 @@ ${pastTweetsSection}
 				t.authorHandle &&
 				t.authorEmoji &&
 				t.category &&
-				t.sourceUrl,
+				t.searchKeyword,
 		);
 
 		console.log(
@@ -204,7 +204,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "tech_breaking",
 			authorEmoji: "⚡",
 			category: "tech",
-			sourceUrl: "https://blog.cloudflare.com/",
+			searchKeyword: "エッジコンピューティング 投資 Cloudflare",
 		},
 		{
 			content:
@@ -213,7 +213,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "politics_watch",
 			authorEmoji: "🏛️",
 			category: "politics",
-			sourceUrl: "https://www3.nhk.or.jp/news/cat04.html",
+			searchKeyword: "経済対策 減税 給付金",
 		},
 		{
 			content:
@@ -222,7 +222,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "buzz_collector",
 			authorEmoji: "🔥",
 			category: "buzz",
-			sourceUrl: "https://x.com/",
+			searchKeyword: "有給 私用 バズ",
 		},
 		{
 			content:
@@ -231,7 +231,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "drama_addict",
 			authorEmoji: "🎬",
 			category: "entertainment",
-			sourceUrl: "https://tver.jp/",
+			searchKeyword: "ドラマ 視聴率 TVer 配信",
 		},
 		{
 			content:
@@ -240,7 +240,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "seikatsu_bouei",
 			authorEmoji: "📊",
 			category: "society",
-			sourceUrl: "https://www3.nhk.or.jp/news/cat01.html",
+			searchKeyword: "物価上昇 実質賃金 景気",
 		},
 		{
 			content:
@@ -249,7 +249,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "space_fan_jp",
 			authorEmoji: "🚀",
 			category: "science",
-			sourceUrl: "https://www.jaxa.jp/projects/sas/slim/",
+			searchKeyword: "JAXA SLIM 月着陸",
 		},
 		{
 			content:
@@ -258,7 +258,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "urayasu_life",
 			authorEmoji: "🏠",
 			category: "urayasu",
-			sourceUrl: "https://www.city.urayasu.lg.jp/",
+			searchKeyword: "浦安 市民祭り 新浦安",
 		},
 		{
 			content:
@@ -267,7 +267,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "tokyo_walker",
 			authorEmoji: "🗼",
 			category: "tokyo",
-			sourceUrl: "https://www.metro.tokyo.lg.jp/",
+			searchKeyword: "渋谷 再開発 東京駅",
 		},
 		{
 			content:
@@ -276,7 +276,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "saijo_love",
 			authorEmoji: "💧",
 			category: "saijo",
-			sourceUrl: "https://www.city.saijo.ehime.jp/",
+			searchKeyword: "西条 うちぬき 名水百選",
 		},
 		{
 			content:
@@ -285,7 +285,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "cafe_nomad",
 			authorEmoji: "☕",
 			category: "life",
-			sourceUrl: "https://tabelog.com/",
+			searchKeyword: "カフェ Wi-Fi ノマド",
 		},
 		{
 			content:
@@ -294,7 +294,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "thinking_dev",
 			authorEmoji: "🤔",
 			category: "opinion",
-			sourceUrl: "https://zenn.dev/",
+			searchKeyword: "AI コーディング アシスタント 生産性",
 		},
 		{
 			content:
@@ -303,7 +303,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "infra_guardian",
 			authorEmoji: "🛡️",
 			category: "dev",
-			sourceUrl: "https://qiita.com/",
+			searchKeyword: "金曜 デプロイ ロールバック",
 		},
 	];
 }
@@ -398,7 +398,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 						authorHandle: tweet.authorHandle,
 						authorEmoji: tweet.authorEmoji,
 						category: tweet.category,
-						sourceUrl: tweet.sourceUrl,
+						sourceUrl: `https://www.google.com/search?q=${encodeURIComponent(tweet.searchKeyword)}`,
+						searchKeyword: tweet.searchKeyword,
 						...engagement,
 						displayed: false,
 						createdAt,
