@@ -1,9 +1,9 @@
-import type { Route } from "./+types/home";
-import { useRevalidator } from "react-router";
-import { drizzle } from "drizzle-orm/d1";
-import { tweets } from "../db/schema";
-import { desc, eq, sql } from "drizzle-orm";
-import { GoogleGenAI } from "@google/genai";
+import type {Route} from "./+types/home";
+import {useRevalidator} from "react-router";
+import {drizzle} from "drizzle-orm/d1";
+import {tweets} from "../db/schema";
+import {desc, eq, sql} from "drizzle-orm";
+import {GoogleGenAI} from "@google/genai";
 
 // --- Configuration ---
 const GENERATION_COOLDOWN_MS = 2 * 60 * 1000; // 2分間のクールダウン
@@ -30,7 +30,7 @@ async function generateTweetBatch(
 	try {
 		const ai = new GoogleGenAI({ apiKey });
 
-		const today = new Date().toLocaleDateString("ja-JP", {
+		const yesterday = new Date(Date.now() - 86400000).toLocaleDateString("ja-JP", {
 			year: "numeric",
 			month: "long",
 			day: "numeric",
@@ -39,7 +39,7 @@ async function generateTweetBatch(
 
 		// ステップ1: Google検索で最新ニュースを取得
 		console.log("Step 1: Fetching latest news via Google Search grounding...");
-		const searchPrompt = `今日は${today}です。
+		const searchPrompt = `今日は${yesterday}です。
 以下のカテゴリごとに、今日の日本と世界の最新ニュース・話題を1〜2件ずつ箇条書きで教えてください。
 各ニュースには元のニュース記事のURLも必ず含めてください。
 
@@ -100,7 +100,7 @@ async function generateTweetBatch(
 		const generatePrompt = `あなたはSNS「X (旧Twitter)」のリアルなタイムラインを生成するAIです。
 多様でリアルなツイートを${BATCH_SIZE}件生成してください。
 
-【今日の日付】${today}
+【今日の日付】${yesterday}
 ${newsSection}
 【カテゴリ（均等に分配）】
 - tech: テクノロジー（AI、Web開発、ガジェット、スタートアップ）
