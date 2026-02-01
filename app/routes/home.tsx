@@ -1,7 +1,7 @@
 import type {Route} from "./+types/home";
 import {useRevalidator} from "react-router";
-import {drizzle} from "drizzle-orm/d1";
-import {tweets} from "../db/schema";
+import {drizzle, type DrizzleD1Database} from "drizzle-orm/d1";
+import {tweets, newsCache} from "../db/schema";
 import {desc, eq, sql} from "drizzle-orm";
 import {GoogleGenAI} from "@google/genai";
 
@@ -19,13 +19,14 @@ interface GeneratedTweet {
 	authorHandle: string;
 	authorEmoji: string;
 	category: string;
-	searchKeyword: string;
+	sourceUrl: string;
 }
 
 // --- Gemini batch generation (2段階: 検索→JSON生成) ---
 async function generateTweetBatch(
 	apiKey: string,
 	pastTweets: string[],
+	db: DrizzleD1Database,
 ): Promise<GeneratedTweet[]> {
 	try {
 		const ai = new GoogleGenAI({ apiKey });
@@ -37,9 +38,24 @@ async function generateTweetBatch(
 			weekday: "long",
 		});
 
-		// ステップ1: Google検索で最新ニュースを取得
-		console.log("Step 1: Fetching latest news via Google Search grounding...");
-		const searchPrompt = `今日は${yesterday}です。
+		// 今日の日付キー (YYYY-MM-DD)
+		const todayKey = new Date().toISOString().slice(0, 10);
+
+		// ステップ1: ニュースキャッシュを確認し、なければGoogle検索で取得
+		let newsContext = "";
+
+		const [cached] = await db
+			.select({ content: newsCache.content })
+			.from(newsCache)
+			.where(eq(newsCache.fetchedDate, todayKey))
+			.limit(1);
+
+		if (cached) {
+			console.log("Step 1: Using cached news context from DB");
+			newsContext = cached.content;
+		} else {
+			console.log("Step 1: Fetching latest news via Google Search grounding...");
+			const searchPrompt = `今日は${yesterday}です。
 以下のカテゴリごとに、今日の日本と世界の最新ニュース・話題を1〜2件ずつ箇条書きで教えてください。
 各ニュースには元のニュース記事のURLも必ず含めてください。
 
@@ -56,24 +72,33 @@ async function generateTweetBatch(
 - ライフ（日常の話題、トレンド）
 - 開発（プログラミング、エンジニアリング）`;
 
-		const searchResponse = await ai.models.generateContent({
-			model: "gemini-2.5-flash",
-			contents: searchPrompt,
-			config: {
-				tools: [{ googleSearch: {} }],
-			},
-		});
+			const searchResponse = await ai.models.generateContent({
+				model: "gemini-2.5-flash",
+				contents: searchPrompt,
+				config: {
+					tools: [{ googleSearch: {} }],
+				},
+			});
 
-		let newsContext = "";
-		try {
-			newsContext = searchResponse.text ?? "";
-		} catch {
-			const parts = searchResponse.candidates?.[0]?.content?.parts;
-			if (parts) {
-				newsContext = parts
-					.filter((p: { text?: string }) => typeof p.text === "string")
-					.map((p: { text?: string }) => p.text)
-					.join("");
+			try {
+				newsContext = searchResponse.text ?? "";
+			} catch {
+				const parts = searchResponse.candidates?.[0]?.content?.parts;
+				if (parts) {
+					newsContext = parts
+						.filter((p: { text?: string }) => typeof p.text === "string")
+						.map((p: { text?: string }) => p.text)
+						.join("");
+				}
+			}
+
+			// キャッシュに保存
+			if (newsContext.length > 0) {
+				await db
+					.insert(newsCache)
+					.values({ content: newsContext, fetchedDate: todayKey })
+					.execute();
+				console.log("Step 1: Saved news context to cache");
 			}
 		}
 
@@ -122,7 +147,7 @@ ${pastTweetsSection}
 - リアルなSNS口調（キャラごとに文体を変える。敬語、タメ口、独り言風など）
 - 最新ニュースや実際の出来事を反映して書く
 - 過去のツイートと同じ話題・内容・表現を避け、常に新鮮なツイートを生成する
-- 各ツイートに元ネタを検索できる短い検索キーワード（2〜5語）をsearchKeywordとして含める（URLではなくキーワードのみ）
+- 各ツイートに元ネタとなったニュース記事のURLをsourceUrlとして含める（上記の最新ニュースに含まれるURLをそのまま使用すること。URLが見つからない場合は空文字列にする）
 - ハッシュタグは0〜2個（使わないツイートもあり）
 - 各ツイートに異なるBOTキャラクター（毎回新しいユニークなキャラを考案）
 - リプライ風（「これマジ？」）、感想ツイート、ニュース速報風、日記風など多様なスタイルを混ぜる
@@ -144,7 +169,7 @@ ${pastTweetsSection}
 							authorHandle: { type: "string" },
 							authorEmoji: { type: "string" },
 							category: { type: "string" },
-							searchKeyword: { type: "string" },
+							sourceUrl: { type: "string" },
 						},
 						required: [
 							"content",
@@ -152,7 +177,7 @@ ${pastTweetsSection}
 							"authorHandle",
 							"authorEmoji",
 							"category",
-							"searchKeyword",
+							"sourceUrl",
 						],
 					},
 				},
@@ -179,8 +204,7 @@ ${pastTweetsSection}
 				t.authorName &&
 				t.authorHandle &&
 				t.authorEmoji &&
-				t.category &&
-				t.searchKeyword,
+				t.category,
 		);
 
 		console.log(
@@ -204,7 +228,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "tech_breaking",
 			authorEmoji: "⚡",
 			category: "tech",
-			searchKeyword: "エッジコンピューティング 投資 Cloudflare",
+			sourceUrl: "https://www.google.com/search?q=%E3%82%A8%E3%83%83%E3%82%B8%E3%82%B3%E3%83%B3%E3%83%94%E3%83%A5%E3%83%BC%E3%83%86%E3%82%A3%E3%83%B3%E3%82%B0+%E6%8A%95%E8%B3%87",
 		},
 		{
 			content:
@@ -213,7 +237,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "politics_watch",
 			authorEmoji: "🏛️",
 			category: "politics",
-			searchKeyword: "経済対策 減税 給付金",
+			sourceUrl: "https://www.google.com/search?q=%E7%B5%8C%E6%B8%88%E5%AF%BE%E7%AD%96+%E6%B8%9B%E7%A8%8E+%E7%B5%A6%E4%BB%98%E9%87%91",
 		},
 		{
 			content:
@@ -222,7 +246,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "buzz_collector",
 			authorEmoji: "🔥",
 			category: "buzz",
-			searchKeyword: "有給 私用 バズ",
+			sourceUrl: "https://www.google.com/search?q=%E6%9C%89%E7%B5%A6+%E7%A7%81%E7%94%A8+%E3%83%90%E3%82%BA",
 		},
 		{
 			content:
@@ -231,7 +255,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "drama_addict",
 			authorEmoji: "🎬",
 			category: "entertainment",
-			searchKeyword: "ドラマ 視聴率 TVer 配信",
+			sourceUrl: "https://www.google.com/search?q=%E3%83%89%E3%83%A9%E3%83%9E+%E8%A6%96%E8%81%B4%E7%8E%87+TVer",
 		},
 		{
 			content:
@@ -240,7 +264,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "seikatsu_bouei",
 			authorEmoji: "📊",
 			category: "society",
-			searchKeyword: "物価上昇 実質賃金 景気",
+			sourceUrl: "https://www.google.com/search?q=%E7%89%A9%E4%BE%A1%E4%B8%8A%E6%98%87+%E5%AE%9F%E8%B3%AA%E8%B3%83%E9%87%91",
 		},
 		{
 			content:
@@ -249,7 +273,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "space_fan_jp",
 			authorEmoji: "🚀",
 			category: "science",
-			searchKeyword: "JAXA SLIM 月着陸",
+			sourceUrl: "https://www.google.com/search?q=JAXA+SLIM+%E6%9C%88%E7%9D%80%E9%99%B8",
 		},
 		{
 			content:
@@ -258,7 +282,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "urayasu_life",
 			authorEmoji: "🏠",
 			category: "urayasu",
-			searchKeyword: "浦安 市民祭り 新浦安",
+			sourceUrl: "https://www.google.com/search?q=%E6%B5%A6%E5%AE%89+%E5%B8%82%E6%B0%91%E7%A5%AD%E3%82%8A",
 		},
 		{
 			content:
@@ -267,7 +291,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "tokyo_walker",
 			authorEmoji: "🗼",
 			category: "tokyo",
-			searchKeyword: "渋谷 再開発 東京駅",
+			sourceUrl: "https://www.google.com/search?q=%E6%B8%8B%E8%B0%B7+%E5%86%8D%E9%96%8B%E7%99%BA",
 		},
 		{
 			content:
@@ -276,7 +300,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "saijo_love",
 			authorEmoji: "💧",
 			category: "saijo",
-			searchKeyword: "西条 うちぬき 名水百選",
+			sourceUrl: "https://www.google.com/search?q=%E8%A5%BF%E6%9D%A1+%E3%81%86%E3%81%A1%E3%81%AC%E3%81%8D+%E5%90%8D%E6%B0%B4%E7%99%BE%E9%81%B8",
 		},
 		{
 			content:
@@ -285,7 +309,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "cafe_nomad",
 			authorEmoji: "☕",
 			category: "life",
-			searchKeyword: "カフェ Wi-Fi ノマド",
+			sourceUrl: "https://www.google.com/search?q=%E3%82%AB%E3%83%95%E3%82%A7+Wi-Fi+%E3%83%8E%E3%83%9E%E3%83%89",
 		},
 		{
 			content:
@@ -294,7 +318,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "thinking_dev",
 			authorEmoji: "🤔",
 			category: "opinion",
-			searchKeyword: "AI コーディング アシスタント 生産性",
+			sourceUrl: "https://www.google.com/search?q=AI+%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0+%E3%82%A2%E3%82%B7%E3%82%B9%E3%82%BF%E3%83%B3%E3%83%88",
 		},
 		{
 			content:
@@ -303,7 +327,7 @@ function getFallbackTweets(): GeneratedTweet[] {
 			authorHandle: "infra_guardian",
 			authorEmoji: "🛡️",
 			category: "dev",
-			searchKeyword: "金曜 デプロイ ロールバック",
+			sourceUrl: "https://www.google.com/search?q=%E9%87%91%E6%9B%9C+%E3%83%87%E3%83%97%E3%83%AD%E3%82%A4+%E3%83%AD%E3%83%BC%E3%83%AB%E3%83%90%E3%83%83%E3%82%AF",
 		},
 	];
 }
@@ -366,7 +390,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 				console.log(
 					`Generating tweet batch via Gemini... (API key length: ${apiKey.length})`,
 				);
-				generated = await generateTweetBatch(apiKey, pastTweetContents);
+				generated = await generateTweetBatch(apiKey, pastTweetContents, db);
 				console.log(
 					`Gemini returned ${generated.length} tweets`,
 				);
@@ -398,8 +422,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 						authorHandle: tweet.authorHandle,
 						authorEmoji: tweet.authorEmoji,
 						category: tweet.category,
-						sourceUrl: `https://www.google.com/search?q=${encodeURIComponent(tweet.searchKeyword)}`,
-						searchKeyword: tweet.searchKeyword,
+						sourceUrl: tweet.sourceUrl || "",
 						...engagement,
 						displayed: false,
 						createdAt,

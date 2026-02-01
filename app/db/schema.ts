@@ -9,12 +9,20 @@ export const tweets = sqliteTable("tweets", {
 	authorEmoji: text("author_emoji").notNull(),
 	category: text("category").notNull(),
 	sourceUrl: text("source_url").notNull(),
-	searchKeyword: text("search_keyword").notNull().default(""),
 	likes: integer("likes").notNull().default(0),
 	retweets: integer("retweets").notNull().default(0),
 	replies: integer("replies").notNull().default(0),
 	views: integer("views").notNull().default(0),
 	displayed: integer("displayed", { mode: "boolean" }).notNull().default(false),
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
+export const newsCache = sqliteTable("news_cache", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	content: text("content").notNull(),
+	fetchedDate: text("fetched_date").notNull(),
 	createdAt: integer("created_at", { mode: "timestamp" }).default(
 		sql`(strftime('%s', 'now'))`,
 	),
