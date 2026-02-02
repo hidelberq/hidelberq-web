@@ -8,6 +8,10 @@ import {
 	createInitialGameState,
 	serializeGameState,
 } from "../shogi/logic";
+import {
+	createInitialGameState as createMinishogiGameState,
+	serializeGameState as serializeMinishogiGameState,
+} from "../shogi/minishogi-logic";
 
 function generateRoomCode(): string {
 	const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 紛らわしい文字を除外
@@ -51,10 +55,16 @@ export async function action({ request, context }: Route.ActionArgs) {
 		headers["Set-Cookie"] = setPlayerIdCookie(playerId);
 	}
 
-	if (intent === "create") {
+	if (intent === "create" || intent === "create-minishogi") {
 		// ルーム作成
-		const initialState = createInitialGameState();
-		const serialized = serializeGameState(initialState);
+		const isMinishogi = intent === "create-minishogi";
+		const initialState = isMinishogi
+			? createMinishogiGameState()
+			: createInitialGameState();
+		const serialized = isMinishogi
+			? serializeMinishogiGameState(initialState)
+			: serializeGameState(initialState);
+		const gameRoute = isMinishogi ? "minishogi/game" : "game";
 
 		// ユニークなコードが見つかるまでリトライ
 		let roomCode: string;
@@ -74,7 +84,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 					status: "waiting",
 					sentePlayerId: playerId,
 				});
-				return redirect(`/shogi/game/${roomCode}`, { headers });
+				return redirect(`/shogi/${gameRoute}/${roomCode}`, { headers });
 			}
 		}
 		return data({ error: "ルーム作成に失敗しました。もう一度お試しください。" }, { status: 500, headers });
@@ -96,9 +106,13 @@ export async function action({ request, context }: Route.ActionArgs) {
 			return data({ error: "ルームが見つかりません。" }, { status: 404, headers });
 		}
 
+		// 盤面サイズからゲームタイプを判定
+		const boardData = JSON.parse(game.board) as unknown[][];
+		const gameRoute = boardData.length === 5 ? "minishogi/game" : "game";
+
 		if (game.sentePlayerId === playerId) {
 			// 自分が作ったルームに再参加
-			return redirect(`/shogi/game/${code}`, { headers });
+			return redirect(`/shogi/${gameRoute}/${code}`, { headers });
 		}
 
 		if (game.gotePlayerId && game.gotePlayerId !== playerId) {
@@ -112,7 +126,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 				.where(eq(shogiGames.id, code));
 		}
 
-		return redirect(`/shogi/game/${code}`, { headers });
+		return redirect(`/shogi/${gameRoute}/${code}`, { headers });
 	}
 
 	return data({ error: "不正なリクエストです。" }, { status: 400, headers });
@@ -149,16 +163,28 @@ export default function ShogiLobby({ actionData }: Route.ComponentProps) {
 					</h3>
 
 					{/* ルーム作成 */}
-					<fetcher.Form method="post">
-						<input type="hidden" name="intent" value="create" />
-						<button
-							type="submit"
-							disabled={isSubmitting}
-							className="w-full px-4 py-3 bg-amber-800/40 hover:bg-amber-800/60 border border-amber-700/50 rounded-lg transition-colors text-sm font-bold disabled:opacity-50"
-						>
-							{isSubmitting ? "作成中..." : "対局を作成する"}
-						</button>
-					</fetcher.Form>
+					<div className="flex gap-2">
+						<fetcher.Form method="post" className="flex-1">
+							<input type="hidden" name="intent" value="create" />
+							<button
+								type="submit"
+								disabled={isSubmitting}
+								className="w-full px-4 py-3 bg-amber-800/40 hover:bg-amber-800/60 border border-amber-700/50 rounded-lg transition-colors text-sm font-bold disabled:opacity-50"
+							>
+								{isSubmitting ? "作成中..." : "本将棋"}
+							</button>
+						</fetcher.Form>
+						<fetcher.Form method="post" className="flex-1">
+							<input type="hidden" name="intent" value="create-minishogi" />
+							<button
+								type="submit"
+								disabled={isSubmitting}
+								className="w-full px-4 py-3 bg-purple-800/40 hover:bg-purple-800/60 border border-purple-700/50 rounded-lg transition-colors text-sm font-bold disabled:opacity-50"
+							>
+								{isSubmitting ? "作成中..." : "5五将棋"}
+							</button>
+						</fetcher.Form>
+					</div>
 
 					{/* ルーム参加 */}
 					<fetcher.Form method="post" className="flex gap-2">
