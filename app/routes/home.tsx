@@ -48,7 +48,7 @@ export default function Home() {
 				{/* Hero */}
 				<section className="text-center mb-20 pt-8">
 					<div className="inline-block mb-6 px-4 py-1.5 rounded-full bg-gradient-to-r from-fuchsia-500/20 to-cyan-500/20 border border-fuchsia-500/30 text-sm text-fuchsia-300">
-						Server-side Engineer / Rapper / Sociology
+						IT Engineer / Rapper / Sociology
 					</div>
 					<h1 className="text-6xl sm:text-7xl font-bold tracking-tight mb-4 bg-gradient-to-r from-white via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent">
 						hidelberq
