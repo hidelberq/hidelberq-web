@@ -75,7 +75,7 @@ export function BoardGrid({
 											${!selected && !highlighted ? "bg-amber-950/20 hover:bg-amber-900/20" : ""}
 										`}
 									>
-										{piece && <PieceDisplay piece={piece} />}
+										{piece && <PieceDisplay piece={piece} flipped={flipped} />}
 										{highlighted && !piece && (
 											<span className="absolute w-2.5 h-2.5 rounded-full bg-green-500/50" />
 										)}
@@ -102,15 +102,22 @@ export function BoardGrid({
 	);
 }
 
-export function PieceDisplay({ piece }: { piece: Piece }) {
+export function PieceDisplay({
+	piece,
+	flipped,
+}: {
+	piece: Piece;
+	flipped?: boolean;
+}) {
 	const kanji = pieceToKanji(piece);
-	const isGote = piece.player === "gote";
+	const shouldRotate =
+		(piece.player === "gote") !== (flipped ?? false);
 	const isPromoted = piece.promoted;
 
 	return (
 		<span
 			className={`
-				${isGote ? "rotate-180" : ""}
+				${shouldRotate ? "rotate-180" : ""}
 				${isPromoted ? "text-red-400" : ""}
 				${piece.player === "sente" ? "text-orange-200" : "text-sky-200"}
 				select-none leading-none
