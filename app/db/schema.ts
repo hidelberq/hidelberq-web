@@ -19,6 +19,24 @@ export const tweets = sqliteTable("tweets", {
 	),
 });
 
+export const shogiGames = sqliteTable("shogi_games", {
+	id: text("id").primaryKey(), // 4文字のルームコード
+	board: text("board").notNull(), // JSON: Board
+	captured: text("captured").notNull(), // JSON: CapturedPieces
+	currentPlayer: text("current_player").notNull().default("sente"),
+	status: text("status").notNull().default("waiting"), // waiting, playing, check, checkmate, stalemate, resigned
+	winner: text("winner"), // sente | gote | null
+	sentePlayerId: text("sente_player_id"),
+	gotePlayerId: text("gote_player_id"),
+	moveCount: integer("move_count").notNull().default(0),
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const newsCache = sqliteTable("news_cache", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	content: text("content").notNull(),
