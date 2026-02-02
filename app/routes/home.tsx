@@ -25,8 +25,8 @@ const skills = [
 ];
 
 const timeline = [
+	{ year: "2025", event: "NWU に参加。楽曲制作・Vlog・HP制作を開始" },
 	{ year: "2024", event: "宮台真司 荒野塾・界隈塾に参加" },
-	{ year: "2023", event: "NWU に参加、楽曲制作活動開始" },
 	{ year: "2020", event: "Go を書き始める。クラウドインフラ (AWS/GCP) にも注力" },
 	{ year: "2015", event: "ITベンチャーに就職。Java / Node.js をメインにエンジニアキャリアをスタート" },
 	{ year: "2013", event: "大学卒業後、情報系の研究室に進学。ラップ活動を開始" },
