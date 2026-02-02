@@ -13,55 +13,23 @@ export function meta(_args: Route.MetaArgs) {
 }
 
 const skills = [
-	{ name: "TypeScript", level: 90, color: "from-blue-400 to-cyan-400" },
-	{ name: "React", level: 85, color: "from-cyan-400 to-teal-400" },
-	{ name: "Cloudflare Workers", level: 80, color: "from-orange-400 to-amber-400" },
-	{ name: "Node.js", level: 85, color: "from-green-400 to-emerald-400" },
-	{ name: "Python", level: 70, color: "from-yellow-400 to-orange-400" },
-	{ name: "Rap / Lyric Writing", level: 95, color: "from-pink-400 to-rose-400" },
-];
-
-const projects = [
-	{
-		title: "AItter",
-		description: "AIが最新ニュースを読み、つぶやくタイムライン。LLMを活用したニュースキュレーション。",
-		tags: ["React", "Cloudflare Workers", "AI/LLM", "D1"],
-		emoji: "🤖",
-		link: "/aitter",
-		internal: true,
-	},
-	{
-		title: "将棋オンライン",
-		description: "ブラウザで遊べるオンライン・ローカル対戦将棋。5x5ミニ将棋モードも搭載。",
-		tags: ["React", "TypeScript", "Game Logic"],
-		emoji: "♟️",
-		link: "/shogi",
-		internal: true,
-	},
-	{
-		title: "Beat Machine",
-		description: "ブラウザ上で動作するビートメイキングツール。サンプラーとシーケンサーを搭載。",
-		tags: ["Web Audio API", "React", "TypeScript"],
-		emoji: "🥁",
-		link: null,
-		internal: false,
-	},
-	{
-		title: "Lyric Flow",
-		description: "ラッパー向けの作詞支援アプリ。韻検索とフロー分析機能付き。",
-		tags: ["NLP", "Python", "FastAPI", "React"],
-		emoji: "🎤",
-		link: null,
-		internal: false,
-	},
+	{ name: "Java", level: 90, color: "from-red-400 to-orange-400" },
+	{ name: "Go", level: 90, color: "from-cyan-400 to-sky-400" },
+	{ name: "Node.js", level: 70, color: "from-green-400 to-emerald-400" },
+	{ name: "Python", level: 65, color: "from-yellow-400 to-orange-400" },
+	{ name: "Terraform", level: 65, color: "from-violet-400 to-purple-400" },
+	{ name: "AWS / GCP", level: 80, color: "from-amber-400 to-yellow-400" },
+	{ name: "React / TypeScript", level: 50, color: "from-blue-400 to-cyan-400" },
+	{ name: "AI / LLM", level: 45, color: "from-pink-400 to-rose-400" },
+	{ name: "Rap / Lyric Writing", level: 95, color: "from-fuchsia-400 to-pink-400" },
 ];
 
 const timeline = [
-	{ year: "2024", event: "Cloudflare Workers でのフルスタック開発に注力" },
-	{ year: "2023", event: "NWU に参加、楽曲制作・ラップ活動開始" },
-	{ year: "2022", event: "宮台真司 荒野塾・界隈塾に参加" },
-	{ year: "2021", event: "React / TypeScript を中心にフロントエンド開発" },
-	{ year: "2020", event: "Web 開発のキャリアをスタート" },
+	{ year: "2024", event: "宮台真司 荒野塾・高野塾に参加" },
+	{ year: "2023", event: "NWU に参加、楽曲制作活動開始" },
+	{ year: "2020", event: "Go を書き始める。クラウドインフラ (AWS/GCP) にも注力" },
+	{ year: "2015", event: "ITエンジニアとしてキャリアスタート。Java / Node.js をメインに開発" },
+	{ year: "2014", event: "大学院入学。ラップ活動を開始" },
 ];
 
 export default function Home() {
@@ -79,7 +47,7 @@ export default function Home() {
 				{/* Hero */}
 				<section className="text-center mb-20 pt-8">
 					<div className="inline-block mb-6 px-4 py-1.5 rounded-full bg-gradient-to-r from-fuchsia-500/20 to-cyan-500/20 border border-fuchsia-500/30 text-sm text-fuchsia-300">
-						IT Engineer / Rapper / Sociology
+						Server-side Engineer / Rapper / Sociology
 					</div>
 					<h1 className="text-6xl sm:text-7xl font-bold tracking-tight mb-4 bg-gradient-to-r from-white via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent">
 						hidelberq
@@ -94,14 +62,19 @@ export default function Home() {
 					<SectionHeading>About</SectionHeading>
 					<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 p-6 space-y-3 text-purple-100/90 leading-relaxed">
 						<p>
-							Web開発を中心に活動するITエンジニア。React / TypeScript / Cloudflare
-							を軸としたモダンなフルスタック開発が得意です。
+							サーバーサイドをメインとするITエンジニア。2015年からのキャリアで、Java
+							/ Go を中心にバックエンド開発を行っています。Node.js、Python、Terraform
+							も実務経験があり、AWS・GCP
+							等のクラウドインフラの設計・構築・運用も対応できます。
 						</p>
 						<p>
-							音楽活動ではラッパーとして作詞・パフォーマンスを行い、テクノロジーとカルチャーの交差点を探求しています。
+							フロントエンドは React / TypeScript
+							を触った経験があり、このサイト自体も React Router + Cloudflare Workers
+							で構築しています。最近は AI / LLM
+							の活用にも取り組んでおり、LLMを使ったアプリケーション開発も行っています。
 						</p>
 						<p>
-							社会学、特に宮台真司氏の理論に関心があり、荒野塾・界隈塾に通っていました。社会システム理論やサブカルチャー分析の視点を大切にしています。
+							音楽活動では2014年からラッパーとして作詞・パフォーマンスを続けています。社会学、特に宮台真司氏の理論に関心があり、2024年から荒野塾・高野塾に参加しています。
 						</p>
 						<p>
 							<a
@@ -139,54 +112,6 @@ export default function Home() {
 								</div>
 							</div>
 						))}
-					</div>
-				</section>
-
-				{/* Projects */}
-				<section className="w-full max-w-2xl mb-16">
-					<SectionHeading>Projects</SectionHeading>
-					<div className="grid gap-4 sm:grid-cols-2">
-						{projects.map((project) => {
-							const content = (
-								<>
-									<span className="text-3xl mb-3 block">
-										{project.emoji}
-									</span>
-									<h3 className="text-lg font-semibold mb-2 text-white">
-										{project.title}
-									</h3>
-									<p className="text-sm text-purple-200/70 mb-4 leading-relaxed">
-										{project.description}
-									</p>
-									<div className="flex flex-wrap gap-1.5 mt-auto">
-										{project.tags.map((tag) => (
-											<span
-												key={tag}
-												className="px-2 py-0.5 rounded-full text-xs bg-white/10 text-purple-200/80 border border-white/5"
-											>
-												{tag}
-											</span>
-										))}
-									</div>
-								</>
-							);
-							const className =
-								"flex flex-col rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-5 transition-all duration-300 hover:border-fuchsia-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-fuchsia-500/10";
-
-							return project.internal && project.link ? (
-								<Link
-									key={project.title}
-									to={project.link}
-									className={className}
-								>
-									{content}
-								</Link>
-							) : (
-								<div key={project.title} className={className}>
-									{content}
-								</div>
-							);
-						})}
 					</div>
 				</section>
 
@@ -242,7 +167,7 @@ export default function Home() {
 				{/* NWU */}
 				<section className="w-full max-w-2xl mb-16">
 					<SectionHeading>NWU</SectionHeading>
-					<div className="grid gap-3 sm:grid-cols-2">
+					<div className="space-y-6">
 						<ExternalCard
 							href="https://nw-union.net/"
 							icon={
@@ -253,24 +178,51 @@ export default function Home() {
 							title="nw-union.net"
 							description="NWU 公式サイト"
 						/>
-						<ExternalCard
-							href="https://youtu.be/4t5oGnl8Peg"
-							icon={<span className="text-2xl leading-none">🎵</span>}
-							title="NWU 楽曲"
-							description="YouTube"
-						/>
-						<ExternalCard
-							href="https://youtu.be/Tm4OiXDAarM"
-							icon={<span className="text-2xl leading-none">📺</span>}
-							title="NWU CM"
-							description="YouTube"
-						/>
-						<ExternalCard
-							href="https://open.spotify.com/show/3c3lDQN4RjCMgiPW0UM10G?si=b73a7ba0ef2a496d"
-							icon={<span className="text-2xl leading-none">🎙️</span>}
-							title="デモクラジオ"
-							description="Spotify Podcast"
-						/>
+
+						{/* YouTube Embeds */}
+						<div className="grid gap-4 sm:grid-cols-2">
+							<div className="rounded-2xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm">
+								<div className="aspect-video">
+									<iframe
+										src="https://www.youtube.com/embed/4t5oGnl8Peg"
+										title="NWU 楽曲"
+										allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+										allowFullScreen
+										className="w-full h-full"
+									/>
+								</div>
+								<div className="px-4 py-3">
+									<p className="text-sm font-semibold">NWU 楽曲</p>
+									<p className="text-xs text-purple-200/60">YouTube</p>
+								</div>
+							</div>
+							<div className="rounded-2xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm">
+								<div className="aspect-video">
+									<iframe
+										src="https://www.youtube.com/embed/Tm4OiXDAarM"
+										title="NWU CM"
+										allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+										allowFullScreen
+										className="w-full h-full"
+									/>
+								</div>
+								<div className="px-4 py-3">
+									<p className="text-sm font-semibold">NWU CM</p>
+									<p className="text-xs text-purple-200/60">YouTube</p>
+								</div>
+							</div>
+						</div>
+
+						{/* Spotify Embed */}
+						<div className="rounded-2xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm">
+							<iframe
+								src="https://open.spotify.com/embed/show/3c3lDQN4RjCMgiPW0UM10G?utm_source=generator&theme=0"
+								title="デモクラジオ"
+								allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+								loading="lazy"
+								className="w-full h-40 sm:h-52"
+							/>
+						</div>
 					</div>
 				</section>
 
