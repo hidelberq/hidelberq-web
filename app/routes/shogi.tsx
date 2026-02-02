@@ -196,15 +196,21 @@ export default function ShogiLobby({ actionData }: Route.ComponentProps) {
 				</div>
 
 				{/* ローカル対戦 */}
-				<div className="w-full max-w-sm">
-					<h3 className="text-sm font-bold text-green-400 uppercase tracking-wider mb-4">
+				<div className="w-full max-w-sm space-y-3">
+					<h3 className="text-sm font-bold text-green-400 uppercase tracking-wider">
 						ローカル対戦
 					</h3>
 					<Link
 						to="/shogi/local"
 						className="block w-full px-4 py-3 bg-green-900/30 hover:bg-green-900/50 border border-green-800/50 rounded-lg transition-colors text-sm font-bold text-center"
 					>
-						同じ画面で2人対戦
+						本将棋（9×9）
+					</Link>
+					<Link
+						to="/shogi/minishogi/local"
+						className="block w-full px-4 py-3 bg-purple-900/30 hover:bg-purple-900/50 border border-purple-800/50 rounded-lg transition-colors text-sm font-bold text-center"
+					>
+						5五将棋（5×5）
 					</Link>
 				</div>
 			</main>
