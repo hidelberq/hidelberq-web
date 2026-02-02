@@ -16,8 +16,8 @@ const services = [
 		icon: "♟",
 	},
 	{
-		to: "/twitter",
-		title: "AI Twitter",
+		to: "/aitter",
+		title: "AItter",
 		description: "AIが生成するニュースタイムライン",
 		icon: "𝕏",
 	},

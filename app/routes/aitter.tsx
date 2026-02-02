@@ -1,4 +1,4 @@
-import type {Route} from "./+types/twitter";
+import type {Route} from "./+types/aitter";
 import {useRevalidator} from "react-router";
 import {drizzle, type DrizzleD1Database} from "drizzle-orm/d1";
 import {tweets, newsCache} from "../db/schema";
