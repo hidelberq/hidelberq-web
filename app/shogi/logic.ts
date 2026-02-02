@@ -571,3 +571,81 @@ export function summarizeCaptured(
 export function pieceTypeToKanji(type: PieceType): string {
 	return PIECE_KANJI[type];
 }
+
+// =====================
+// サーバーサイド用: バリデーション & シリアライズ
+// =====================
+
+/** アクションが合法かどうかを検証する */
+export function validateAction(
+	state: GameState,
+	action: GameAction,
+): boolean {
+	if (action.kind === "move") {
+		const piece = state.board[action.from.row]?.[action.from.col];
+		if (!piece || piece.player !== state.currentPlayer) return false;
+
+		const legalMoves = getLegalMoves(state.board, action.from);
+		const isLegal = legalMoves.some(
+			(m) => m.row === action.to.row && m.col === action.to.col,
+		);
+		if (!isLegal) return false;
+
+		if (action.promote) {
+			if (!canPromote(piece, action.from, action.to)) return false;
+		} else {
+			if (mustPromote(piece, action.to)) return false;
+		}
+		return true;
+	}
+
+	// ドロップ
+	if (!state.captured[state.currentPlayer].includes(action.piece))
+		return false;
+	const dropPositions = getDropPositions(
+		state.board,
+		action.piece,
+		state.currentPlayer,
+	);
+	return dropPositions.some(
+		(p) => p.row === action.to.row && p.col === action.to.col,
+	);
+}
+
+/** GameState を DB 用にシリアライズ */
+export function serializeGameState(state: GameState): {
+	board: string;
+	captured: string;
+	currentPlayer: string;
+	status: string;
+	winner: string | null;
+	moveCount: number;
+} {
+	return {
+		board: JSON.stringify(state.board),
+		captured: JSON.stringify(state.captured),
+		currentPlayer: state.currentPlayer,
+		status: state.status,
+		winner: state.winner,
+		moveCount: state.moveHistory.length,
+	};
+}
+
+/** DB のデータから GameState を復元 */
+export function deserializeGameState(data: {
+	board: string;
+	captured: string;
+	currentPlayer: string;
+	status: string;
+	winner: string | null;
+	moveCount: number;
+}): GameState {
+	return {
+		board: JSON.parse(data.board) as Board,
+		captured: JSON.parse(data.captured) as CapturedPieces,
+		currentPlayer: data.currentPlayer as Player,
+		status: data.status as GameState["status"],
+		winner: (data.winner as Player) ?? null,
+		moveHistory: [],
+	};
+}

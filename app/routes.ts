@@ -4,4 +4,6 @@ export default [
 	index("routes/home.tsx"),
 	route("debug", "routes/debug.tsx"),
 	route("shogi", "routes/shogi.tsx"),
+	route("shogi/local", "routes/shogi.local.tsx"),
+	route("shogi/game/:gameId", "routes/shogi.game.tsx"),
 ] satisfies RouteConfig;
