@@ -48,6 +48,7 @@ async function generateTweetBatch(
 			.select({ content: newsCache.content })
 			.from(newsCache)
 			.where(eq(newsCache.fetchedDate, todayKey))
+			.orderBy(desc(newsCache.createdAt))
 			.limit(1);
 
 		if (cached) {
