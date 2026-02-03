@@ -29,6 +29,12 @@ import {
 	GameOverBanner,
 	StatusBar,
 } from "../shogi/board";
+import {
+	type ChatMessage,
+	GameChatPanel,
+	EmoteToast,
+	createChatMessage,
+} from "../shogi/chat";
 
 // =====================
 // Cookie ヘルパー
@@ -84,6 +90,7 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
 		status: game.status,
 		winner: game.winner,
 		moveCount: game.moveCount,
+		chat: game.chat,
 		myRole,
 	};
 
@@ -196,6 +203,34 @@ export async function action({ params, request, context }: Route.ActionArgs) {
 		return { ok: true };
 	}
 
+	if (intent === "chat") {
+		let myRole: Player | null = null;
+		if (game.sentePlayerId === playerId) myRole = "sente";
+		else if (game.gotePlayerId === playerId) myRole = "gote";
+
+		if (!myRole) {
+			return data({ error: "このゲームに参加していません。" }, { status: 403 });
+		}
+
+		const content = formData.get("content");
+		const isEmote = formData.get("isEmote") === "true";
+		if (typeof content !== "string" || content.length === 0 || content.length > 100) {
+			return data({ error: "不正なメッセージです。" }, { status: 400 });
+		}
+
+		const existingChat: ChatMessage[] = JSON.parse(game.chat);
+		const newMessage = createChatMessage(myRole, content, isEmote);
+		// 最大50件に制限
+		const updatedChat = [...existingChat, newMessage].slice(-50);
+
+		await db
+			.update(shogiGames)
+			.set({ chat: JSON.stringify(updatedChat) })
+			.where(eq(shogiGames.id, gameId));
+
+		return { ok: true };
+	}
+
 	return data({ error: "不正なリクエストです。" }, { status: 400 });
 }
 
@@ -221,6 +256,7 @@ export default function ShogiGame({ loaderData }: Route.ComponentProps) {
 		status,
 		winner,
 		moveCount,
+		chat,
 		myRole,
 	} = loaderData as {
 		gameId: string;
@@ -230,6 +266,7 @@ export default function ShogiGame({ loaderData }: Route.ComponentProps) {
 		status: string;
 		winner: string | null;
 		moveCount: number;
+		chat: string;
 		myRole: "sente" | "gote" | "spectator";
 	};
 
@@ -242,8 +279,11 @@ export default function ShogiGame({ loaderData }: Route.ComponentProps) {
 		moveCount,
 	});
 
+	const chatMessages: ChatMessage[] = JSON.parse(chat);
+
 	const revalidator = useRevalidator();
 	const fetcher = useFetcher();
+	const chatFetcher = useFetcher();
 	const moveCountRef = useRef(moveCount);
 
 	// 最新のmoveCountを追跡
@@ -251,14 +291,13 @@ export default function ShogiGame({ loaderData }: Route.ComponentProps) {
 		moveCountRef.current = moveCount;
 	}, [moveCount]);
 
-	// 相手の番のときポーリング (2秒間隔)
+	// ポーリング (2秒間隔) - チャットメッセージの受信のため常時ポーリング
 	const isMyTurn = myRole === currentPlayer;
 	const isWaiting = status === "waiting";
 	const gameOver = status === "checkmate" || status === "stalemate";
 
 	useEffect(() => {
 		if (gameOver) return;
-		if (isMyTurn && !isWaiting) return;
 
 		const interval = setInterval(() => {
 			if (revalidator.state === "idle") {
@@ -267,7 +306,7 @@ export default function ShogiGame({ loaderData }: Route.ComponentProps) {
 		}, 2000);
 
 		return () => clearInterval(interval);
-	}, [isMyTurn, isWaiting, gameOver, revalidator]);
+	}, [gameOver, revalidator]);
 
 	const [selection, setSelection] = useState<Selection>(null);
 	const [highlightedMoves, setHighlightedMoves] = useState<Position[]>([]);
@@ -464,6 +503,30 @@ export default function ShogiGame({ loaderData }: Route.ComponentProps) {
 		fetcher.submit(formData, { method: "post" });
 	}, [fetcher]);
 
+	const handleSendMessage = useCallback(
+		(text: string, _player: Player) => {
+			if (myRole === "spectator") return;
+			const formData = new FormData();
+			formData.set("intent", "chat");
+			formData.set("content", text);
+			formData.set("isEmote", "false");
+			chatFetcher.submit(formData, { method: "post" });
+		},
+		[myRole, chatFetcher],
+	);
+
+	const handleSendEmote = useCallback(
+		(emote: string, _player: Player) => {
+			if (myRole === "spectator") return;
+			const formData = new FormData();
+			formData.set("intent", "chat");
+			formData.set("content", emote);
+			formData.set("isEmote", "true");
+			chatFetcher.submit(formData, { method: "post" });
+		},
+		[myRole, chatFetcher],
+	);
+
 	// 上に表示するプレイヤー・下に表示するプレイヤー
 	const topPlayer: Player = flipped ? "sente" : "gote";
 	const bottomPlayer: Player = flipped ? "gote" : "sente";
@@ -498,6 +561,8 @@ export default function ShogiGame({ loaderData }: Route.ComponentProps) {
 			</header>
 
 			<main className="flex-1 flex flex-col items-center justify-center px-2 py-4 gap-3">
+				<EmoteToast messages={chatMessages} />
+
 				{/* 待機中 */}
 				{isWaiting && (
 					<WaitingRoom gameId={gameId} myRole={myRole} />
@@ -558,6 +623,15 @@ export default function ShogiGame({ loaderData }: Route.ComponentProps) {
 								onReset={() => {
 									window.location.href = "/shogi";
 								}}
+							/>
+						)}
+
+						{myRole !== "spectator" && (
+							<GameChatPanel
+								messages={chatMessages}
+								currentPlayer={myRole}
+								onSendMessage={handleSendMessage}
+								onSendEmote={handleSendEmote}
 							/>
 						)}
 					</>

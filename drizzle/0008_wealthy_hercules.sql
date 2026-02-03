@@ -1,0 +1,1 @@
+ALTER TABLE `shogi_games` ADD `chat` text DEFAULT '[]' NOT NULL;

@@ -57,6 +57,13 @@
       "when": 1770049339746,
       "tag": "0007_foamy_sasquatch",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1770124778115,
+      "tag": "0008_wealthy_hercules",
+      "breakpoints": true
     }
   ]
 }

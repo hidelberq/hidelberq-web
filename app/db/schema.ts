@@ -29,6 +29,7 @@ export const shogiGames = sqliteTable("shogi_games", {
 	sentePlayerId: text("sente_player_id"),
 	gotePlayerId: text("gote_player_id"),
 	moveCount: integer("move_count").notNull().default(0),
+	chat: text("chat").notNull().default("[]"), // JSON: ChatMessage[]
 	createdAt: integer("created_at", { mode: "timestamp" }).default(
 		sql`(strftime('%s', 'now'))`,
 	),
