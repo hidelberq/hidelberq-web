@@ -25,6 +25,12 @@ import {
 	GameOverBanner,
 	StatusBar,
 } from "../shogi/board";
+import {
+	type ChatMessage,
+	GameChatPanel,
+	EmoteToast,
+	createChatMessage,
+} from "../shogi/chat";
 
 export function meta(_args: Route.MetaArgs) {
 	return [
@@ -43,13 +49,35 @@ export default function MinishogiLocal() {
 		from: Position;
 		to: Position;
 	} | null>(null);
+	const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
 	const resetGame = useCallback(() => {
 		setGameState(createInitialGameState());
 		setSelection(null);
 		setHighlightedMoves([]);
 		setPromotionPrompt(null);
+		setChatMessages([]);
 	}, []);
+
+	const handleSendMessage = useCallback(
+		(text: string, player: Player) => {
+			setChatMessages((prev) => [
+				...prev,
+				createChatMessage(player, text, false),
+			]);
+		},
+		[],
+	);
+
+	const handleSendEmote = useCallback(
+		(emote: string, player: Player) => {
+			setChatMessages((prev) => [
+				...prev,
+				createChatMessage(player, emote, true),
+			]);
+		},
+		[],
+	);
 
 	const isHighlighted = useCallback(
 		(row: number, col: number) =>
@@ -240,6 +268,8 @@ export default function MinishogiLocal() {
 			</header>
 
 			<main className="flex-1 flex flex-col items-center justify-center px-2 py-4 gap-3">
+				<EmoteToast messages={chatMessages} />
+
 				<StatusBar gameState={gameState} />
 
 				<MinishogiCapturedPiecesBar
@@ -282,6 +312,13 @@ export default function MinishogiLocal() {
 				{gameOver && (
 					<GameOverBanner gameState={gameState} onReset={resetGame} />
 				)}
+
+				<GameChatPanel
+					messages={chatMessages}
+					currentPlayer={gameState.currentPlayer}
+					onSendMessage={handleSendMessage}
+					onSendEmote={handleSendEmote}
+				/>
 			</main>
 		</div>
 	);
