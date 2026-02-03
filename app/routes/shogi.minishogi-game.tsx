@@ -1,36 +1,33 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { Link, useFetcher, useRevalidator, data } from "react-router";
-import type { Route } from "./+types/shogi.minishogi-game";
-import type {
-	GameState,
-	Selection,
-	Position,
-	PieceType,
-	Player,
-	GameAction,
-} from "../shogi/types";
-import { drizzle } from "drizzle-orm/d1";
-import { shogiGames } from "../db/schema";
 import { eq } from "drizzle-orm";
-import {
-	deserializeGameState,
-	serializeGameState,
-	validateAction,
-	applyAction,
-	getLegalMoves,
-	getDropPositions,
-	canPromote,
-	mustPromote,
-} from "../shogi/minishogi-logic";
+import { drizzle } from "drizzle-orm/d1";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { data, Link, useFetcher, useRevalidator } from "react-router";
+import { shogiGames } from "../db/schema";
+import { GameOverBanner, PromotionDialog, StatusBar } from "../shogi/board";
 import {
 	MinishogiBoardGrid,
 	MinishogiCapturedPiecesBar,
 } from "../shogi/minishogi-board";
 import {
-	PromotionDialog,
-	GameOverBanner,
-	StatusBar,
-} from "../shogi/board";
+	applyAction,
+	canPromote,
+	deserializeGameState,
+	getDropPositions,
+	getLegalMoves,
+	mustPromote,
+	serializeGameState,
+	validateAction,
+} from "../shogi/minishogi-logic";
+import type {
+	GameAction,
+	GameState,
+	PieceType,
+	Player,
+	Position,
+	Selection,
+} from "../shogi/types";
+import { vibrateTurnChange } from "../shogi/vibrate";
+import type { Route } from "./+types/shogi.minishogi-game";
 
 // =====================
 // Cookie ヘルパー
@@ -285,6 +282,17 @@ export default function MinishogiGame({ loaderData }: Route.ComponentProps) {
 		setPromotionPrompt(null);
 	}, [moveCount]);
 
+	// 自分の番になったら振動フィードバック
+	const prevMoveCountRef = useRef(moveCount);
+	useEffect(() => {
+		if (moveCount !== prevMoveCountRef.current) {
+			prevMoveCountRef.current = moveCount;
+			if (isMyTurn && myRole !== "spectator") {
+				vibrateTurnChange();
+			}
+		}
+	}, [moveCount, isMyTurn, myRole]);
+
 	const canInteract =
 		myRole !== "spectator" && isMyTurn && !gameOver && !isWaiting;
 
@@ -339,10 +347,7 @@ export default function MinishogiGame({ loaderData }: Route.ComponentProps) {
 			const clickedPiece = gameState.board[row][col];
 
 			if (!selection) {
-				if (
-					clickedPiece &&
-					clickedPiece.player === gameState.currentPlayer
-				) {
+				if (clickedPiece && clickedPiece.player === gameState.currentPlayer) {
 					setSelection({ kind: "board", position: pos });
 					setHighlightedMoves(getLegalMoves(gameState.board, pos));
 				}
@@ -358,10 +363,7 @@ export default function MinishogiGame({ loaderData }: Route.ComponentProps) {
 					return;
 				}
 
-				if (
-					clickedPiece &&
-					clickedPiece.player === gameState.currentPlayer
-				) {
+				if (clickedPiece && clickedPiece.player === gameState.currentPlayer) {
 					setSelection({ kind: "board", position: pos });
 					setHighlightedMoves(getLegalMoves(gameState.board, pos));
 					return;
@@ -401,10 +403,7 @@ export default function MinishogiGame({ loaderData }: Route.ComponentProps) {
 			}
 
 			if (selection.kind === "captured") {
-				if (
-					clickedPiece &&
-					clickedPiece.player === gameState.currentPlayer
-				) {
+				if (clickedPiece && clickedPiece.player === gameState.currentPlayer) {
 					setSelection({ kind: "board", position: pos });
 					setHighlightedMoves(getLegalMoves(gameState.board, pos));
 					return;
@@ -452,9 +451,7 @@ export default function MinishogiGame({ loaderData }: Route.ComponentProps) {
 			}
 
 			setSelection({ kind: "captured", piece: pieceType, player });
-			setHighlightedMoves(
-				getDropPositions(gameState.board, pieceType, player),
-			);
+			setHighlightedMoves(getDropPositions(gameState.board, pieceType, player));
 		},
 		[canInteract, gameState, selection, promotionPrompt],
 	);
@@ -481,8 +478,7 @@ export default function MinishogiGame({ loaderData }: Route.ComponentProps) {
 						← 戻る
 					</Link>
 					<h1 className="text-lg font-bold">
-						5五将棋{" "}
-						<span className="text-amber-400 font-mono">{gameId}</span>
+						5五将棋 <span className="text-amber-400 font-mono">{gameId}</span>
 					</h1>
 					{myRole !== "spectator" && !gameOver && !isWaiting && (
 						<button
@@ -501,9 +497,7 @@ export default function MinishogiGame({ loaderData }: Route.ComponentProps) {
 
 			<main className="flex-1 flex flex-col items-center justify-center px-2 py-4 gap-3">
 				{/* 待機中 */}
-				{isWaiting && (
-					<WaitingRoom gameId={gameId} myRole={myRole} />
-				)}
+				{isWaiting && <WaitingRoom gameId={gameId} myRole={myRole} />}
 
 				{/* 対局中 / 観戦中 */}
 				{!isWaiting && (
@@ -573,13 +567,7 @@ export default function MinishogiGame({ loaderData }: Route.ComponentProps) {
 // サブコンポーネント
 // =====================
 
-function WaitingRoom({
-	gameId,
-	myRole,
-}: {
-	gameId: string;
-	myRole: string;
-}) {
+function WaitingRoom({ gameId, myRole }: { gameId: string; myRole: string }) {
 	const [copied, setCopied] = useState(false);
 
 	const copyCode = useCallback(() => {

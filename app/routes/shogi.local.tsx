@@ -1,28 +1,29 @@
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router";
-import type { Route } from "./+types/shogi.local";
-import type {
-	GameState,
-	Selection,
-	Position,
-	PieceType,
-	Player,
-} from "../shogi/types";
-import {
-	createInitialGameState,
-	getLegalMoves,
-	getDropPositions,
-	applyAction,
-	canPromote,
-	mustPromote,
-} from "../shogi/logic";
 import {
 	BoardGrid,
 	CapturedPiecesBar,
-	PromotionDialog,
 	GameOverBanner,
+	PromotionDialog,
 	StatusBar,
 } from "../shogi/board";
+import {
+	applyAction,
+	canPromote,
+	createInitialGameState,
+	getDropPositions,
+	getLegalMoves,
+	mustPromote,
+} from "../shogi/logic";
+import type {
+	GameState,
+	PieceType,
+	Player,
+	Position,
+	Selection,
+} from "../shogi/types";
+import { vibrateTurnChange } from "../shogi/vibrate";
+import type { Route } from "./+types/shogi.local";
 
 export function meta(_args: Route.MetaArgs) {
 	return [
@@ -32,9 +33,7 @@ export function meta(_args: Route.MetaArgs) {
 }
 
 export default function ShogiLocal() {
-	const [gameState, setGameState] = useState<GameState>(
-		createInitialGameState,
-	);
+	const [gameState, setGameState] = useState<GameState>(createInitialGameState);
 	const [selection, setSelection] = useState<Selection>(null);
 	const [highlightedMoves, setHighlightedMoves] = useState<Position[]>([]);
 	const [promotionPrompt, setPromotionPrompt] = useState<{
@@ -73,6 +72,7 @@ export default function ShogiLocal() {
 				promote,
 			});
 			setGameState(newState);
+			vibrateTurnChange();
 			setSelection(null);
 			setHighlightedMoves([]);
 			setPromotionPrompt(null);
@@ -83,20 +83,14 @@ export default function ShogiLocal() {
 	const handleCellClick = useCallback(
 		(row: number, col: number) => {
 			if (promotionPrompt) return;
-			if (
-				gameState.status === "checkmate" ||
-				gameState.status === "stalemate"
-			)
+			if (gameState.status === "checkmate" || gameState.status === "stalemate")
 				return;
 
 			const pos: Position = { row, col };
 			const clickedPiece = gameState.board[row][col];
 
 			if (!selection) {
-				if (
-					clickedPiece &&
-					clickedPiece.player === gameState.currentPlayer
-				) {
+				if (clickedPiece && clickedPiece.player === gameState.currentPlayer) {
 					setSelection({ kind: "board", position: pos });
 					setHighlightedMoves(getLegalMoves(gameState.board, pos));
 				}
@@ -112,10 +106,7 @@ export default function ShogiLocal() {
 					return;
 				}
 
-				if (
-					clickedPiece &&
-					clickedPiece.player === gameState.currentPlayer
-				) {
+				if (clickedPiece && clickedPiece.player === gameState.currentPlayer) {
 					setSelection({ kind: "board", position: pos });
 					setHighlightedMoves(getLegalMoves(gameState.board, pos));
 					return;
@@ -138,6 +129,7 @@ export default function ShogiLocal() {
 						promote: true,
 					});
 					setGameState(newState);
+					vibrateTurnChange();
 					setSelection(null);
 					setHighlightedMoves([]);
 				} else if (canPromote(piece, from, pos)) {
@@ -150,6 +142,7 @@ export default function ShogiLocal() {
 						promote: false,
 					});
 					setGameState(newState);
+					vibrateTurnChange();
 					setSelection(null);
 					setHighlightedMoves([]);
 				}
@@ -157,10 +150,7 @@ export default function ShogiLocal() {
 			}
 
 			if (selection.kind === "captured") {
-				if (
-					clickedPiece &&
-					clickedPiece.player === gameState.currentPlayer
-				) {
+				if (clickedPiece && clickedPiece.player === gameState.currentPlayer) {
 					setSelection({ kind: "board", position: pos });
 					setHighlightedMoves(getLegalMoves(gameState.board, pos));
 					return;
@@ -178,6 +168,7 @@ export default function ShogiLocal() {
 					to: pos,
 				});
 				setGameState(newState);
+				vibrateTurnChange();
 				setSelection(null);
 				setHighlightedMoves([]);
 			}
@@ -188,10 +179,7 @@ export default function ShogiLocal() {
 	const handleCapturedClick = useCallback(
 		(pieceType: PieceType, player: Player) => {
 			if (promotionPrompt) return;
-			if (
-				gameState.status === "checkmate" ||
-				gameState.status === "stalemate"
-			)
+			if (gameState.status === "checkmate" || gameState.status === "stalemate")
 				return;
 			if (player !== gameState.currentPlayer) return;
 
@@ -206,9 +194,7 @@ export default function ShogiLocal() {
 			}
 
 			setSelection({ kind: "captured", piece: pieceType, player });
-			setHighlightedMoves(
-				getDropPositions(gameState.board, pieceType, player),
-			);
+			setHighlightedMoves(getDropPositions(gameState.board, pieceType, player));
 		},
 		[gameState, selection, promotionPrompt],
 	);
