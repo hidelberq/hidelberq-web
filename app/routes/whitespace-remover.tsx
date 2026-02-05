@@ -24,16 +24,14 @@ type CleanOption = {
 	transform: (text: string, parser?: Parser) => string;
 };
 
-// 文末表現パターン（句点を追加）
+// 文末表現パターン（句点を追加）- 明確な文末のみ
 const sentenceEndPatterns = [
-	/(?:です|ます|ました|でした|ません|ている|ていた|てる|てた|だった|である|であった|ございます|いたします)$/,
-	/(?:した|きた|なった|あった|いった|思う|思った|ない|なかった|ある|あります|ありません)$/,
-	/(?:だ|た|る|い|う|く|す|ぬ|む|ゆ)$/,
-];
-
-// 読点を追加するパターン（接続助詞など）
-const commaPatterns = [
-	/(?:が|けど|けれど|けれども|ので|から|ながら|たり|し|て|で|ば|と|のに|ても|でも|ものの|つつ)$/,
+	// 丁寧語・敬語の文末
+	/(?:ですね|ですよ|ですか|です|ますね|ますよ|ますか|ます|ました|でした|ません|ございます|いたします)$/,
+	// 「んです」系
+	/(?:んですね|んですよ|んですか|んです|のですね|のですよ|のですか|のです)$/,
+	// 断定・完了
+	/(?:だね|だよ|だな|った|ない)$/,
 ];
 
 // 句読点追加ロジック
@@ -52,24 +50,14 @@ function addPunctuation(text: string, parser: Parser): string {
 			// budouxで文節に分割
 			const segments = parser.parse(line);
 
-			// 各文節を処理
+			// 各文節を処理して、文末表現の後に句点を追加
 			const result: string[] = [];
-			for (let i = 0; i < segments.length; i++) {
-				const segment = segments[i];
-				const isLast = i === segments.length - 1;
-
+			for (const segment of segments) {
 				result.push(segment);
 
-				// 最後の文節には句点
-				if (isLast && segment.length > 0) {
-					if (sentenceEndPatterns.some((p) => p.test(segment))) {
-						result.push("。");
-					}
-				} else {
-					// 途中の文節で読点パターンにマッチしたら読点を追加
-					if (commaPatterns.some((p) => p.test(segment))) {
-						result.push("、");
-					}
+				// 文末表現にマッチしたら句点を追加
+				if (sentenceEndPatterns.some((p) => p.test(segment))) {
+					result.push("。");
 				}
 			}
 
