@@ -162,6 +162,18 @@ export default function Home() {
 								</p>
 							</div>
 						</Link>
+						<Link
+							to="/whitespace-remover"
+							className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-5 py-4 transition-all duration-300 hover:border-cyan-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-cyan-500/10"
+						>
+							<span className="text-2xl leading-none">✂️</span>
+							<div>
+								<span className="text-lg font-semibold">空白除去</span>
+								<p className="text-sm text-purple-200/60">
+									AIの文字起こしの余計な空白を除去
+								</p>
+							</div>
+						</Link>
 					</div>
 				</section>
 
