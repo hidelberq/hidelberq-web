@@ -22,6 +22,27 @@ type CleanOption = {
 
 const defaultOptions: CleanOption[] = [
 	{
+		id: "japaneseSpaces",
+		label: "日本語文字間のスペースを削除",
+		description:
+			"「自分 自身 の を」→「自分自身のを」（AI文字起こし向け）",
+		enabled: true,
+		transform: (text) => {
+			// 日本語文字の間のスペースを削除
+			// 日本語文字 + スペース + 日本語文字 のパターンを繰り返し処理
+			let result = text;
+			let prev = "";
+			while (prev !== result) {
+				prev = result;
+				result = result.replace(
+					/([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u3000-\u303F])[ \u3000]+([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u3000-\u303F])/g,
+					"$1$2",
+				);
+			}
+			return result;
+		},
+	},
+	{
 		id: "multipleSpaces",
 		label: "連続スペースをまとめる",
 		description: "2つ以上の連続したスペースを1つにまとめます",
@@ -56,7 +77,7 @@ const defaultOptions: CleanOption[] = [
 	{
 		id: "removeAllSpaces",
 		label: "すべてのスペースを削除",
-		description: "テキスト内のすべてのスペースを削除します（日本語向け）",
+		description: "テキスト内のすべてのスペースを削除します",
 		enabled: false,
 		transform: (text) => text.replace(/[ \u3000]/g, ""),
 	},
