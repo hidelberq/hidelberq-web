@@ -9,6 +9,9 @@
     "worker-configuration.d.ts",
     "env.d.ts"
   ],
+  "exclude": [
+    "app/**/*.test.ts"
+  ],
   "compilerOptions": {
     "composite": true,
     "strict": true,

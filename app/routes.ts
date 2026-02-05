@@ -4,6 +4,7 @@ export default [
 	index("routes/home.tsx"),
 	route("aitter", "routes/aitter.tsx"),
 	route("debug", "routes/debug.tsx"),
+	route("whitespace-remover", "routes/whitespace-remover.tsx"),
 	route("shogi", "routes/shogi.tsx"),
 	route("shogi/local", "routes/shogi.local.tsx"),
 	route("shogi/minishogi/local", "routes/shogi.minishogi-local.tsx"),
