@@ -64,6 +64,24 @@ describe("addPunctuation - 句読点追加", () => {
 		expect(result).toBe(expected);
 	});
 
+	it("「ですよね」は分割しない", () => {
+		const input = "そういうもんなんですよね例えば";
+		const expected = "そういうもんなんですよね。例えば";
+		const result = addPunctuation(input, parser);
+		console.log("Input:", input);
+		console.log("Result:", result);
+		expect(result).toBe(expected);
+	});
+
+	it("「ますよね」は分割しない", () => {
+		const input = "言葉ありますよね僕らが";
+		const expected = "言葉ありますよね。僕らが";
+		const result = addPunctuation(input, parser);
+		console.log("Input:", input);
+		console.log("Result:", result);
+		expect(result).toBe(expected);
+	});
+
 	it("ユーザー提供の完全なテキスト", () => {
 		const input =
 			"自分自身のを守ったまま自分の世界観を守ったままに良くなることはないんですねはいどうもアメンタルの委長マスターです本日は頭が悪いとぐるぐる思考は止められないというテーマでお話ししようかなと思います";
@@ -73,6 +91,17 @@ describe("addPunctuation - 句読点追加", () => {
 		console.log("Full Input:", input);
 		console.log("Full Segments:", debugSegments(input, parser));
 		console.log("Full Result:", result);
+		expect(result).toBe(expected);
+	});
+
+	it("ユーザー提供のテキスト2 - ですよね対応", () => {
+		const input =
+			"て言われるとそういうもんなんですよね例えば言葉っていうのはですね言葉ありますよね僕らが使ってる言葉っていうのは人類が生み出したものなんですよ";
+		const expected =
+			"て言われるとそういうもんなんですよね。例えば言葉っていうのはですね。言葉ありますよね。僕らが使ってる言葉っていうのは人類が生み出したものなんですよ。";
+		const result = addPunctuation(input, parser);
+		console.log("Input2:", input);
+		console.log("Result2:", result);
 		expect(result).toBe(expected);
 	});
 
