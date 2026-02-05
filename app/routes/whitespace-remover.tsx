@@ -1,10 +1,7 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback } from "react";
 import { Link } from "react-router";
-import {
-	loadDefaultJapaneseParser,
-	type Parser,
-} from "budoux";
 import type { Route } from "./+types/whitespace-remover";
+import { addPunctuation } from "../whitespace-remover/punctuation";
 
 export function meta(_args: Route.MetaArgs) {
 	return [
@@ -21,50 +18,8 @@ type CleanOption = {
 	label: string;
 	description: string;
 	enabled: boolean;
-	transform: (text: string, parser?: Parser) => string;
+	transform: (text: string) => string;
 };
-
-// 文末表現パターン（句点を追加）- 明確な文末のみ
-const sentenceEndPatterns = [
-	// 丁寧語・敬語の文末
-	/(?:ですね|ですよ|ですか|です|ますね|ますよ|ますか|ます|ました|でした|ません|ございます|いたします)$/,
-	// 「んです」系
-	/(?:んですね|んですよ|んですか|んです|のですね|のですよ|のですか|のです)$/,
-	// 断定・完了
-	/(?:だね|だよ|だな|った|ない)$/,
-];
-
-// 句読点追加ロジック
-function addPunctuation(text: string, parser: Parser): string {
-	// 既に句読点がある場合はスキップ
-	if (/[。、！？!?]/.test(text)) {
-		return text;
-	}
-
-	// 行ごとに処理
-	return text
-		.split("\n")
-		.map((line) => {
-			if (!line.trim()) return line;
-
-			// budouxで文節に分割
-			const segments = parser.parse(line);
-
-			// 各文節を処理して、文末表現の後に句点を追加
-			const result: string[] = [];
-			for (const segment of segments) {
-				result.push(segment);
-
-				// 文末表現にマッチしたら句点を追加
-				if (sentenceEndPatterns.some((p) => p.test(segment))) {
-					result.push("。");
-				}
-			}
-
-			return result.join("");
-		})
-		.join("\n");
-}
 
 const defaultOptions: CleanOption[] = [
 	{
@@ -130,12 +85,9 @@ const defaultOptions: CleanOption[] = [
 	{
 		id: "addPunctuation",
 		label: "句読点を自動追加",
-		description: "文節解析して自然な位置に句読点を追加（既存の句読点がある行はスキップ）",
+		description: "「です」「ます」などの後に句点を追加（既存の句読点がある場合はスキップ）",
 		enabled: false,
-		transform: (text, parser) => {
-			if (!parser) return text;
-			return addPunctuation(text, parser);
-		},
+		transform: (text) => addPunctuation(text),
 	},
 ];
 
@@ -143,9 +95,6 @@ export default function WhitespaceRemover() {
 	const [input, setInput] = useState("");
 	const [options, setOptions] = useState<CleanOption[]>(defaultOptions);
 	const [copied, setCopied] = useState(false);
-
-	// budoux parserを初期化
-	const parser = useMemo(() => loadDefaultJapaneseParser(), []);
 
 	const toggleOption = useCallback((id: string) => {
 		setOptions((prev) =>
@@ -159,9 +108,9 @@ export default function WhitespaceRemover() {
 		(text: string) => {
 			return options
 				.filter((opt) => opt.enabled)
-				.reduce((acc, opt) => opt.transform(acc, parser), text);
+				.reduce((acc, opt) => opt.transform(acc), text);
 		},
-		[options, parser],
+		[options],
 	);
 
 	const output = cleanText(input);
