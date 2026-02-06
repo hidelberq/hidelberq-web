@@ -1,4 +1,5 @@
 import { createRequestHandler } from "react-router";
+import { generateHeroImage } from "./hero-image";
 
 declare module "react-router" {
   export interface AppLoadContext {
@@ -19,5 +20,8 @@ export default {
     return requestHandler(request, {
       cloudflare: { env, ctx },
     });
+  },
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(generateHeroImage(env));
   },
 } satisfies ExportedHandler<Env>;

@@ -1,4 +1,7 @@
 import { Link } from "react-router";
+import { drizzle } from "drizzle-orm/d1";
+import { desc } from "drizzle-orm";
+import { heroImages } from "../db/schema";
 import type { Route } from "./+types/home";
 
 export function meta(_args: Route.MetaArgs) {
@@ -10,6 +13,25 @@ export function meta(_args: Route.MetaArgs) {
 				"hidelberq - ITエンジニア / ラッパー / 社会学",
 		},
 	];
+}
+
+export async function loader({ context }: Route.LoaderArgs) {
+	const db = drizzle(context.cloudflare.env.DB);
+
+	// 最新のヒーローイメージを取得
+	const latest = await db
+		.select()
+		.from(heroImages)
+		.orderBy(desc(heroImages.createdAt))
+		.limit(1);
+
+	const heroImage = latest.length > 0 ? latest[0] : null;
+
+	return {
+		heroImage: heroImage
+			? { date: heroImage.date, source: heroImage.source }
+			: null,
+	};
 }
 
 const skills = [
@@ -33,7 +55,9 @@ const timeline = [
 	{ year: "2009", event: "大学入学。放送研究部・映画研究部に所属し、映画制作やラジオ番組の制作に打ち込む" },
 ];
 
-export default function Home() {
+export default function Home({ loaderData }: Route.ComponentProps) {
+	const { heroImage } = loaderData;
+
 	return (
 		<div className="min-h-dvh bg-gradient-to-br from-violet-950 via-fuchsia-950 to-indigo-950">
 			{/* Decorative blobs */}
@@ -46,16 +70,32 @@ export default function Home() {
 
 			<div className="relative flex flex-col items-center px-4 py-16">
 				{/* Hero */}
-				<section className="text-center mb-20 pt-8">
+				<section className="text-center mb-20 pt-8 w-full max-w-4xl">
 					<div className="inline-block mb-6 px-4 py-1.5 rounded-full bg-gradient-to-r from-fuchsia-500/20 to-cyan-500/20 border border-fuchsia-500/30 text-sm text-fuchsia-300">
-						IT Engineer / Rapper / Sociology
+						Software Engineer / Rapper / Sociology
 					</div>
 					<h1 className="text-6xl sm:text-7xl font-bold tracking-tight mb-4 bg-gradient-to-r from-white via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent">
 						hidelberq
 					</h1>
-					<p className="text-lg text-purple-200/80 max-w-md mx-auto leading-relaxed">
-						ITエンジニア。ラッパー。社会学(宮台真司氏など)に興味あります
+					<p className="text-lg text-purple-200/80 max-w-md mx-auto leading-relaxed mb-8">
+						ソフトウェアエンジニア。ラッパー。社会学(宮台真司氏など)に興味あります
 					</p>
+					{heroImage ? (
+						<div className="w-full mx-auto">
+							<div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-fuchsia-500/10">
+								<img
+									src={`/hero-image/${heroImage.date}`}
+									alt={`Daily hero image - ${heroImage.date}`}
+									className="w-full aspect-video object-cover"
+								/>
+								<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4">
+									<span className="text-xs text-white/60">
+										{heroImage.source === "diary" ? "from diary" : "from weather"} - {heroImage.date}
+									</span>
+								</div>
+							</div>
+						</div>
+					) : null}
 				</section>
 
 				{/* About */}
