@@ -66,13 +66,13 @@ async function fetchWorkflowyNodes(
     if (!res.ok) {
         throw new Error(`Workflowy API error: ${res.status} ${res.statusText}`);
     }
-    const data = await res.json();
+    const data: unknown = await res.json();
 
     console.log("fetchWorkflowyNodes response data:", data);
 
     // レスポンスは { nodes: [...] } 形式
-    if (data && typeof data === "object" && Array.isArray(data.nodes)) {
-        return data.nodes as WorkflowyNode[];
+    if (data && typeof data === "object" && "nodes" in data && Array.isArray((data as { nodes: unknown }).nodes)) {
+        return (data as { nodes: WorkflowyNode[] }).nodes;
     }
     if (Array.isArray(data)) {
         return data as WorkflowyNode[];
