@@ -37,6 +37,18 @@ export const shogiGames = sqliteTable("shogi_games", {
 	),
 });
 
+export const heroImages = sqliteTable("hero_images", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	date: text("date").notNull().unique(), // YYYY-MM-DD
+	imageKey: text("image_key").notNull(), // R2 のキー
+	prompt: text("prompt").notNull(), // 使用したプロンプト
+	source: text("source").notNull(), // "diary" | "weather"
+	diaryContent: text("diary_content"), // 日記の内容（あれば）
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const newsCache = sqliteTable("news_cache", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	content: text("content").notNull(),
