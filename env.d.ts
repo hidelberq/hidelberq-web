@@ -4,5 +4,6 @@ declare namespace Cloudflare {
 	interface Env {
 		GEMINI_API_KEY: string;
 		WORKFLOWY_API_KEY: string;
+		ACTIVITY_API_KEY: string;
 	}
 }

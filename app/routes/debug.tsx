@@ -2,7 +2,7 @@ import type { Route } from "./+types/debug";
 import { useState } from "react";
 import { useFetcher } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
-import { newsCache, heroImages, scrapedArticles, tweets, scrapeSites } from "../db/schema";
+import { newsCache, heroImages, scrapedArticles, tweets, scrapeSites, activityLog } from "../db/schema";
 import { desc, eq, sql } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
 import { generateHeroImage, regenerateHeroImageWithPrompt } from "../../workers/hero-image";
@@ -64,6 +64,16 @@ export async function loader({ context }: Route.LoaderArgs) {
 		.from(scrapeSites)
 		.orderBy(scrapeSites.id);
 
+	const activityEntries = await db
+		.select()
+		.from(activityLog)
+		.orderBy(desc(activityLog.createdAt))
+		.limit(50);
+
+	const [activityCount] = await db
+		.select({ count: sql<number>`count(*)` })
+		.from(activityLog);
+
 	return {
 		entries,
 		heroEntries,
@@ -74,6 +84,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 		unshownCount: unshownCount?.count ?? 0,
 		siteConfigs,
 		availableParsers: parsers.map((p) => ({ id: p.id, name: p.name })),
+		activityEntries,
+		activityCount: activityCount?.count ?? 0,
 	};
 }
 
@@ -81,6 +93,35 @@ export async function loader({ context }: Route.LoaderArgs) {
 export async function action({ request, context }: Route.ActionArgs) {
 	const formData = await request.formData();
 	const intent = formData.get("intent");
+
+	// --- アクティビティログ追加 ---
+	if (intent === "add-activity") {
+		const type = (formData.get("type") as string)?.trim();
+		const message = (formData.get("message") as string)?.trim();
+		const metadata = (formData.get("metadata") as string)?.trim() || null;
+		if (!type || !message) {
+			return { error: "タイプとメッセージは必須です" };
+		}
+		const db = drizzle(context.cloudflare.env.DB);
+		await db.insert(activityLog).values({ type, message, metadata });
+		return { ok: true, intent: "activity", message: "アクティビティを追加しました" };
+	}
+
+	// --- アクティビティログ削除 ---
+	if (intent === "delete-activity") {
+		const id = Number(formData.get("id"));
+		if (!id) return { error: "IDが不正です" };
+		const db = drizzle(context.cloudflare.env.DB);
+		await db.delete(activityLog).where(eq(activityLog.id, id));
+		return { ok: true, intent: "activity", message: "アクティビティを削除しました" };
+	}
+
+	// --- アクティビティログ全削除 ---
+	if (intent === "clear-all-activities") {
+		const db = drizzle(context.cloudflare.env.DB);
+		await db.delete(activityLog);
+		return { ok: true, intent: "activity", message: "全アクティビティを削除しました" };
+	}
 
 	if (intent === "regenerate-hero") {
 		try {
@@ -309,6 +350,7 @@ export default function Debug({ loaderData }: Route.ComponentProps) {
 	const scrapeUrlFetcher = useFetcher<typeof action>();
 	const tweetFetcher = useFetcher<typeof action>();
 	const siteFetcher = useFetcher<typeof action>();
+	const activityFetcher = useFetcher<typeof action>();
 	const isRefreshingNews =
 		newsFetcher.state === "submitting" || newsFetcher.state === "loading";
 	const isRegeneratingHero =
@@ -321,13 +363,19 @@ export default function Debug({ loaderData }: Route.ComponentProps) {
 		tweetFetcher.state === "submitting" || tweetFetcher.state === "loading";
 	const isSiteAction =
 		siteFetcher.state === "submitting" || siteFetcher.state === "loading";
+	const isActivityAction =
+		activityFetcher.state === "submitting" || activityFetcher.state === "loading";
 
 	// fetcher からの結果を表示
 	const activeFetcherData =
-		siteFetcher.data ?? tweetFetcher.data ?? scrapeFetcher.data ?? scrapeUrlFetcher.data ?? heroFetcher.data ?? newsFetcher.data;
+		activityFetcher.data ?? siteFetcher.data ?? tweetFetcher.data ?? scrapeFetcher.data ?? scrapeUrlFetcher.data ?? heroFetcher.data ?? newsFetcher.data;
 
 	const [scrapeUrlInput, setScrapeUrlInput] = useState("");
 	const [showAddSite, setShowAddSite] = useState(false);
+	const [showAddActivity, setShowAddActivity] = useState(false);
+	const [newActivityType, setNewActivityType] = useState("deploy");
+	const [newActivityMessage, setNewActivityMessage] = useState("");
+	const [newActivityMetadata, setNewActivityMetadata] = useState("");
 	const [newSiteId, setNewSiteId] = useState("");
 	const [newSiteName, setNewSiteName] = useState("");
 	const [newSiteUrl, setNewSiteUrl] = useState("");
@@ -391,6 +439,162 @@ export default function Debug({ loaderData }: Route.ComponentProps) {
 							: `キャッシュを更新しました（${"length" in activeFetcherData ? activeFetcherData.length : 0}文字）`}
 					</div>
 				)}
+
+				{/* Activity Log Section */}
+				<section className="mb-8">
+					<div className="flex items-center justify-between mb-4">
+						<h2 className="text-lg font-bold text-emerald-400">
+							アクティビティログ
+							<span className="text-sm font-normal text-gray-500 ml-2">
+								({loaderData.activityCount}件)
+							</span>
+						</h2>
+						<div className="flex items-center gap-2">
+							<button
+								type="button"
+								onClick={() => setShowAddActivity(!showAddActivity)}
+								className="flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 transition-colors px-3 py-1.5 rounded-full hover:bg-emerald-400/10 border border-emerald-400/30"
+							>
+								{showAddActivity ? "閉じる" : "+ 追加"}
+							</button>
+							<activityFetcher.Form method="post">
+								<input type="hidden" name="intent" value="clear-all-activities" />
+								<button
+									type="submit"
+									disabled={isActivityAction || loaderData.activityCount === 0}
+									className="flex items-center gap-1 text-sm text-red-400/60 hover:text-red-400 transition-colors disabled:opacity-50 px-3 py-1.5 rounded-full hover:bg-red-400/10 border border-red-400/20"
+									onClick={(e) => {
+										if (!confirm("全てのアクティビティログを削除しますか？")) {
+											e.preventDefault();
+										}
+									}}
+								>
+									全削除
+								</button>
+							</activityFetcher.Form>
+						</div>
+					</div>
+
+					{/* アクティビティ追加フォーム */}
+					{showAddActivity && (
+						<div className="mb-4 p-4 border border-emerald-400/20 rounded-lg bg-gray-900/30">
+							<activityFetcher.Form
+								method="post"
+								onSubmit={() => {
+									setNewActivityMessage("");
+									setNewActivityMetadata("");
+									setShowAddActivity(false);
+								}}
+							>
+								<input type="hidden" name="intent" value="add-activity" />
+								<div className="grid grid-cols-2 gap-3 mb-3">
+									<div>
+										<label className="block text-xs text-gray-400 mb-1">タイプ</label>
+										<select
+											name="type"
+											value={newActivityType}
+											onChange={(e) => setNewActivityType(e.target.value)}
+											className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 focus:border-emerald-500/50 focus:outline-none"
+										>
+											<option value="deploy">deploy</option>
+											<option value="cron_aitter">cron_aitter</option>
+											<option value="cron_hero_image">cron_hero_image</option>
+											<option value="cron_news_scrape">cron_news_scrape</option>
+										</select>
+									</div>
+									<div>
+										<label className="block text-xs text-gray-400 mb-1">メタデータ (JSON, 任意)</label>
+										<input
+											type="text"
+											name="metadata"
+											value={newActivityMetadata}
+											onChange={(e) => setNewActivityMetadata(e.target.value)}
+											placeholder='{"hash": "abc1234"}'
+											className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 placeholder-gray-600 focus:border-emerald-500/50 focus:outline-none"
+										/>
+									</div>
+								</div>
+								<div className="mb-3">
+									<label className="block text-xs text-gray-400 mb-1">メッセージ</label>
+									<input
+										type="text"
+										name="message"
+										value={newActivityMessage}
+										onChange={(e) => setNewActivityMessage(e.target.value)}
+										placeholder="feat: アクティビティフィードを追加"
+										className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 placeholder-gray-600 focus:border-emerald-500/50 focus:outline-none"
+									/>
+								</div>
+								<button
+									type="submit"
+									disabled={isActivityAction || !newActivityMessage.trim()}
+									className="w-full flex items-center justify-center gap-2 text-sm text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50 px-4 py-2 rounded bg-emerald-400/10 border border-emerald-400/30 hover:bg-emerald-400/20"
+								>
+									{isActivityAction ? "追加中..." : "アクティビティを追加"}
+								</button>
+							</activityFetcher.Form>
+						</div>
+					)}
+
+					{/* アクティビティ一覧 */}
+					{loaderData.activityEntries.length === 0 ? (
+						<div className="p-8 text-center text-gray-500 border border-gray-800 rounded-lg">
+							<p className="text-sm">アクティビティログがありません</p>
+						</div>
+					) : (
+						<div className="space-y-2">
+							{loaderData.activityEntries.map((entry) => (
+								<div
+									key={entry.id}
+									className="flex items-start justify-between gap-3 p-3 border border-gray-800 rounded-lg hover:border-gray-700 transition-colors"
+								>
+									<div className="min-w-0 flex-1">
+										<div className="flex items-center gap-2 mb-1">
+											<span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+												entry.type === "deploy"
+													? "bg-blue-500/10 text-blue-400"
+													: entry.type === "cron_aitter"
+														? "bg-violet-500/10 text-violet-400"
+														: entry.type === "cron_hero_image"
+															? "bg-fuchsia-500/10 text-fuchsia-400"
+															: entry.type === "cron_news_scrape"
+																? "bg-cyan-500/10 text-cyan-400"
+																: "bg-gray-800 text-gray-400"
+											}`}>
+												{entry.type}
+											</span>
+											<span className="text-[10px] font-mono text-gray-600">
+												ID: {entry.id}
+											</span>
+											{entry.createdAt && (
+												<span className="text-[10px] text-gray-600">
+													{entry.createdAt.toLocaleString("ja-JP")}
+												</span>
+											)}
+										</div>
+										<p className="text-sm text-gray-300">{entry.message}</p>
+										{entry.metadata && (
+											<p className="text-xs text-gray-600 mt-0.5 font-mono">
+												{entry.metadata}
+											</p>
+										)}
+									</div>
+									<activityFetcher.Form method="post" className="shrink-0">
+										<input type="hidden" name="intent" value="delete-activity" />
+										<input type="hidden" name="id" value={entry.id} />
+										<button
+											type="submit"
+											disabled={isActivityAction}
+											className="text-xs text-red-400/60 hover:text-red-400 px-2 py-1 rounded border border-red-400/20 hover:bg-red-400/10 transition-colors disabled:opacity-50"
+										>
+											削除
+										</button>
+									</activityFetcher.Form>
+								</div>
+							))}
+						</div>
+					)}
+				</section>
 
 				{/* Scrape Site Config Section */}
 				<section className="mb-8">

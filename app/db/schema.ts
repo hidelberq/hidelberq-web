@@ -70,6 +70,16 @@ export const scrapeSites = sqliteTable("scrape_sites", {
 	),
 });
 
+export const activityLog = sqliteTable("activity_log", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	type: text("type").notNull(), // "deploy" | "cron_aitter" | "cron_hero_image" | "cron_news_scrape"
+	message: text("message").notNull(),
+	metadata: text("metadata"), // JSON (コミットハッシュ等)
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const scrapedArticles = sqliteTable("scraped_articles", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	siteId: text("site_id").notNull(),
