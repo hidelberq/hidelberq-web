@@ -64,6 +64,20 @@
       "when": 1770343545833,
       "tag": "0008_chief_kree",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1770474222636,
+      "tag": "0009_vengeful_texas_twister",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1770479883027,
+      "tag": "0010_motionless_doctor_faustus",
+      "breakpoints": true
     }
   ]
 }

@@ -57,3 +57,34 @@ export const newsCache = sqliteTable("news_cache", {
 		sql`(strftime('%s', 'now'))`,
 	),
 });
+
+export const scrapeSites = sqliteTable("scrape_sites", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	siteId: text("site_id").notNull().unique(),
+	name: text("name").notNull(),
+	url: text("url").notNull(),
+	parserId: text("parser_id").notNull(), // "yahoo-top" | "generic-links" | "generic-page"
+	enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
+export const scrapedArticles = sqliteTable("scraped_articles", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	siteId: text("site_id").notNull(),
+	siteName: text("site_name").notNull(),
+	siteUrl: text("site_url").notNull(),
+	articleUrl: text("article_url").notNull().unique(),
+	articleTitle: text("article_title").notNull(),
+	imageUrl: text("image_url"),
+	description: text("description"),
+	category: text("category"),
+	scrapedAt: integer("scraped_at", { mode: "timestamp" }).notNull(),
+	usedForTweet: integer("used_for_tweet", { mode: "boolean" })
+		.notNull()
+		.default(false),
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
