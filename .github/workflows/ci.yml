@@ -44,6 +44,9 @@ jobs:
       - name: Build
         run: bun run build
 
+      - name: Strip production-only config for preview
+        run: jq 'del(.triggers, .routes)' build/server/wrangler.json > build/server/wrangler.tmp.json && mv build/server/wrangler.tmp.json build/server/wrangler.json
+
       - name: Deploy Preview
         id: deploy
         run: |
