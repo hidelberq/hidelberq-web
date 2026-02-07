@@ -261,14 +261,104 @@ function getTodayJST(): string {
 }
 
 /**
+ * ツイート生成の内部ロジック（閾値チェックなし）
+ * Cron とデバッグ画面の両方から使用
+ */
+async function runTweetGeneration(env: Env): Promise<number> {
+	const db = drizzle(env.DB);
+	const apiKey = env.GEMINI_API_KEY;
+
+	if (!apiKey) {
+		throw new Error("GEMINI_API_KEY is not set");
+	}
+
+	const ai = new GoogleGenAI({ apiKey });
+
+	// Step 1: ニュースコンテキスト取得
+	const newsContext = await fetchNewsContext(ai, db);
+
+	// 過去のツイート内容を取得（重複防止用）
+	const recentTweets = await db
+		.select({ content: tweets.content })
+		.from(tweets)
+		.orderBy(desc(tweets.createdAt))
+		.limit(50);
+	const pastTweetContents = recentTweets.map((t) => t.content);
+
+	// スクレイピング記事を取得（未使用のものを優先）
+	const recentArticles = await db
+		.select({
+			id: scrapedArticles.id,
+			articleUrl: scrapedArticles.articleUrl,
+			articleTitle: scrapedArticles.articleTitle,
+			category: scrapedArticles.category,
+			siteName: scrapedArticles.siteName,
+		})
+		.from(scrapedArticles)
+		.where(eq(scrapedArticles.usedForTweet, false))
+		.orderBy(desc(scrapedArticles.scrapedAt))
+		.limit(30);
+
+	console.log(`Found ${recentArticles.length} unused scraped articles`);
+
+	// Step 2: ツイート生成
+	const generated = await generateTweets(
+		ai,
+		newsContext,
+		pastTweetContents,
+		recentArticles,
+	);
+
+	if (generated.length === 0) {
+		return 0;
+	}
+
+	// DB に保存
+	const now = Date.now();
+	const intervalMs = 60 * 1000; // 1分間隔
+	for (let i = 0; i < generated.length; i++) {
+		const tweet = generated[i];
+		const engagement = randomEngagement();
+		const createdAt = new Date(now - i * intervalMs);
+
+		await db
+			.insert(tweets)
+			.values({
+				content: tweet.content,
+				authorName: tweet.authorName,
+				authorHandle: tweet.authorHandle,
+				authorEmoji: tweet.authorEmoji,
+				category: tweet.category,
+				sourceUrl: tweet.sourceUrl || "",
+				...engagement,
+				displayed: false,
+				createdAt,
+			})
+			.execute();
+	}
+
+	// 使用したスクレイピング記事を usedForTweet = true に更新
+	if (recentArticles.length > 0) {
+		const usedArticleIds = recentArticles.map((a) => a.id);
+		await db
+			.update(scrapedArticles)
+			.set({ usedForTweet: true })
+			.where(inArray(scrapedArticles.id, usedArticleIds))
+			.execute();
+		console.log(`Marked ${usedArticleIds.length} articles as used`);
+	}
+
+	return generated.length;
+}
+
+/**
  * Cron から呼ばれるメインのツイート生成関数
  * 未表示ツイートが閾値以下の場合のみ生成する
  */
 export async function generateAitterTweets(env: Env): Promise<void> {
 	const db = drizzle(env.DB);
-	const apiKey = env.GEMINI_API_KEY;
 
-	if (!apiKey) {
+	if (!env.GEMINI_API_KEY) {
 		console.log("GEMINI_API_KEY is not set, skipping AIteer cron");
 		return;
 	}
@@ -287,86 +377,17 @@ export async function generateAitterTweets(env: Env): Promise<void> {
 		return;
 	}
 
-	const ai = new GoogleGenAI({ apiKey });
-
 	try {
-		// Step 1: ニュースコンテキスト取得
-		const newsContext = await fetchNewsContext(ai, db);
-
-		// 過去のツイート内容を取得（重複防止用）
-		const recentTweets = await db
-			.select({ content: tweets.content })
-			.from(tweets)
-			.orderBy(desc(tweets.createdAt))
-			.limit(50);
-		const pastTweetContents = recentTweets.map((t) => t.content);
-
-		// スクレイピング記事を取得（未使用のものを優先）
-		const recentArticles = await db
-			.select({
-				id: scrapedArticles.id,
-				articleUrl: scrapedArticles.articleUrl,
-				articleTitle: scrapedArticles.articleTitle,
-				category: scrapedArticles.category,
-				siteName: scrapedArticles.siteName,
-			})
-			.from(scrapedArticles)
-			.where(eq(scrapedArticles.usedForTweet, false))
-			.orderBy(desc(scrapedArticles.scrapedAt))
-			.limit(30);
-
-		console.log(`Found ${recentArticles.length} unused scraped articles`);
-
-		// Step 2: ツイート生成
-		const generated = await generateTweets(
-			ai,
-			newsContext,
-			pastTweetContents,
-			recentArticles,
-		);
-
-		if (generated.length === 0) {
-			console.log("AIteer cron: No tweets generated");
-			return;
-		}
-
-		// DB に保存
-		const now = Date.now();
-		const intervalMs = 60 * 1000; // 1分間隔
-		for (let i = 0; i < generated.length; i++) {
-			const tweet = generated[i];
-			const engagement = randomEngagement();
-			const createdAt = new Date(now - i * intervalMs);
-
-			await db
-				.insert(tweets)
-				.values({
-					content: tweet.content,
-					authorName: tweet.authorName,
-					authorHandle: tweet.authorHandle,
-					authorEmoji: tweet.authorEmoji,
-					category: tweet.category,
-					sourceUrl: tweet.sourceUrl || "",
-					...engagement,
-					displayed: false,
-					createdAt,
-				})
-				.execute();
-		}
-
-		console.log(`AIteer cron: Saved ${generated.length} tweets to DB`);
-
-		// 使用したスクレイピング記事を usedForTweet = true に更新
-		if (recentArticles.length > 0) {
-			const usedArticleIds = recentArticles.map((a) => a.id);
-			await db
-				.update(scrapedArticles)
-				.set({ usedForTweet: true })
-				.where(inArray(scrapedArticles.id, usedArticleIds))
-				.execute();
-			console.log(`AIteer cron: Marked ${usedArticleIds.length} articles as used`);
-		}
+		const count = await runTweetGeneration(env);
+		console.log(`AIteer cron: Saved ${count} tweets to DB`);
 	} catch (e) {
 		console.error("AIteer cron error:", e);
 	}
+}
+
+/**
+ * デバッグ画面から呼ばれるツイート生成関数（閾値チェックなし、強制実行）
+ */
+export async function forceGenerateAitterTweets(env: Env): Promise<number> {
+	return runTweetGeneration(env);
 }
