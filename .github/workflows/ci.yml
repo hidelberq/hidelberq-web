@@ -47,8 +47,15 @@ jobs:
       - name: Deploy Preview
         id: deploy
         run: |
+          set +e
           OUTPUT=$(bun wrangler deploy --name hidelberq-web-pr-${{ github.event.pull_request.number }} 2>&1)
+          DEPLOY_EXIT=$?
+          set -e
           echo "$OUTPUT"
+          if [ $DEPLOY_EXIT -ne 0 ]; then
+            echo "::error::Wrangler deploy failed with exit code $DEPLOY_EXIT"
+            exit $DEPLOY_EXIT
+          fi
           URL=$(echo "$OUTPUT" | grep -oP 'https://[^\s]+\.workers\.dev' | head -1)
           echo "preview_url=$URL" >> "$GITHUB_OUTPUT"
         env:
