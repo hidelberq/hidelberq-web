@@ -1,8 +1,8 @@
 import { drizzle } from "drizzle-orm/d1";
-import { scrapedArticles } from "../../app/db/schema";
-import { lt } from "drizzle-orm";
-import type { ScrapeSiteConfig, ScrapedArticle } from "./types";
-import { allSites } from "./sites";
+import { scrapedArticles, scrapeSites } from "../../app/db/schema";
+import { eq, lt } from "drizzle-orm";
+import type { ScrapedArticle } from "./types";
+import { getParserById } from "./parsers";
 import { parseGenericPage, parseGenericLinks } from "./sites/generic";
 
 const USER_AGENT =
@@ -30,17 +30,31 @@ async function fetchHtml(url: string): Promise<string> {
 	return res.text();
 }
 
+/** DB サイト設定の型 */
+interface DbSiteConfig {
+	siteId: string;
+	name: string;
+	url: string;
+	parserId: string;
+}
+
 /**
  * 1サイトをスクレイピングして記事を取得・保存
  */
 async function scrapeSite(
 	db: ReturnType<typeof drizzle>,
-	site: ScrapeSiteConfig,
+	site: DbSiteConfig,
 ): Promise<{ inserted: number; total: number }> {
 	console.log(`Scraping: ${site.name} (${site.url})`);
 
+	const parser = getParserById(site.parserId);
+	if (!parser) {
+		console.error(`  Unknown parser: ${site.parserId}`);
+		return { inserted: 0, total: 0 };
+	}
+
 	const html = await fetchHtml(site.url);
-	const articles = site.parseArticles(html);
+	const articles = parser.parse(html, site.url);
 
 	console.log(`  Parsed ${articles.length} articles from ${site.name}`);
 
@@ -52,7 +66,7 @@ async function scrapeSite(
 			await db
 				.insert(scrapedArticles)
 				.values({
-					siteId: site.id,
+					siteId: site.siteId,
 					siteName: site.name,
 					siteUrl: site.url,
 					articleUrl: article.articleUrl,
@@ -94,6 +108,7 @@ async function cleanupOldArticles(
 
 /**
  * 全登録サイトをスクレイピング (cron 用)
+ * DB の scrape_sites テーブルから有効なサイトを取得して実行
  */
 export async function scrapeAllSites(
 	env: Env,
@@ -101,12 +116,20 @@ export async function scrapeAllSites(
 	const db = drizzle(env.DB);
 	const results: Record<string, { inserted: number; total: number }> = {};
 
-	for (const site of allSites) {
+	// DB から有効なサイト設定を取得
+	const sites = await db
+		.select()
+		.from(scrapeSites)
+		.where(eq(scrapeSites.enabled, true));
+
+	console.log(`Found ${sites.length} enabled scrape sites`);
+
+	for (const site of sites) {
 		try {
-			results[site.id] = await scrapeSite(db, site);
+			results[site.siteId] = await scrapeSite(db, site);
 		} catch (e) {
 			console.error(`Error scraping ${site.name}:`, e);
-			results[site.id] = { inserted: 0, total: 0 };
+			results[site.siteId] = { inserted: 0, total: 0 };
 		}
 	}
 
@@ -121,12 +144,12 @@ export async function scrapeAllSites(
 
 /**
  * 任意URLをスクレイピング (デバッグ用)
- * サイト設定があればそれを使い、なければ汎用パーサーを使用
+ * DB にマッチするサイト設定があればそのパーサーを使い、なければ汎用パーサーを使用
  */
 export async function scrapeUrl(
 	env: Env,
 	url: string,
-	siteConfig?: ScrapeSiteConfig,
+	parserId?: string,
 ): Promise<{ articles: ScrapedArticle[]; inserted: number }> {
 	const db = drizzle(env.DB);
 	const html = await fetchHtml(url);
@@ -135,18 +158,41 @@ export async function scrapeUrl(
 	let siteId: string;
 	let siteName: string;
 
-	if (siteConfig) {
-		articles = siteConfig.parseArticles(html);
-		siteId = siteConfig.id;
-		siteName = siteConfig.name;
+	// parserId が指定されていればそのパーサーを使う
+	const parser = parserId ? getParserById(parserId) : undefined;
+
+	if (parser) {
+		articles = parser.parse(html, url);
+		siteId = parserId!;
+		siteName = parser.name;
 	} else {
-		// 汎用パーサー: まずリンク抽出を試し、なければ OGP で単一ページ情報を取得
-		articles = parseGenericLinks(html, url);
-		if (articles.length === 0) {
-			articles = parseGenericPage(html, url);
+		// DB にマッチするサイト設定を探す
+		const sites = await db.select().from(scrapeSites);
+		const matchedSite = sites.find((s) => url.startsWith(new URL(s.url).origin));
+
+		if (matchedSite) {
+			const matchedParser = getParserById(matchedSite.parserId);
+			if (matchedParser) {
+				articles = matchedParser.parse(html, url);
+				siteId = matchedSite.siteId;
+				siteName = matchedSite.name;
+			} else {
+				articles = parseGenericLinks(html, url);
+				if (articles.length === 0) {
+					articles = parseGenericPage(html, url);
+				}
+				siteId = "custom";
+				siteName = new URL(url).hostname;
+			}
+		} else {
+			// 汎用パーサー: まずリンク抽出を試し、なければ OGP で単一ページ情報を取得
+			articles = parseGenericLinks(html, url);
+			if (articles.length === 0) {
+				articles = parseGenericPage(html, url);
+			}
+			siteId = "custom";
+			siteName = new URL(url).hostname;
 		}
-		siteId = "custom";
-		siteName = new URL(url).hostname;
 	}
 
 	const now = new Date();

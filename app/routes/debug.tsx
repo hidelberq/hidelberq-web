@@ -2,13 +2,13 @@ import type { Route } from "./+types/debug";
 import { useState } from "react";
 import { useFetcher } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
-import { newsCache, heroImages, scrapedArticles, tweets } from "../db/schema";
+import { newsCache, heroImages, scrapedArticles, tweets, scrapeSites } from "../db/schema";
 import { desc, eq, sql } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
 import { generateHeroImage, regenerateHeroImageWithPrompt } from "../../workers/hero-image";
 import { forceGenerateAitterTweets } from "../../workers/aitter-cron";
 import { scrapeAllSites, scrapeUrl } from "../../workers/scraper/run";
-import { allSites } from "../../workers/scraper/sites";
+import { parsers } from "../../workers/scraper/parsers";
 
 // --- Meta ---
 export function meta(): Route.MetaDescriptors {
@@ -59,6 +59,11 @@ export async function loader({ context }: Route.LoaderArgs) {
 		.from(tweets)
 		.where(eq(tweets.displayed, false));
 
+	const siteConfigs = await db
+		.select()
+		.from(scrapeSites)
+		.orderBy(scrapeSites.id);
+
 	return {
 		entries,
 		heroEntries,
@@ -67,6 +72,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 		recentTweets,
 		tweetCount: tweetCount?.count ?? 0,
 		unshownCount: unshownCount?.count ?? 0,
+		siteConfigs,
+		availableParsers: parsers.map((p) => ({ id: p.id, name: p.name })),
 	};
 }
 
@@ -104,6 +111,48 @@ export async function action({ request, context }: Route.ActionArgs) {
 		}
 	}
 
+	// --- サイト追加 ---
+	if (intent === "add-site") {
+		const siteId = (formData.get("siteId") as string)?.trim();
+		const name = (formData.get("name") as string)?.trim();
+		const url = (formData.get("siteUrl") as string)?.trim();
+		const parserId = (formData.get("parserId") as string)?.trim();
+		if (!siteId || !name || !url || !parserId) {
+			return { error: "すべてのフィールドを入力してください" };
+		}
+		try {
+			new URL(url);
+		} catch {
+			return { error: "有効なURLを入力してください" };
+		}
+		const db = drizzle(context.cloudflare.env.DB);
+		try {
+			await db.insert(scrapeSites).values({ siteId, name, url, parserId });
+			return { ok: true, intent: "site-config", message: `サイト「${name}」を追加しました` };
+		} catch (e) {
+			return { error: `サイト追加エラー: ${e instanceof Error ? e.message : String(e)}` };
+		}
+	}
+
+	// --- サイト削除 ---
+	if (intent === "delete-site") {
+		const id = Number(formData.get("id"));
+		if (!id) return { error: "IDが不正です" };
+		const db = drizzle(context.cloudflare.env.DB);
+		await db.delete(scrapeSites).where(eq(scrapeSites.id, id));
+		return { ok: true, intent: "site-config", message: "サイトを削除しました" };
+	}
+
+	// --- サイト有効/無効切り替え ---
+	if (intent === "toggle-site") {
+		const id = Number(formData.get("id"));
+		const enabled = formData.get("enabled") === "true";
+		if (!id) return { error: "IDが不正です" };
+		const db = drizzle(context.cloudflare.env.DB);
+		await db.update(scrapeSites).set({ enabled }).where(eq(scrapeSites.id, id));
+		return { ok: true, intent: "site-config", message: `サイトを${enabled ? "有効" : "無効"}にしました` };
+	}
+
 	// --- スクレイピング: 全サイト実行 ---
 	if (intent === "scrape-all") {
 		try {
@@ -136,12 +185,9 @@ export async function action({ request, context }: Route.ActionArgs) {
 			return { error: "有効なURLを入力してください" };
 		}
 		try {
-			// 登録済みサイトの設定があればそれを使う
-			const matchedSite = allSites.find((s) => url.startsWith(new URL(s.url).origin));
 			const { articles, inserted } = await scrapeUrl(
 				context.cloudflare.env,
 				url,
-				matchedSite,
 			);
 			return {
 				ok: true,
@@ -262,6 +308,7 @@ export default function Debug({ loaderData }: Route.ComponentProps) {
 	const scrapeFetcher = useFetcher<typeof action>();
 	const scrapeUrlFetcher = useFetcher<typeof action>();
 	const tweetFetcher = useFetcher<typeof action>();
+	const siteFetcher = useFetcher<typeof action>();
 	const isRefreshingNews =
 		newsFetcher.state === "submitting" || newsFetcher.state === "loading";
 	const isRegeneratingHero =
@@ -272,12 +319,19 @@ export default function Debug({ loaderData }: Route.ComponentProps) {
 		scrapeUrlFetcher.state === "submitting" || scrapeUrlFetcher.state === "loading";
 	const isGeneratingTweets =
 		tweetFetcher.state === "submitting" || tweetFetcher.state === "loading";
+	const isSiteAction =
+		siteFetcher.state === "submitting" || siteFetcher.state === "loading";
 
 	// fetcher からの結果を表示
 	const activeFetcherData =
-		tweetFetcher.data ?? scrapeFetcher.data ?? scrapeUrlFetcher.data ?? heroFetcher.data ?? newsFetcher.data;
+		siteFetcher.data ?? tweetFetcher.data ?? scrapeFetcher.data ?? scrapeUrlFetcher.data ?? heroFetcher.data ?? newsFetcher.data;
 
 	const [scrapeUrlInput, setScrapeUrlInput] = useState("");
+	const [showAddSite, setShowAddSite] = useState(false);
+	const [newSiteId, setNewSiteId] = useState("");
+	const [newSiteName, setNewSiteName] = useState("");
+	const [newSiteUrl, setNewSiteUrl] = useState("");
+	const [newSiteParserId, setNewSiteParserId] = useState(loaderData.availableParsers[0]?.id ?? "generic-links");
 
 	return (
 		<div className="min-h-screen bg-black text-white font-sans">
@@ -337,6 +391,170 @@ export default function Debug({ loaderData }: Route.ComponentProps) {
 							: `キャッシュを更新しました（${"length" in activeFetcherData ? activeFetcherData.length : 0}文字）`}
 					</div>
 				)}
+
+				{/* Scrape Site Config Section */}
+				<section className="mb-8">
+					<div className="flex items-center justify-between mb-4">
+						<h2 className="text-lg font-bold text-teal-400">
+							スクレイピング対象サイト
+							<span className="text-sm font-normal text-gray-500 ml-2">
+								({loaderData.siteConfigs.length}件)
+							</span>
+						</h2>
+						<button
+							type="button"
+							onClick={() => setShowAddSite(!showAddSite)}
+							className="flex items-center gap-1 text-sm text-teal-400 hover:text-teal-300 transition-colors px-3 py-1.5 rounded-full hover:bg-teal-400/10 border border-teal-400/30"
+						>
+							{showAddSite ? "閉じる" : "+ サイト追加"}
+						</button>
+					</div>
+
+					{/* サイト追加フォーム */}
+					{showAddSite && (
+						<div className="mb-4 p-4 border border-teal-400/20 rounded-lg bg-gray-900/30">
+							<siteFetcher.Form
+								method="post"
+								onSubmit={() => {
+									setNewSiteId("");
+									setNewSiteName("");
+									setNewSiteUrl("");
+									setShowAddSite(false);
+								}}
+							>
+								<input type="hidden" name="intent" value="add-site" />
+								<div className="grid grid-cols-2 gap-3 mb-3">
+									<div>
+										<label className="block text-xs text-gray-400 mb-1">サイトID</label>
+										<input
+											type="text"
+											name="siteId"
+											value={newSiteId}
+											onChange={(e) => setNewSiteId(e.target.value)}
+											placeholder="nhk-news"
+											className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 placeholder-gray-600 focus:border-teal-500/50 focus:outline-none"
+										/>
+									</div>
+									<div>
+										<label className="block text-xs text-gray-400 mb-1">表示名</label>
+										<input
+											type="text"
+											name="name"
+											value={newSiteName}
+											onChange={(e) => setNewSiteName(e.target.value)}
+											placeholder="NHKニュース"
+											className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 placeholder-gray-600 focus:border-teal-500/50 focus:outline-none"
+										/>
+									</div>
+									<div>
+										<label className="block text-xs text-gray-400 mb-1">URL</label>
+										<input
+											type="url"
+											name="siteUrl"
+											value={newSiteUrl}
+											onChange={(e) => setNewSiteUrl(e.target.value)}
+											placeholder="https://www3.nhk.or.jp/news/"
+											className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 placeholder-gray-600 focus:border-teal-500/50 focus:outline-none"
+										/>
+									</div>
+									<div>
+										<label className="block text-xs text-gray-400 mb-1">パーサー</label>
+										<select
+											name="parserId"
+											value={newSiteParserId}
+											onChange={(e) => setNewSiteParserId(e.target.value)}
+											className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 focus:border-teal-500/50 focus:outline-none"
+										>
+											{loaderData.availableParsers.map((p) => (
+												<option key={p.id} value={p.id}>
+													{p.name} ({p.id})
+												</option>
+											))}
+										</select>
+									</div>
+								</div>
+								<button
+									type="submit"
+									disabled={isSiteAction || !newSiteId.trim() || !newSiteName.trim() || !newSiteUrl.trim()}
+									className="w-full flex items-center justify-center gap-2 text-sm text-teal-400 hover:text-teal-300 transition-colors disabled:opacity-50 px-4 py-2 rounded bg-teal-400/10 border border-teal-400/30 hover:bg-teal-400/20"
+								>
+									{isSiteAction ? "追加中..." : "サイトを追加"}
+								</button>
+							</siteFetcher.Form>
+						</div>
+					)}
+
+					{/* サイト一覧 */}
+					{loaderData.siteConfigs.length === 0 ? (
+						<div className="p-8 text-center text-gray-500 border border-gray-800 rounded-lg">
+							<p className="text-sm">スクレイピング対象サイトが登録されていません</p>
+						</div>
+					) : (
+						<div className="space-y-2">
+							{loaderData.siteConfigs.map((site) => (
+								<div
+									key={site.id}
+									className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${
+										site.enabled
+											? "border-gray-800 hover:border-gray-700"
+											: "border-gray-800/50 opacity-50"
+									}`}
+								>
+									<div className="min-w-0 flex-1">
+										<div className="flex items-center gap-2">
+											<span className="text-sm font-medium text-gray-200">
+												{site.name}
+											</span>
+											<span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400">
+												{site.siteId}
+											</span>
+											<span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">
+												{site.parserId}
+											</span>
+										</div>
+										<a
+											href={site.url}
+											target="_blank"
+											rel="noopener noreferrer"
+											className="text-xs text-gray-500 hover:text-gray-400 truncate block mt-0.5"
+										>
+											{site.url}
+										</a>
+									</div>
+									<div className="flex items-center gap-2 ml-3 shrink-0">
+										<siteFetcher.Form method="post">
+											<input type="hidden" name="intent" value="toggle-site" />
+											<input type="hidden" name="id" value={site.id} />
+											<input type="hidden" name="enabled" value={String(!site.enabled)} />
+											<button
+												type="submit"
+												disabled={isSiteAction}
+												className={`text-xs px-2 py-1 rounded border transition-colors disabled:opacity-50 ${
+													site.enabled
+														? "text-green-400 border-green-400/30 hover:bg-green-400/10"
+														: "text-gray-500 border-gray-700 hover:bg-gray-800"
+												}`}
+											>
+												{site.enabled ? "ON" : "OFF"}
+											</button>
+										</siteFetcher.Form>
+										<siteFetcher.Form method="post">
+											<input type="hidden" name="intent" value="delete-site" />
+											<input type="hidden" name="id" value={site.id} />
+											<button
+												type="submit"
+												disabled={isSiteAction}
+												className="text-xs text-red-400/60 hover:text-red-400 px-2 py-1 rounded border border-red-400/20 hover:bg-red-400/10 transition-colors disabled:opacity-50"
+											>
+												削除
+											</button>
+										</siteFetcher.Form>
+									</div>
+								</div>
+							))}
+						</div>
+					)}
+				</section>
 
 				{/* News Scraping Section */}
 				<section className="mb-8">

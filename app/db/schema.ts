@@ -58,6 +58,18 @@ export const newsCache = sqliteTable("news_cache", {
 	),
 });
 
+export const scrapeSites = sqliteTable("scrape_sites", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	siteId: text("site_id").notNull().unique(),
+	name: text("name").notNull(),
+	url: text("url").notNull(),
+	parserId: text("parser_id").notNull(), // "yahoo-top" | "generic-links" | "generic-page"
+	enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const scrapedArticles = sqliteTable("scraped_articles", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	siteId: text("site_id").notNull(),
