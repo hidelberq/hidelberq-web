@@ -42,26 +42,25 @@ export default {
     });
   },
   async scheduled(event, env, ctx) {
-    // UTC 21:00 (JST 06:00) - ヒーロー画像生成
-    ctx.waitUntil(
-      runWithActivityLog(env, "cron_hero_image", async () => {
-        const result = await generateHeroImage(env);
-        return result;
-      }),
-    );
-    // 毎時0分・30分 - AIteer ツイート生成
-    ctx.waitUntil(
-      runWithActivityLog(env, "cron_aitter", async () => {
-        const result = await generateAitterTweets(env);
-        return result;
-      }),
-    );
-    // 毎時0分 - ニューススクレイピング
-    ctx.waitUntil(
-      runWithActivityLog(env, "cron_news_scrape", async () => {
-        const result = await scrapeNews(env);
-        return result;
-      }),
-    );
+    switch (event.cron) {
+      // UTC 21:00 (JST 06:00) - ヒーロー画像生成
+      case "0 21 * * *":
+        ctx.waitUntil(
+          runWithActivityLog(env, "cron_hero_image", () => generateHeroImage(env)),
+        );
+        break;
+      // 30分ごと - AItter ツイート生成 + 毎時ニューススクレイピング
+      case "*/30 * * * *":
+        ctx.waitUntil(
+          runWithActivityLog(env, "cron_aitter", () => generateAitterTweets(env)),
+        );
+        // ニューススクレイピングは毎時0分のみ実行
+        if (new Date().getUTCMinutes() < 5) {
+          ctx.waitUntil(
+            runWithActivityLog(env, "cron_news_scrape", () => scrapeNews(env)),
+          );
+        }
+        break;
+    }
   },
 } satisfies ExportedHandler<Env>;
