@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
-import { desc } from "drizzle-orm";
-import { heroImages } from "../db/schema";
+import { desc, sql } from "drizzle-orm";
+import { heroImages, activityLog } from "../db/schema";
 import type { Route } from "./+types/home";
 
 export function meta(_args: Route.MetaArgs) {
@@ -27,10 +27,36 @@ export async function loader({ context }: Route.LoaderArgs) {
 
 	const heroImage = latest.length > 0 ? latest[0] : null;
 
+	// アクティビティログを取得（直近20件）
+	const activities = await db
+		.select({
+			id: activityLog.id,
+			type: activityLog.type,
+			message: activityLog.message,
+			metadata: activityLog.metadata,
+			createdAt: activityLog.createdAt,
+		})
+		.from(activityLog)
+		.orderBy(desc(activityLog.createdAt))
+		.limit(20);
+
+	// 古いアクティビティを削除（30日以上前）
+	const thirtyDaysAgo = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
+	await db
+		.delete(activityLog)
+		.where(sql`${activityLog.createdAt} < ${thirtyDaysAgo}`);
+
 	return {
 		heroImage: heroImage
 			? { date: heroImage.date, source: heroImage.source }
 			: null,
+		activities: activities.map((a) => ({
+			id: a.id,
+			type: a.type,
+			message: a.message,
+			metadata: a.metadata,
+			createdAt: a.createdAt?.getTime() ?? Date.now(),
+		})),
 	};
 }
 
@@ -55,8 +81,89 @@ const timeline = [
 	{ year: "2009", event: "大学入学。放送研究部・映画研究部に所属し、映画制作やラジオ番組の制作に打ち込む" },
 ];
 
+const activityIcons: Record<string, string> = {
+	deploy: "rocket",
+	cron_aitter: "bot",
+	cron_hero_image: "palette",
+	cron_news_scrape: "newspaper",
+};
+
+const activityLabels: Record<string, string> = {
+	deploy: "Deploy",
+	cron_aitter: "AItter",
+	cron_hero_image: "Hero Image",
+	cron_news_scrape: "Scrape",
+};
+
+function formatRelativeTime(timestamp: number): string {
+	const now = Date.now();
+	const diff = now - timestamp;
+	const seconds = Math.floor(diff / 1000);
+	const minutes = Math.floor(seconds / 60);
+	const hours = Math.floor(minutes / 60);
+	const days = Math.floor(hours / 24);
+
+	if (seconds < 60) return "たった今";
+	if (minutes < 60) return `${minutes}分前`;
+	if (hours < 24) return `${hours}時間前`;
+	if (days < 30) return `${days}日前`;
+	return `${Math.floor(days / 30)}ヶ月前`;
+}
+
+function ActivityIcon({ type }: { type: string }) {
+	const icon = activityIcons[type] ?? "activity";
+	switch (icon) {
+		case "rocket":
+			return (
+				<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+					<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+					<path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+					<path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+					<path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+				</svg>
+			);
+		case "bot":
+			return (
+				<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+					<path d="M12 8V4H8" />
+					<rect width="16" height="12" x="4" y="8" rx="2" />
+					<path d="M2 14h2" />
+					<path d="M20 14h2" />
+					<path d="M15 13v2" />
+					<path d="M9 13v2" />
+				</svg>
+			);
+		case "palette":
+			return (
+				<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+					<circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+					<circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+					<circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+					<circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+					<path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
+				</svg>
+			);
+		case "newspaper":
+			return (
+				<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+					<path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2" />
+					<path d="M18 14h-8" />
+					<path d="M15 18h-5" />
+					<path d="M10 6h8v4h-8V6Z" />
+				</svg>
+			);
+		default:
+			return (
+				<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+					<circle cx="12" cy="12" r="10" />
+					<path d="M12 6v6l4 2" />
+				</svg>
+			);
+	}
+}
+
 export default function Home({ loaderData }: Route.ComponentProps) {
-	const { heroImage } = loaderData;
+	const { heroImage, activities } = loaderData;
 
 	return (
 		<div className="min-h-dvh bg-gradient-to-br from-violet-950 via-fuchsia-950 to-indigo-950">
@@ -97,6 +204,40 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 						</div>
 					) : null}
 				</section>
+
+				{/* Activity Feed */}
+				{activities.length > 0 && (
+					<section className="w-full max-w-2xl mb-16">
+						<SectionHeading>Activity</SectionHeading>
+						<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 overflow-hidden">
+							<div className="divide-y divide-white/5">
+								{activities.map((activity) => (
+									<div
+										key={activity.id}
+										className="flex items-start gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+									>
+										<div className="mt-0.5 flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-fuchsia-500/20 to-cyan-500/20 border border-white/10 flex items-center justify-center text-fuchsia-300">
+											<ActivityIcon type={activity.type} />
+										</div>
+										<div className="flex-1 min-w-0">
+											<div className="flex items-center gap-2 mb-0.5">
+												<span className="text-[10px] font-medium uppercase tracking-wider text-fuchsia-400/70 bg-fuchsia-500/10 px-1.5 py-0.5 rounded">
+													{activityLabels[activity.type] ?? activity.type}
+												</span>
+												<span className="text-[11px] text-purple-300/40">
+													{formatRelativeTime(activity.createdAt)}
+												</span>
+											</div>
+											<p className="text-sm text-purple-100/80 truncate">
+												{activity.message}
+											</p>
+										</div>
+									</div>
+								))}
+							</div>
+						</div>
+					</section>
+				)}
 
 				{/* About */}
 				<section className="w-full max-w-2xl mb-16">

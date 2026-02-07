@@ -355,12 +355,12 @@ async function runTweetGeneration(env: Env): Promise<number> {
  * Cron から呼ばれるメインのツイート生成関数
  * 未表示ツイートが閾値以下の場合のみ生成する
  */
-export async function generateAitterTweets(env: Env): Promise<void> {
+export async function generateAitterTweets(env: Env): Promise<string | null> {
 	const db = drizzle(env.DB);
 
 	if (!env.GEMINI_API_KEY) {
 		console.log("GEMINI_API_KEY is not set, skipping AIteer cron");
-		return;
+		return null;
 	}
 
 	// 未表示ツイートの件数を確認
@@ -374,14 +374,19 @@ export async function generateAitterTweets(env: Env): Promise<void> {
 
 	if (unshownCount >= UNSHOWN_THRESHOLD) {
 		console.log("AIteer cron: Enough unshown tweets, skipping generation");
-		return;
+		return null;
 	}
 
 	try {
 		const count = await runTweetGeneration(env);
 		console.log(`AIteer cron: Saved ${count} tweets to DB`);
+		if (count > 0) {
+			return `AIツイートを${count}件生成`;
+		}
+		return null;
 	} catch (e) {
 		console.error("AIteer cron error:", e);
+		return null;
 	}
 }
 

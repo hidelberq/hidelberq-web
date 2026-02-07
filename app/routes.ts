@@ -11,4 +11,5 @@ export default [
 	route("shogi/minishogi/local", "routes/shogi.minishogi-local.tsx"),
 	route("shogi/minishogi/game/:gameId", "routes/shogi.minishogi-game.tsx"),
 	route("shogi/game/:gameId", "routes/shogi.game.tsx"),
+	route("api/activity", "routes/api.activity.ts"),
 ] satisfies RouteConfig;

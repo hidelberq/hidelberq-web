@@ -342,10 +342,11 @@ async function generateImage(
 
 // --- Main ---
 
-export async function generateHeroImage(env: Env): Promise<void> {
+export async function generateHeroImage(env: Env): Promise<string | null> {
     const geminiApiKey = env.GEMINI_API_KEY;
     if (!geminiApiKey) {
-        throw new Error("GEMINI_API_KEY is not set");
+        console.log("GEMINI_API_KEY is not set, skipping hero image generation");
+        return null;
     }
 
     const ai = new GoogleGenAI({apiKey: geminiApiKey});
@@ -429,6 +430,8 @@ export async function generateHeroImage(env: Env): Promise<void> {
     }
 
     console.log(`Hero image generation completed for ${todayDate}`);
+    const sourceLabel = source === "diary" ? "日記" : "天気";
+    return `ヒーロー画像を生成 (${sourceLabel}ベース: ${todayDate})`;
 }
 
 /**

@@ -31,3 +31,19 @@ jobs:
         run: bun wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Record deploy activity
+        if: success()
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%s)
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          PAYLOAD=$(jq -n \
+            --arg msg "$COMMIT_MSG" \
+            --arg hash "$COMMIT_HASH" \
+            '{type: "deploy", message: $msg, metadata: ({hash: $hash} | tostring)}')
+          curl -sf -X POST "https://hidelberq.com/api/activity" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $ACTIVITY_API_KEY" \
+            -d "$PAYLOAD" || echo "Failed to record deploy activity (non-critical)"
+        env:
+          ACTIVITY_API_KEY: ${{ secrets.ACTIVITY_API_KEY }}
