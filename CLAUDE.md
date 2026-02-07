@@ -1,174 +1,227 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+このファイルは Claude Code (claude.ai/code) がこのリポジトリで作業する際のガイダンスを提供します。
 
-## Project Overview
+## 言語ルール
 
-これは Cloudflare Workers にデプロイされた React Router v7 アプリケーションで、Drizzle ORM が Cloudflare D1 (SQLite) データベースを管理しています。このアプリケーションは nw-union.net の包括的なプラットフォームであり、以下の機能を備えています:
+**すべてのコミュニケーションは日本語で行うこと。** 以下を含む:
 
-- **ドキュメント管理**: TipTap リッチテキストエディタでドキュメントを作成、編集、公開
-- **ビデオギャラリー**: YouTube 動画の閲覧と紹介
-- **ユーザー管理**: Cloudflare Access によるユーザープロフィールと認証
-- **ファイルストレージ**: Cloudflare R2 Object Storage を使用した画像とファイルのアップロード
-- **外部リンク**: Discord、YouTube、GitHub、ショップへの素早いアクセス
+- Claude とのチャット応答
+- Git コミットメッセージ
+- Pull Request のタイトルと説明
+- コードレビューコメント
+- コード内コメント (ただし変数名・関数名等の識別子は英語のまま)
 
-## Development Tools
+## プロジェクト概要
 
-- **Runtime**: Bun (パッケージマネージャー兼開発ランタイム)
-- **Framework**: SSR 対応の React Router v7
-- **Deployment**: Cloudflare Workers
-- **Database**: Drizzle ORM を使用した Cloudflare D1 (SQLite)
-- **Styling**: Tailwind CSS v4 (Vite プラグイン経由)
-- **Code Quality**: Biome (フォーマット & リント)
-- **TypeScript**: verbatim モジュール構文で strict モードを有効化
-- **Rich Text**: ドキュメント編集用の TipTap エディタ
-- **Utilities**:
-  - `neverthrow`: Result 型とエラーハンドリング
-  - `ts-pattern`: 網羅的パターンマッチング
-  - `zod`: ランタイムバリデーション
-  - `@nw-union/nw-utils`: 共有ユーティリティ (logging, auth, UUID)
+hidelberq.com の個人サイト。Cloudflare Workers にデプロイされた React Router v7 SSR アプリケーションで、Drizzle ORM が Cloudflare D1 (SQLite) データベースを管理しています。
 
-## Development Commands
+### 主な機能
 
-### Setup & Development
+- **ポートフォリオ**: スキル、タイムライン、NWU 関連コンテンツを含むトップページ
+- **AItter**: Google Gemini AI がニュースを読んでツイート風の投稿を生成する SNS タイムライン
+- **将棋**: 9x9 標準将棋とミニ将棋 (5x5) のオンライン・ローカル対戦
+- **ヒーロー画像**: Gemini AI が毎朝自動生成する日替わりヒーロー画像 (Workflowy 日記 or 天気ベース)
+- **空白除去**: AI 文字起こしの余計な空白・句読点を補正するツール
+- **ニューススクレイピング**: 定期的にニュースサイトをスクレイピングし、AItter の素材として活用
+
+## 開発ツール
+
+- **ランタイム**: Bun (パッケージマネージャー兼ランタイム)
+- **フレームワーク**: React Router v7 (SSR 有効)
+- **デプロイ先**: Cloudflare Workers
+- **データベース**: Drizzle ORM + Cloudflare D1 (SQLite)
+- **スタイリング**: Tailwind CSS v4 (`@tailwindcss/vite` プラグイン) + `@tailwindcss/typography`
+- **AI**: Google Gemini (`@google/genai`, `@google/generative-ai`)
+- **TypeScript**: strict モード、`verbatimModuleSyntax` 有効
+- **スクレイピング**: `node-html-parser` で HTML パース
+- **日本語処理**: `budoux` で日本語テキストセグメンテーション
+- **Markdown**: `react-markdown` + `remark-gfm`
+
+## 開発コマンド
+
+### セットアップ・開発
 ```bash
-# Install dependencies
+# 依存関係のインストール
 bun install --frozen-lockfile
 
-# Start development server (React Router dev server with HMR)
+# 開発サーバー起動 (React Router dev + HMR)
 bun run dev
-# Opens at http://localhost:5173
+# http://localhost:5173 で起動
 
-# Start Wrangler dev server (Cloudflare Workers local environment)
-bun run start
-# Opens at http://localhost:8787
+# 本番ビルドのローカルプレビュー
+bun run preview
 ```
 
-### Code Quality
+### コード品質
 ```bash
-# Type check with TypeScript
+# 型チェック (Wrangler 型生成 → React Router 型生成 → tsc)
 bun run typecheck
-
-# Run all checks (format, lint, typecheck)
-bun run check
 ```
 
-### Build & Deploy
+### ビルド・デプロイ
 ```bash
-# Build for production
+# 本番ビルド
 bun run build
 
-# Deploy to production environment
-bun run deploy:production
+# ビルド + Cloudflare Workers へデプロイ
+bun run deploy
 ```
 
-### Database Operations
+### データベース操作
 ```bash
-# Generate migration files from schema changes
+# スキーマ変更からマイグレーションファイルを生成
 bun run db:generate
 
-# Apply migrations to local D1 database
+# ローカル D1 にマイグレーション適用
 bun run db:migrate:local
 
-# Apply migrations to production environment
+# 本番 D1 にマイグレーション適用
 bun run db:migrate:production
 
-# Load sample data to local database
-bun run db:sampledata:local
-
-# Generate TypeScript types for Wrangler bindings
+# Wrangler バインディングの TypeScript 型を生成
 bun run typegen
 ```
 
-## Architecture
+## アーキテクチャ
 
-### Hexagonal Architecture (Ports & Adapters)
+### ディレクトリ構成
 
-コードベースはヘキサゴナルアーキテクチャの原則に従い、ドメイン、ポート、アダプター間の明確な分離を実現しています:
+```
+├── app/                            # React Router アプリケーション
+│   ├── db/schema.ts               # Drizzle ORM テーブル定義 (単一ファイル)
+│   ├── entry.server.tsx           # SSR エントリーポイント
+│   ├── root.tsx                   # ルートレイアウト、メタ、エラーバウンダリー
+│   ├── routes.ts                  # ルート設定 (集中定義)
+│   ├── app.css                    # グローバル Tailwind スタイル
+│   ├── routes/                    # ルートコンポーネント (loader + UI)
+│   ├── shogi/                     # 将棋エンジン・盤面コンポーネント
+│   ├── whitespace-remover/        # 日本語句読点ユーティリティ
+│   └── welcome/                   # ウェルカムページアセット
+├── workers/                        # Cloudflare Workers エントリー・Cron ジョブ
+│   ├── app.ts                     # メイン Worker: HTTP ハンドラー + Cron ディスパッチ
+│   ├── hero-image.ts              # 日替わりヒーロー画像生成 (Gemini AI)
+│   ├── aitter-cron.ts            # AI ツイート生成 (Gemini AI)
+│   ├── news-scrape-cron.ts        # ニューススクレイピングスケジューラー
+│   └── scraper/                   # スクレイピングライブラリ (パーサー、サイト設定)
+├── drizzle/                        # マイグレーション SQL ファイル (自動生成)
+├── public/                         # 静的アセット (favicon)
+└── .github/workflows/              # CI/CD (typecheck → build → deploy)
+```
 
-**ドメイン層** (`domain/`): ほとんどのドメイン (Doc, User, Video) は一貫した構造に従っています:
-- **type.ts**: コアビジネス型と値オブジェクト
-- **port.ts**: 外部アダプターとの契約を定義するポートインターフェース
-- **logic.ts**: 純粋なビジネスロジック関数
-- **workflow.ts**: ポートとロジックを使用してビジネス操作を調整
+### データアクセスパターン
 
-注: System ドメインは workflow.ts のみを含み、複雑なビジネスロジックを持たない主にストレージ操作を調整するためのものです。
+ルートの `loader` / `action` 内で Drizzle ORM を直接使用。リポジトリパターンや DI は使用していない。
 
-**アダプター層** (`adapter/`): ポートインターフェースを実装する外部統合:
-- **drizzle/**: リポジトリポートを実装するデータベースアダプター (doc.ts, user.ts, video.ts)
-- **r2/**: ファイル操作用の Cloudflare R2 Object Storage アダプター
-- **time/**: 一貫したタイムスタンプ処理のための時刻プロバイダーアダプター
+```typescript
+// 典型的なパターン: route loader で直接 DB アクセス
+export async function loader({ context }: Route.LoaderArgs) {
+  const db = drizzle(context.cloudflare.env.DB);
+  const results = await db.select().from(tableName).orderBy(desc(col)).limit(n);
+  return { results };
+}
+```
 
-**依存性注入** (`load-context.ts`): 環境設定に基づいてアダプターを接続し、ワークフローをルートに注入します
+### データベーススキーマ (`app/db/schema.ts`)
 
-### Dependency Injection Pattern
+全テーブルを単一ファイルで定義:
 
-依存関係は React Router の `AppLoadContext` を通じて注入されます (`load-context.ts` で設定):
+| テーブル | 用途 |
+|----------|------|
+| `tweets` | AI 生成ツイート (content, author, category, engagement metrics, displayed flag) |
+| `shogiGames` | 将棋ゲーム状態 (board/captured を JSON で保存, player IDs, status, move count) |
+| `heroImages` | 日替わりヒーロー画像 (date, R2 key, prompt, source) |
+| `newsCache` | ニュースコンテキストキャッシュ (日次) |
+| `scrapeSites` | スクレイパーサイト設定 (siteId, url, parserId) |
+| `scrapedArticles` | スクレイピング済み記事 (articleUrl unique, usedForTweet flag) |
 
-- **Logger**: `LOG_ADAPTER` 環境変数に基づいて `console` (ローカル) または `json` (本番) に適応
-- **Auth**: `AUTH_ADAPTER` 環境変数に基づいて `mock` (ローカル) または `cloudflare` (本番) を使用
-- **Workflows**: 適切なアダプターで初期化されたドメインワークフロー (doc, video, user, sys)
+**スキーマ変更後**: `bun run db:generate` → `bun run db:migrate:local` の順で実行。
 
-### Database Layer
+### ルート定義 (`app/routes.ts`)
 
-データベースアクセスは以下のパターンに従います:
+```
+/                              → home.tsx (ポートフォリオトップ)
+/aitter                        → aitter.tsx (AI タイムライン)
+/debug                         → debug.tsx (デバッグページ、noindex)
+/hero-image/:date              → hero-image.ts (R2 からヒーロー画像を返す loader)
+/whitespace-remover            → whitespace-remover.tsx (空白除去ツール)
+/shogi                         → shogi.tsx (将棋トップ)
+/shogi/local                   → shogi.local.tsx (ローカル対戦 9x9)
+/shogi/game/:gameId            → shogi.game.tsx (オンライン対戦 9x9)
+/shogi/minishogi/local         → shogi.minishogi-local.tsx (ミニ将棋ローカル)
+/shogi/minishogi/game/:gameId  → shogi.minishogi-game.tsx (ミニ将棋オンライン)
+```
 
-1. **Schema Definition** (`adapter/drizzle/schema.ts`): すべてのドメイン (docs, users, videos) に対する SQLite 固有の型を持つ Drizzle テーブル定義
-2. **DTO Converters** (例: `adapter/drizzle/doc.ts`):
-   - `convTo*InsertModel`: Domain → DTO (書き込み用)
-   - `validate*`: DTO → Domain (読み取り用)
-3. **Adapter Functions**: データベース操作を実行する純粋関数で、`ResultAsync<T, AppError>` を返す
-4. **Port Implementation**: ファクトリー関数 (例: `newDocRepository`, `newUserRepository`) はリポジトリポートを実装するオブジェクトを返す
+### Cloudflare Workers エントリー (`workers/app.ts`)
 
-**重要**: Drizzle はコード生成が正しく動作するために、スキーマファイルが `schema.ts` という名前である必要があります。
+`fetch` ハンドラーで React Router SSR リクエストを処理し、`scheduled` ハンドラーで Cron ジョブをディスパッチ:
 
-### Storage Layer
+| Cron | スケジュール | Worker |
+|------|-------------|--------|
+| ヒーロー画像生成 | `0 21 * * *` (JST 06:00) | `hero-image.ts` |
+| AItter ツイート生成 | `*/30 * * * *` (30分毎) | `aitter-cron.ts` |
+| ニューススクレイピング | `0 * * * *` (毎時) | `news-scrape-cron.ts` |
 
-ファイルストレージは Cloudflare R2 Object Storage を使用します:
+### 将棋エンジン (`app/shogi/`)
 
-1. **R2 Adapter** (`adapter/r2/putBucket.ts`): ファイルアップロード操作を実装
-2. **Storage Workflow** (`domain/System/workflow.ts`): R2 アダプターを通じてストレージ操作を調整
-3. **Access Pattern**: ファイル操作にはルート内で `wf.sys` ワークフローを使用
+- `types.ts`: PieceType, Player, Board, GameAction, Selection 等の型定義
+- `logic.ts`: 9x9 標準将棋ルール (駒移動、成り、王手、詰み判定)
+- `minishogi-logic.ts`: 5x5 ミニ将棋バリアント
+- `board.tsx` / `minishogi-board.tsx`: 盤面 UI コンポーネント
+- ゲーム状態は D1 に JSON として保存、React Router の action で手を送信
 
-### Error Handling
+### ウェブスクレイピング (`workers/scraper/`)
 
-コードベースは関数型エラーハンドリングに `neverthrow` を使用します:
+- `types.ts`: ScrapeSiteConfig, ScrapedArticle インターフェース
+- `run.ts`: `scrapeAllSites()` メインロジック
+- `parsers.ts`: 利用可能なパーサー定義
+- `sites/`: サイト別パーサー実装 (Yahoo News Top, generic link/OGP)
+- 記事は `articleUrl` の unique 制約で自動重複排除、7日経過で自動削除
 
-- すべてのリポジトリメソッドは neverthrow の `ResultAsync<T, AppError>` を返す
-- 失敗する可能性のある操作をチェーンするには `.andThen()` を使用
-- 失敗しない変換には `.map()` を使用
-- エラーは `AppError` として型付けされる (`@nw-union/nw-utils` から)
+## Cloudflare バインディング
 
-### React Router Structure
+`wrangler.jsonc` で定義、`context.cloudflare.env` でアクセス:
 
-- **Routes Configuration** (`app/routes.ts`): React Router v7 のファイルベースルーティングを使用した集中型ルート定義
-- **Entry Points**:
-  - `app/entry.server.tsx`: サーバーサイドレンダリングのエントリーポイント
-  - `workers/app.ts`: ロードコンテキストを使用してリクエストハンドラーを作成する Cloudflare Workers のエントリーポイント
-- **Root Layout** (`app/root.tsx`): メタタグ、リンク、エラーバウンダリーを含む共有レイアウト
+| バインディング | 種類 | 名前 |
+|---------------|------|------|
+| `DB` | D1 Database | `hidelberq-web-db` |
+| `HERO_BUCKET` | R2 Bucket | `hidelberq-hero-images` |
 
-### Cloudflare Workers Configuration
+### シークレット (`env.d.ts`)
 
-- **Main Config** (`wrangler.jsonc`): Workers 設定、D1 バインディング、R2 バインディング、環境変数を定義
-- **Environments**: 本番環境は独立した D1 データベースと R2 バケットを使用 (ローカル開発はローカルバインディングを使用)
-- **Build Output**: React Router は `build/` ディレクトリにビルドし、サーバーバンドルは `build/server/index.js` に配置
-- **Bindings**:
-  - **D1**: 構造化データ (docs, users, videos) 用の SQLite データベース
-  - **R2**: ファイルアップロード (images, documents) 用のオブジェクトストレージ
+`wrangler secret` で管理。`wrangler types` では生成されないため `env.d.ts` で手動宣言:
 
-## Environment Variables
+- `GEMINI_API_KEY`: Google Gemini API キー
+- `WORKFLOWY_API_KEY`: Workflowy API キー (日記アクセス用)
 
-`wrangler.jsonc` で設定され、`context.cloudflare.env` を介してアクセス:
+## CI/CD
 
-- `LOG_ADAPTER`: "console" (ローカル) または "json" (本番)
-- `LOG_LEVEL`: "debug" (ローカル) または "info" (本番)
-- `AUTH_ADAPTER`: "mock" (ローカル) または "cloudflare" (本番)
-- `AUTH_TEAM_DOMAIN`: 認証用の Cloudflare Access チームドメイン
-- `STORAGE_DOMAIN`: "local" (開発環境と本番環境の両方で R2 ストレージ用)
+### Pull Request (`ci.yml`)
+1. `bun install --frozen-lockfile`
+2. `bun run typecheck`
+3. `bun run build`
+4. Cloudflare Workers へプレビューデプロイ (PR 番号付き)
+5. プレビュー URL を PR コメントに投稿
 
-## Type Safety
+### 本番デプロイ (`deploy.yml`)
+`main` ブランチへの push で自動デプロイ:
+1. `bun install --frozen-lockfile` → `bun run typecheck` → `bun run build` → `bun wrangler deploy`
 
-- **Strict TypeScript**: すべてのコンパイラ strict フラグを有効化
-- **Type Generation**: `wrangler.jsonc` を変更した後、`bun run typegen` を実行して Wrangler の型を生成
-- **Exhaustive Matching**: すべてのケースが処理されることを保証するために `ts-pattern` の `.exhaustive()` を使用
-- **Route Types**: React Router は `.react-router/types/` ディレクトリに型を生成
+## TypeScript 設定
+
+| 設定ファイル | 用途 |
+|-------------|------|
+| `tsconfig.json` | ベース: strict, verbatimModuleSyntax, noEmit |
+| `tsconfig.cloudflare.json` | App・Workers: ES2022, react-jsx, パスエイリアス `~/*` → `./app/*` |
+| `tsconfig.node.json` | Vite 設定ファイル用 |
+
+**テストファイルの除外**: `tsconfig.cloudflare.json` は `app/**/*.test.ts` を exclude している。
+
+## 主要な規約
+
+- **パスエイリアス**: `~/` は `./app/` にマッピング (`import { tweets } from "~/db/schema"`)
+- **ルート型**: React Router が `.react-router/types/` に自動生成 (`import type { Route } from "./+types/home"`)
+- **Wrangler 型**: `wrangler.jsonc` 変更後は `bun run typegen` を実行
+- **Bun バージョン**: CI では `1.3.8` を使用
+- **互換性**: `nodejs_compat` フラグ有効、`compatibility_date: 2025-04-04`
+- **Future flags**: `v8_viteEnvironmentApi: true` (`react-router.config.ts`)
