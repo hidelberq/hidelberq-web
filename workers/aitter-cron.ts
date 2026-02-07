@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { drizzle } from "drizzle-orm/d1";
-import { tweets, newsCache } from "../app/db/schema";
-import { desc, eq, sql } from "drizzle-orm";
+import { tweets, newsCache, scrapedArticles } from "../app/db/schema";
+import { desc, eq, sql, inArray } from "drizzle-orm";
 
 // --- Configuration ---
 const BATCH_SIZE = 12;
@@ -102,6 +102,14 @@ async function fetchNewsContext(
 	return newsContext;
 }
 
+/** スクレイピング記事の型 */
+interface ScrapedArticleInfo {
+	articleUrl: string;
+	articleTitle: string;
+	category: string | null;
+	siteName: string;
+}
+
 /**
  * Step 2: ニュースコンテキストを基にツイートを生成
  */
@@ -109,6 +117,7 @@ async function generateTweets(
 	ai: GoogleGenAI,
 	newsContext: string,
 	pastTweets: string[],
+	scrapedArticleList: ScrapedArticleInfo[],
 ): Promise<GeneratedTweet[]> {
 	console.log("Step 2: Generating tweets as JSON...");
 
@@ -132,11 +141,16 @@ async function generateTweets(
 			? `\n【最新ニュース・話題（これらを基にツイートを作成してください）】\n${newsContext}\n`
 			: "";
 
+	const scrapedSection =
+		scrapedArticleList.length > 0
+			? `\n【スクレイピングで取得した最新記事（sourceUrlにはこれらの実際のURLを優先的に使用してください）】\n${scrapedArticleList.map((a) => `- [${a.category || a.siteName}] ${a.articleTitle}\n  URL: ${a.articleUrl}`).join("\n")}\n`
+			: "";
+
 	const generatePrompt = `あなたはSNS「X (旧Twitter)」のリアルなタイムラインを生成するAIです。
 多様でリアルなツイートを${BATCH_SIZE}件生成してください。
 
 【今日の日付】${yesterday}
-${newsSection}
+${newsSection}${scrapedSection}
 【カテゴリ（均等に分配）】
 - tech: テクノロジー（AI、Web開発、ガジェット、スタートアップ）
 - politics: 政治（国内外の政治動向、選挙、政策、国会。権力に対して批判的・懐疑的な市民目線で、政府や与党の発表を鵜呑みにせず問題点を指摘するトーン）
@@ -287,8 +301,29 @@ export async function generateAitterTweets(env: Env): Promise<void> {
 			.limit(50);
 		const pastTweetContents = recentTweets.map((t) => t.content);
 
+		// スクレイピング記事を取得（未使用のものを優先）
+		const recentArticles = await db
+			.select({
+				id: scrapedArticles.id,
+				articleUrl: scrapedArticles.articleUrl,
+				articleTitle: scrapedArticles.articleTitle,
+				category: scrapedArticles.category,
+				siteName: scrapedArticles.siteName,
+			})
+			.from(scrapedArticles)
+			.where(eq(scrapedArticles.usedForTweet, false))
+			.orderBy(desc(scrapedArticles.scrapedAt))
+			.limit(30);
+
+		console.log(`Found ${recentArticles.length} unused scraped articles`);
+
 		// Step 2: ツイート生成
-		const generated = await generateTweets(ai, newsContext, pastTweetContents);
+		const generated = await generateTweets(
+			ai,
+			newsContext,
+			pastTweetContents,
+			recentArticles,
+		);
 
 		if (generated.length === 0) {
 			console.log("AIteer cron: No tweets generated");
@@ -320,6 +355,17 @@ export async function generateAitterTweets(env: Env): Promise<void> {
 		}
 
 		console.log(`AIteer cron: Saved ${generated.length} tweets to DB`);
+
+		// 使用したスクレイピング記事を usedForTweet = true に更新
+		if (recentArticles.length > 0) {
+			const usedArticleIds = recentArticles.map((a) => a.id);
+			await db
+				.update(scrapedArticles)
+				.set({ usedForTweet: true })
+				.where(inArray(scrapedArticles.id, usedArticleIds))
+				.execute();
+			console.log(`AIteer cron: Marked ${usedArticleIds.length} articles as used`);
+		}
 	} catch (e) {
 		console.error("AIteer cron error:", e);
 	}

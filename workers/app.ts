@@ -1,6 +1,7 @@
 import { createRequestHandler } from "react-router";
 import { generateHeroImage } from "./hero-image";
 import { generateAitterTweets } from "./aitter-cron";
+import { scrapeNews } from "./news-scrape-cron";
 
 declare module "react-router" {
   export interface AppLoadContext {
@@ -25,7 +26,9 @@ export default {
   async scheduled(event, env, ctx) {
     // UTC 21:00 (JST 06:00) - ヒーロー画像生成
     // 毎時0分・30分 - AIteer ツイート生成
+    // 毎時0分 - ニューススクレイピング
     ctx.waitUntil(generateHeroImage(env));
     ctx.waitUntil(generateAitterTweets(env));
+    ctx.waitUntil(scrapeNews(env));
   },
 } satisfies ExportedHandler<Env>;

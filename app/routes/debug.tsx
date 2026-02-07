@@ -2,10 +2,12 @@ import type { Route } from "./+types/debug";
 import { useState } from "react";
 import { useFetcher } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
-import { newsCache, heroImages } from "../db/schema";
-import { desc } from "drizzle-orm";
+import { newsCache, heroImages, scrapedArticles } from "../db/schema";
+import { desc, sql } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
 import { generateHeroImage, regenerateHeroImageWithPrompt } from "../../workers/hero-image";
+import { scrapeAllSites, scrapeUrl } from "../../workers/scraper/run";
+import { allSites } from "../../workers/scraper/sites";
 
 // --- Meta ---
 export function meta(): Route.MetaDescriptors {
@@ -31,10 +33,25 @@ export async function loader({ context }: Route.LoaderArgs) {
 		.orderBy(desc(heroImages.createdAt))
 		.limit(5);
 
-	return { entries, heroEntries };
+	const scraped = await db
+		.select()
+		.from(scrapedArticles)
+		.orderBy(desc(scrapedArticles.scrapedAt))
+		.limit(30);
+
+	const [scrapedCount] = await db
+		.select({ count: sql<number>`count(*)` })
+		.from(scrapedArticles);
+
+	return {
+		entries,
+		heroEntries,
+		scraped,
+		scrapedCount: scrapedCount?.count ?? 0,
+	};
 }
 
-// --- Action: Step 1 キャッシュを再取得 / ヒーロー画像再生成 ---
+// --- Action: Step 1 キャッシュを再取得 / ヒーロー画像再生成 / スクレイピング ---
 export async function action({ request, context }: Route.ActionArgs) {
 	const formData = await request.formData();
 	const intent = formData.get("intent");
@@ -68,6 +85,59 @@ export async function action({ request, context }: Route.ActionArgs) {
 		}
 	}
 
+	// --- スクレイピング: 全サイト実行 ---
+	if (intent === "scrape-all") {
+		try {
+			const { results, cleaned } = await scrapeAllSites(context.cloudflare.env);
+			const summary = Object.entries(results)
+				.map(([id, r]) => `${id}: ${r.inserted}/${r.total}件`)
+				.join(", ");
+			return {
+				ok: true,
+				intent: "scrape",
+				message: `スクレイピング完了 (${summary})${cleaned > 0 ? ` / ${cleaned}件の古い記事を削除` : ""}`,
+			};
+		} catch (e) {
+			console.error("Scrape all error:", e);
+			return {
+				error: `スクレイピングエラー: ${e instanceof Error ? e.message : String(e)}`,
+			};
+		}
+	}
+
+	// --- スクレイピング: URL指定 ---
+	if (intent === "scrape-url") {
+		const url = formData.get("url") as string;
+		if (!url) {
+			return { error: "URLを入力してください" };
+		}
+		try {
+			new URL(url); // バリデーション
+		} catch {
+			return { error: "有効なURLを入力してください" };
+		}
+		try {
+			// 登録済みサイトの設定があればそれを使う
+			const matchedSite = allSites.find((s) => url.startsWith(new URL(s.url).origin));
+			const { articles, inserted } = await scrapeUrl(
+				context.cloudflare.env,
+				url,
+				matchedSite,
+			);
+			return {
+				ok: true,
+				intent: "scrape",
+				message: `${url} から ${articles.length}件取得、${inserted}件保存しました`,
+			};
+		} catch (e) {
+			console.error("Scrape URL error:", e);
+			return {
+				error: `スクレイピングエラー: ${e instanceof Error ? e.message : String(e)}`,
+			};
+		}
+	}
+
+	// --- ニュースキャッシュ再取得 (既存) ---
 	const db = drizzle(context.cloudflare.env.DB);
 	const apiKey = context.cloudflare.env.GEMINI_API_KEY as string;
 
@@ -151,13 +221,22 @@ export async function action({ request, context }: Route.ActionArgs) {
 export default function Debug({ loaderData }: Route.ComponentProps) {
 	const newsFetcher = useFetcher<typeof action>();
 	const heroFetcher = useFetcher<typeof action>();
+	const scrapeFetcher = useFetcher<typeof action>();
+	const scrapeUrlFetcher = useFetcher<typeof action>();
 	const isRefreshingNews =
 		newsFetcher.state === "submitting" || newsFetcher.state === "loading";
 	const isRegeneratingHero =
 		heroFetcher.state === "submitting" || heroFetcher.state === "loading";
+	const isScraping =
+		scrapeFetcher.state === "submitting" || scrapeFetcher.state === "loading";
+	const isScrapingUrl =
+		scrapeUrlFetcher.state === "submitting" || scrapeUrlFetcher.state === "loading";
 
-	// どちらかの fetcher からの結果を表示
-	const activeFetcherData = heroFetcher.data ?? newsFetcher.data;
+	// fetcher からの結果を表示
+	const activeFetcherData =
+		scrapeFetcher.data ?? scrapeUrlFetcher.data ?? heroFetcher.data ?? newsFetcher.data;
+
+	const [scrapeUrlInput, setScrapeUrlInput] = useState("");
 
 	return (
 		<div className="min-h-screen bg-black text-white font-sans">
@@ -217,6 +296,127 @@ export default function Debug({ loaderData }: Route.ComponentProps) {
 							: `キャッシュを更新しました（${"length" in activeFetcherData ? activeFetcherData.length : 0}文字）`}
 					</div>
 				)}
+
+				{/* News Scraping Section */}
+				<section className="mb-8">
+					<div className="flex items-center justify-between mb-4">
+						<h2 className="text-lg font-bold text-cyan-400">
+							ニューススクレイピング
+							<span className="text-sm font-normal text-gray-500 ml-2">
+								({loaderData.scrapedCount}件)
+							</span>
+						</h2>
+						<scrapeFetcher.Form method="post">
+							<input type="hidden" name="intent" value="scrape-all" />
+							<button
+								type="submit"
+								disabled={isScraping}
+								className="flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors disabled:opacity-50 px-3 py-1.5 rounded-full hover:bg-cyan-400/10 border border-cyan-400/30"
+							>
+								<svg
+									className={`w-4 h-4 ${isScraping ? "animate-spin" : ""}`}
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										strokeLinecap="round"
+										strokeLinejoin="round"
+										strokeWidth={2}
+										d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+									/>
+								</svg>
+								{isScraping ? "スクレイピング中..." : "全サイトスクレイピング"}
+							</button>
+						</scrapeFetcher.Form>
+					</div>
+
+					{/* URL指定スクレイピング */}
+					<div className="mb-4 p-4 border border-gray-800 rounded-lg bg-gray-900/30">
+						<p className="text-sm text-gray-400 mb-2">
+							URL を指定してスクレイピング
+						</p>
+						<scrapeUrlFetcher.Form method="post" className="flex gap-2">
+							<input type="hidden" name="intent" value="scrape-url" />
+							<input
+								type="url"
+								name="url"
+								value={scrapeUrlInput}
+								onChange={(e) => setScrapeUrlInput(e.target.value)}
+								placeholder="https://news.yahoo.co.jp/topics"
+								className="flex-1 bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 placeholder-gray-600 focus:border-cyan-500/50 focus:outline-none"
+							/>
+							<button
+								type="submit"
+								disabled={isScrapingUrl || !scrapeUrlInput.trim()}
+								className="flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors disabled:opacity-50 px-4 py-2 rounded bg-cyan-400/10 border border-cyan-400/30 hover:bg-cyan-400/20"
+							>
+								{isScrapingUrl ? "取得中..." : "取得"}
+							</button>
+						</scrapeUrlFetcher.Form>
+					</div>
+
+					{/* スクレイピング結果一覧 */}
+					{loaderData.scraped.length === 0 ? (
+						<div className="p-8 text-center text-gray-500 border border-gray-800 rounded-lg">
+							<p className="text-sm">
+								スクレイピング記事がまだありません
+							</p>
+						</div>
+					) : (
+						<div className="space-y-2">
+							{loaderData.scraped.map((article) => (
+								<article
+									key={article.id}
+									className="flex gap-3 p-3 border border-gray-800 rounded-lg hover:border-gray-700 transition-colors"
+								>
+									{article.imageUrl && (
+										<img
+											src={article.imageUrl}
+											alt=""
+											className="w-16 h-16 rounded object-cover shrink-0"
+										/>
+									)}
+									<div className="min-w-0 flex-1">
+										<a
+											href={article.articleUrl}
+											target="_blank"
+											rel="noopener noreferrer"
+											className="text-sm text-gray-200 hover:text-cyan-300 transition-colors line-clamp-2"
+										>
+											{article.articleTitle}
+										</a>
+										{article.description && (
+											<p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+												{article.description}
+											</p>
+										)}
+										<div className="flex items-center gap-2 mt-1 text-[10px] text-gray-600">
+											<span className="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400">
+												{article.siteName}
+											</span>
+											{article.category && (
+												<span className="px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">
+													{article.category}
+												</span>
+											)}
+											{article.scrapedAt && (
+												<span>
+													{article.scrapedAt.toLocaleString("ja-JP")}
+												</span>
+											)}
+											{article.usedForTweet && (
+												<span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-400">
+													ツイート済
+												</span>
+											)}
+										</div>
+									</div>
+								</article>
+							))}
+						</div>
+					)}
+				</section>
 
 				{/* Hero Image Section */}
 				<section className="mb-8">
