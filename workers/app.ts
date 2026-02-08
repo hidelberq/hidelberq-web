@@ -43,23 +43,21 @@ export default {
   },
   async scheduled(event, env, ctx) {
     switch (event.cron) {
-      // UTC 21:00 (JST 06:00) - ヒーロー画像生成
+      // UTC 21:00 (JST 06:00) - ヒーロー画像生成（1日1回）
       case "0 21 * * *":
         ctx.waitUntil(
           runWithActivityLog(env, "cron_hero_image", () => generateHeroImage(env)),
         );
         break;
-      // 30分ごと - AItter ツイート生成 + 毎時ニューススクレイピング
-      case "*/30 * * * *":
+      // JST 8,14,20,2時 - ニューススクレイピング + AIツイート生成（1日4回）
+      case "0 23,5,11,17 * * *":
+        // ニューススクレイピングを先に実行（最新記事をツイート生成に活用）
+        ctx.waitUntil(
+          runWithActivityLog(env, "cron_news_scrape", () => scrapeNews(env)),
+        );
         ctx.waitUntil(
           runWithActivityLog(env, "cron_aitter", () => generateAitterTweets(env)),
         );
-        // ニューススクレイピングは毎時0分のみ実行
-        if (new Date().getUTCMinutes() < 5) {
-          ctx.waitUntil(
-            runWithActivityLog(env, "cron_news_scrape", () => scrapeNews(env)),
-          );
-        }
         break;
     }
   },
