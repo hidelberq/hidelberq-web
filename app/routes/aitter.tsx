@@ -2,11 +2,11 @@ import type {Route} from "./+types/aitter";
 import {useRevalidator} from "react-router";
 import {drizzle} from "drizzle-orm/d1";
 import {tweets} from "../db/schema";
-import {desc, eq} from "drizzle-orm";
+import {desc, eq, sql} from "drizzle-orm";
 
 // --- Configuration ---
-const DISPLAY_COUNT = 25; // タイムラインに表示するツイート数
-const NEW_PER_LOAD = 5; // リロードごとに新たに表示するツイート数
+const DISPLAY_COUNT = 20; // タイムラインに表示するツイート数
+const NEW_PER_LOAD = 3; // リロードごとに新たに表示するツイート数（1日4回生成×12件=48件/日に対応）
 
 // --- Meta ---
 export function meta(): Route.MetaDescriptors {
@@ -38,13 +38,20 @@ export async function loader({ context }: Route.LoaderArgs) {
 		}
 	}
 
-	// 2. 表示済みツイートを取得してタイムラインに返す（新しい順）
-	const timeline = await db
+	// 2. 表示済みツイートからランダムに選出（訪問ごとに異なるタイムラインを表示）
+	const randomTimeline = await db
 		.select()
 		.from(tweets)
 		.where(eq(tweets.displayed, true))
-		.orderBy(desc(tweets.createdAt))
+		.orderBy(sql`RANDOM()`)
 		.limit(DISPLAY_COUNT);
+
+	// 3. 時系列でソート（新しい順）して自然なタイムライン表示に
+	const timeline = [...randomTimeline].sort((a, b) => {
+		const aTime = a.createdAt?.getTime() ?? 0;
+		const bTime = b.createdAt?.getTime() ?? 0;
+		return bTime - aTime;
+	});
 
 	return { tweets: timeline };
 }

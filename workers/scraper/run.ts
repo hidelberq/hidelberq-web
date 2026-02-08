@@ -63,7 +63,7 @@ async function scrapeSite(
 
 	for (const article of articles) {
 		try {
-			await db
+			const result = await db
 				.insert(scrapedArticles)
 				.values({
 					siteId: site.siteId,
@@ -76,15 +76,18 @@ async function scrapeSite(
 					category: article.category ?? null,
 					scrapedAt: now,
 				})
-				.onConflictDoNothing({ target: scrapedArticles.articleUrl });
-			inserted++;
+				.onConflictDoNothing({ target: scrapedArticles.articleUrl })
+				.returning({ id: scrapedArticles.id });
+			if (result.length > 0) {
+				inserted++;
+			}
 		} catch (e) {
 			// UNIQUE 制約違反等は無視
 			console.warn(`  Skip duplicate: ${article.articleTitle}`);
 		}
 	}
 
-	console.log(`  Inserted ${inserted} new articles`);
+	console.log(`  Inserted ${inserted} new articles (${articles.length - inserted} duplicates skipped)`);
 	return { inserted, total: articles.length };
 }
 
