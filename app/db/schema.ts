@@ -80,6 +80,67 @@ export const activityLog = sqliteTable("activity_log", {
 	),
 });
 
+// 読書リスト管理
+export const bookGroups = sqliteTable("book_groups", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	groupCode: text("group_code").notNull().unique(), // 6文字の招待コード
+	name: text("name").notNull(),
+	description: text("description"),
+	createdByMemberId: text("created_by_member_id").notNull(),
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
+export const bookGroupMembers = sqliteTable("book_group_members", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	groupId: integer("group_id").notNull(),
+	memberId: text("member_id").notNull(), // localStorage の UUID
+	displayName: text("display_name").notNull(),
+	joinedAt: integer("joined_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
+export const books = sqliteTable("books", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	groupId: integer("group_id").notNull(),
+	title: text("title").notNull(),
+	author: text("author").notNull(),
+	isbn: text("isbn"),
+	publishedYear: text("published_year"),
+	publisher: text("publisher"),
+	coverImageUrl: text("cover_image_url"),
+	description: text("description"),
+	pageCount: integer("page_count"),
+	genre: text("genre"),
+	addedByMemberId: text("added_by_member_id").notNull(),
+	addedByName: text("added_by_name").notNull(),
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
+export const bookMemberStatuses = sqliteTable("book_member_statuses", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	bookId: integer("book_id").notNull(),
+	memberId: text("member_id").notNull(),
+	memberName: text("member_name").notNull(),
+	status: text("status").notNull().default("interested"), // unowned, interested, reading, completed
+	difficulty: integer("difficulty"), // 1-5
+	importance: integer("importance"), // 1-5
+	recommendation: integer("recommendation"), // 1-5
+	memo: text("memo"),
+	startedAt: text("started_at"), // YYYY-MM-DD
+	completedAt: text("completed_at"), // YYYY-MM-DD
+	updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const scrapedArticles = sqliteTable("scraped_articles", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	siteId: text("site_id").notNull(),
