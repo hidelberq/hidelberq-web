@@ -2,8 +2,8 @@ import type { Route } from "./+types/debug";
 import { useState } from "react";
 import { useFetcher } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
-import { newsCache, heroImages, scrapedArticles, tweets, scrapeSites, activityLog } from "../db/schema";
-import { desc, eq, sql } from "drizzle-orm";
+import { newsCache, heroImages, scrapedArticles, tweets, scrapeSites, activityLog, bookGroups, bookGroupMembers, books, bookMemberStatuses } from "../db/schema";
+import { desc, eq, and, sql } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
 import { generateHeroImage, regenerateHeroImageWithPrompt } from "../../workers/hero-image";
 import { forceGenerateAitterTweets } from "../../workers/aitter-cron";
@@ -74,6 +74,33 @@ export async function loader({ context }: Route.LoaderArgs) {
 		.select({ count: sql<number>`count(*)` })
 		.from(activityLog);
 
+	// 読書リスト関連
+	const allGroups = await db
+		.select()
+		.from(bookGroups)
+		.orderBy(desc(bookGroups.createdAt));
+
+	const allMembers = await db
+		.select()
+		.from(bookGroupMembers)
+		.orderBy(desc(bookGroupMembers.joinedAt));
+
+	const allBooks = await db
+		.select()
+		.from(books)
+		.orderBy(desc(books.createdAt))
+		.limit(50);
+
+	const [bookCount] = await db
+		.select({ count: sql<number>`count(*)` })
+		.from(books);
+
+	const allBookStatuses = await db
+		.select()
+		.from(bookMemberStatuses)
+		.orderBy(desc(bookMemberStatuses.updatedAt))
+		.limit(50);
+
 	return {
 		entries,
 		heroEntries,
@@ -86,6 +113,13 @@ export async function loader({ context }: Route.LoaderArgs) {
 		availableParsers: parsers.map((p) => ({ id: p.id, name: p.name })),
 		activityEntries,
 		activityCount: activityCount?.count ?? 0,
+		bookData: {
+			groups: allGroups,
+			members: allMembers,
+			books: allBooks,
+			bookCount: bookCount?.count ?? 0,
+			statuses: allBookStatuses,
+		},
 	};
 }
 
@@ -121,6 +155,67 @@ export async function action({ request, context }: Route.ActionArgs) {
 		const db = drizzle(context.cloudflare.env.DB);
 		await db.delete(activityLog);
 		return { ok: true, intent: "activity", message: "全アクティビティを削除しました" };
+	}
+
+	// --- 読書リスト: グループ削除 ---
+	if (intent === "delete-book-group") {
+		const id = Number(formData.get("id"));
+		if (!id) return { error: "IDが不正です" };
+		const db = drizzle(context.cloudflare.env.DB);
+		// グループに紐づく本のステータスを削除
+		const groupBooks = await db.select({ id: books.id }).from(books).where(eq(books.groupId, id));
+		for (const book of groupBooks) {
+			await db.delete(bookMemberStatuses).where(eq(bookMemberStatuses.bookId, book.id));
+		}
+		// グループに紐づく本を削除
+		await db.delete(books).where(eq(books.groupId, id));
+		// グループのメンバーを削除
+		await db.delete(bookGroupMembers).where(eq(bookGroupMembers.groupId, id));
+		// グループ自体を削除
+		await db.delete(bookGroups).where(eq(bookGroups.id, id));
+		return { ok: true, intent: "book-manage", message: "グループとその全データを削除しました" };
+	}
+
+	// --- 読書リスト: メンバー削除 ---
+	if (intent === "delete-book-member") {
+		const id = Number(formData.get("id"));
+		const memberId = formData.get("memberId") as string;
+		if (!id || !memberId) return { error: "IDが不正です" };
+		const db = drizzle(context.cloudflare.env.DB);
+		// メンバーのステータスを削除
+		await db.delete(bookMemberStatuses).where(eq(bookMemberStatuses.memberId, memberId));
+		// メンバーを削除
+		await db.delete(bookGroupMembers).where(eq(bookGroupMembers.id, id));
+		return { ok: true, intent: "book-manage", message: "メンバーを削除しました" };
+	}
+
+	// --- 読書リスト: 本を削除 ---
+	if (intent === "delete-book") {
+		const id = Number(formData.get("id"));
+		if (!id) return { error: "IDが不正です" };
+		const db = drizzle(context.cloudflare.env.DB);
+		await db.delete(bookMemberStatuses).where(eq(bookMemberStatuses.bookId, id));
+		await db.delete(books).where(eq(books.id, id));
+		return { ok: true, intent: "book-manage", message: "本を削除しました" };
+	}
+
+	// --- 読書リスト: ステータス削除 ---
+	if (intent === "delete-book-status") {
+		const id = Number(formData.get("id"));
+		if (!id) return { error: "IDが不正です" };
+		const db = drizzle(context.cloudflare.env.DB);
+		await db.delete(bookMemberStatuses).where(eq(bookMemberStatuses.id, id));
+		return { ok: true, intent: "book-manage", message: "ステータスを削除しました" };
+	}
+
+	// --- 読書リスト: 全データクリア ---
+	if (intent === "clear-all-book-data") {
+		const db = drizzle(context.cloudflare.env.DB);
+		await db.delete(bookMemberStatuses);
+		await db.delete(books);
+		await db.delete(bookGroupMembers);
+		await db.delete(bookGroups);
+		return { ok: true, intent: "book-manage", message: "読書リストの全データを削除しました" };
 	}
 
 	if (intent === "regenerate-hero") {
@@ -351,6 +446,7 @@ export default function Debug({ loaderData }: Route.ComponentProps) {
 	const tweetFetcher = useFetcher<typeof action>();
 	const siteFetcher = useFetcher<typeof action>();
 	const activityFetcher = useFetcher<typeof action>();
+	const bookFetcher = useFetcher<typeof action>();
 	const isRefreshingNews =
 		newsFetcher.state === "submitting" || newsFetcher.state === "loading";
 	const isRegeneratingHero =
@@ -365,10 +461,12 @@ export default function Debug({ loaderData }: Route.ComponentProps) {
 		siteFetcher.state === "submitting" || siteFetcher.state === "loading";
 	const isActivityAction =
 		activityFetcher.state === "submitting" || activityFetcher.state === "loading";
+	const isBookAction =
+		bookFetcher.state === "submitting" || bookFetcher.state === "loading";
 
 	// fetcher からの結果を表示
 	const activeFetcherData =
-		activityFetcher.data ?? siteFetcher.data ?? tweetFetcher.data ?? scrapeFetcher.data ?? scrapeUrlFetcher.data ?? heroFetcher.data ?? newsFetcher.data;
+		bookFetcher.data ?? activityFetcher.data ?? siteFetcher.data ?? tweetFetcher.data ?? scrapeFetcher.data ?? scrapeUrlFetcher.data ?? heroFetcher.data ?? newsFetcher.data;
 
 	const [scrapeUrlInput, setScrapeUrlInput] = useState("");
 	const [showAddSite, setShowAddSite] = useState(false);
@@ -439,6 +537,13 @@ export default function Debug({ loaderData }: Route.ComponentProps) {
 							: `キャッシュを更新しました（${"length" in activeFetcherData ? activeFetcherData.length : 0}文字）`}
 					</div>
 				)}
+
+				{/* Book List Management Section */}
+				<BookManagementSection
+					bookData={loaderData.bookData}
+					bookFetcher={bookFetcher}
+					isBookAction={isBookAction}
+				/>
 
 				{/* Activity Log Section */}
 				<section className="mb-8">
@@ -1253,5 +1358,337 @@ function HeroImageCard({
 				</details>
 			</div>
 		</article>
+	);
+}
+
+const STATUS_LABELS: Record<string, string> = {
+	unowned: "持ってない",
+	interested: "気になる",
+	reading: "途中",
+	completed: "読了",
+};
+
+function BookManagementSection({
+	bookData,
+	bookFetcher,
+	isBookAction,
+}: {
+	bookData: {
+		groups: Array<{
+			id: number;
+			groupCode: string;
+			name: string;
+			description: string | null;
+			createdByMemberId: string;
+			createdAt: Date | null;
+		}>;
+		members: Array<{
+			id: number;
+			groupId: number;
+			memberId: string;
+			displayName: string;
+			joinedAt: Date | null;
+		}>;
+		books: Array<{
+			id: number;
+			groupId: number;
+			title: string;
+			author: string;
+			genre: string | null;
+			addedByName: string;
+			addedByMemberId: string;
+			createdAt: Date | null;
+		}>;
+		bookCount: number;
+		statuses: Array<{
+			id: number;
+			bookId: number;
+			memberId: string;
+			memberName: string;
+			status: string;
+			difficulty: number | null;
+			importance: number | null;
+			recommendation: number | null;
+			memo: string | null;
+			updatedAt: Date | null;
+		}>;
+	};
+	bookFetcher: ReturnType<typeof useFetcher<typeof action>>;
+	isBookAction: boolean;
+}) {
+	const [expandedGroup, setExpandedGroup] = useState<number | null>(null);
+
+	const { groups, members, books: bookList, bookCount, statuses } = bookData;
+
+	const getMembersForGroup = (groupId: number) =>
+		members.filter((m) => m.groupId === groupId);
+
+	const getBooksForGroup = (groupId: number) =>
+		bookList.filter((b) => b.groupId === groupId);
+
+	const getStatusesForBook = (bookId: number) =>
+		statuses.filter((s) => s.bookId === bookId);
+
+	return (
+		<section className="mb-8">
+			<div className="flex items-center justify-between mb-4">
+				<h2 className="text-lg font-bold text-orange-400">
+					読書リスト管理
+					<span className="text-sm font-normal text-gray-500 ml-2">
+						({groups.length}グループ / {bookCount}冊)
+					</span>
+				</h2>
+				<bookFetcher.Form method="post">
+					<input type="hidden" name="intent" value="clear-all-book-data" />
+					<button
+						type="submit"
+						disabled={isBookAction || groups.length === 0}
+						className="flex items-center gap-1 text-sm text-red-400/60 hover:text-red-400 transition-colors disabled:opacity-50 px-3 py-1.5 rounded-full hover:bg-red-400/10 border border-red-400/20"
+						onClick={(e) => {
+							if (!confirm("読書リストの全データ（グループ・メンバー・本・ステータス）を削除しますか？")) {
+								e.preventDefault();
+							}
+						}}
+					>
+						全データ削除
+					</button>
+				</bookFetcher.Form>
+			</div>
+
+			{groups.length === 0 ? (
+				<div className="p-8 text-center text-gray-500 border border-gray-800 rounded-lg">
+					<p className="text-sm">グループがありません</p>
+				</div>
+			) : (
+				<div className="space-y-3">
+					{groups.map((group) => {
+						const groupMembers = getMembersForGroup(group.id);
+						const groupBooks = getBooksForGroup(group.id);
+						const isExpanded = expandedGroup === group.id;
+
+						return (
+							<div
+								key={group.id}
+								className="border border-gray-800 rounded-lg overflow-hidden"
+							>
+								{/* グループヘッダー */}
+								<div className="flex items-center justify-between px-4 py-3 bg-gray-900/50">
+									<button
+										type="button"
+										onClick={() => setExpandedGroup(isExpanded ? null : group.id)}
+										className="flex items-center gap-3 text-left flex-1 min-w-0"
+									>
+										<span className="text-sm text-gray-400">
+											{isExpanded ? "▼" : "▶"}
+										</span>
+										<div className="min-w-0">
+											<div className="flex items-center gap-2">
+												<span className="text-sm font-medium text-gray-200">
+													{group.name}
+												</span>
+												<span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 font-mono">
+													{group.groupCode}
+												</span>
+											</div>
+											<div className="flex items-center gap-2 text-[10px] text-gray-600 mt-0.5">
+												<span>ID: {group.id}</span>
+												<span>メンバー: {groupMembers.length}</span>
+												<span>本: {groupBooks.length}</span>
+												{group.createdAt && (
+													<span>{group.createdAt.toLocaleString("ja-JP")}</span>
+												)}
+											</div>
+										</div>
+									</button>
+									<bookFetcher.Form method="post" className="shrink-0 ml-2">
+										<input type="hidden" name="intent" value="delete-book-group" />
+										<input type="hidden" name="id" value={group.id} />
+										<button
+											type="submit"
+											disabled={isBookAction}
+											className="text-xs text-red-400/60 hover:text-red-400 px-2 py-1 rounded border border-red-400/20 hover:bg-red-400/10 transition-colors disabled:opacity-50"
+											onClick={(e) => {
+												if (!confirm(`グループ「${group.name}」と紐づく全データを削除しますか？`)) {
+													e.preventDefault();
+												}
+											}}
+										>
+											削除
+										</button>
+									</bookFetcher.Form>
+								</div>
+
+								{/* 展開コンテンツ */}
+								{isExpanded && (
+									<div className="border-t border-gray-800">
+										{/* メンバー */}
+										<div className="px-4 py-3 border-b border-gray-800/50">
+											<h4 className="text-xs font-bold text-orange-400/70 uppercase tracking-wider mb-2">
+												メンバー ({groupMembers.length})
+											</h4>
+											{groupMembers.length === 0 ? (
+												<p className="text-xs text-gray-600">メンバーなし</p>
+											) : (
+												<div className="space-y-1.5">
+													{groupMembers.map((member) => (
+														<div
+															key={member.id}
+															className="flex items-center justify-between p-2 rounded bg-gray-900/30"
+														>
+															<div className="flex items-center gap-2 text-sm min-w-0">
+																<span className="text-gray-200 font-medium">
+																	{member.displayName}
+																</span>
+																<span className="text-[10px] text-gray-600 font-mono truncate">
+																	{member.memberId.slice(0, 8)}...
+																</span>
+																<span className="text-[10px] text-gray-600">
+																	ID: {member.id}
+																</span>
+																{member.joinedAt && (
+																	<span className="text-[10px] text-gray-600">
+																		{member.joinedAt.toLocaleString("ja-JP")}
+																	</span>
+																)}
+															</div>
+															<bookFetcher.Form method="post" className="shrink-0">
+																<input type="hidden" name="intent" value="delete-book-member" />
+																<input type="hidden" name="id" value={member.id} />
+																<input type="hidden" name="memberId" value={member.memberId} />
+																<button
+																	type="submit"
+																	disabled={isBookAction}
+																	className="text-[10px] text-red-400/60 hover:text-red-400 px-1.5 py-0.5 rounded border border-red-400/20 hover:bg-red-400/10 transition-colors disabled:opacity-50"
+																>
+																	削除
+																</button>
+															</bookFetcher.Form>
+														</div>
+													))}
+												</div>
+											)}
+										</div>
+
+										{/* 本 */}
+										<div className="px-4 py-3">
+											<h4 className="text-xs font-bold text-orange-400/70 uppercase tracking-wider mb-2">
+												本 ({groupBooks.length})
+											</h4>
+											{groupBooks.length === 0 ? (
+												<p className="text-xs text-gray-600">本なし</p>
+											) : (
+												<div className="space-y-2">
+													{groupBooks.map((book) => {
+														const bookStatuses = getStatusesForBook(book.id);
+														return (
+															<div
+																key={book.id}
+																className="p-3 rounded bg-gray-900/30 border border-gray-800/50"
+															>
+																<div className="flex items-start justify-between gap-2">
+																	<div className="min-w-0 flex-1">
+																		<div className="flex items-center gap-2 mb-0.5">
+																			<span className="text-sm font-medium text-gray-200">
+																				{book.title}
+																			</span>
+																			<span className="text-[10px] text-gray-600">
+																				ID: {book.id}
+																			</span>
+																		</div>
+																		<div className="flex items-center gap-2 text-xs text-gray-500">
+																			<span>{book.author}</span>
+																			{book.genre && (
+																				<span className="px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 text-[10px]">
+																					{book.genre}
+																				</span>
+																			)}
+																			<span className="text-gray-600">
+																				by {book.addedByName}
+																			</span>
+																		</div>
+
+																		{/* ステータス一覧 */}
+																		{bookStatuses.length > 0 && (
+																			<div className="mt-2 space-y-1">
+																				{bookStatuses.map((s) => (
+																					<div
+																						key={s.id}
+																						className="flex items-center justify-between text-[10px] p-1.5 rounded bg-gray-900/50"
+																					>
+																						<div className="flex items-center gap-2">
+																							<span className="text-gray-300">
+																								{s.memberName}
+																							</span>
+																							<span className={`px-1 py-0.5 rounded ${
+																								s.status === "completed" ? "bg-green-500/10 text-green-400" :
+																								s.status === "reading" ? "bg-blue-500/10 text-blue-400" :
+																								s.status === "interested" ? "bg-yellow-500/10 text-yellow-400" :
+																								"bg-gray-800 text-gray-400"
+																							}`}>
+																								{STATUS_LABELS[s.status] ?? s.status}
+																							</span>
+																							{s.difficulty !== null && (
+																								<span className="text-gray-500">
+																									難:{s.difficulty}
+																								</span>
+																							)}
+																							{s.importance !== null && (
+																								<span className="text-gray-500">
+																									重:{s.importance}
+																								</span>
+																							)}
+																							{s.recommendation !== null && (
+																								<span className="text-yellow-400/60">
+																									薦:{s.recommendation}
+																								</span>
+																							)}
+																							{s.memo && (
+																								<span className="text-gray-600 truncate max-w-[150px]" title={s.memo}>
+																									{s.memo}
+																								</span>
+																							)}
+																						</div>
+																						<bookFetcher.Form method="post" className="shrink-0">
+																							<input type="hidden" name="intent" value="delete-book-status" />
+																							<input type="hidden" name="id" value={s.id} />
+																							<button
+																								type="submit"
+																								disabled={isBookAction}
+																								className="text-red-400/60 hover:text-red-400 px-1 py-0.5 rounded border border-red-400/20 hover:bg-red-400/10 transition-colors disabled:opacity-50"
+																							>
+																								x
+																							</button>
+																						</bookFetcher.Form>
+																					</div>
+																				))}
+																			</div>
+																		)}
+																	</div>
+																	<bookFetcher.Form method="post" className="shrink-0">
+																		<input type="hidden" name="intent" value="delete-book" />
+																		<input type="hidden" name="id" value={book.id} />
+																		<button
+																			type="submit"
+																			disabled={isBookAction}
+																			className="text-xs text-red-400/60 hover:text-red-400 px-2 py-1 rounded border border-red-400/20 hover:bg-red-400/10 transition-colors disabled:opacity-50"
+																		>
+																			削除
+																		</button>
+																	</bookFetcher.Form>
+																</div>
+															</div>
+														);
+													})}
+												</div>
+											)}
+										</div>
+									</div>
+								)}
+							</div>
+						);
+					})}
+				</div>
+			)}
+		</section>
 	);
 }
