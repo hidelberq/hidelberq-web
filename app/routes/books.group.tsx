@@ -235,7 +235,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 					to="/books"
 					className="text-sm text-purple-300/60 hover:text-purple-200 transition-colors mb-8"
 				>
-					&larr; 読書リストに戻る
+					&larr; 積読 2.0 に戻る
 				</Link>
 
 				{/* ヘッダー */}
@@ -363,12 +363,18 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 
 				{/* 追加ボタン */}
 				{isMember && (
-					<div className="w-full max-w-2xl mb-6">
+					<div className="w-full max-w-2xl mb-6 flex gap-3 flex-wrap">
 						<Link
 							to={`/books/${group.groupCode}/add`}
 							className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 px-5 py-2.5 font-medium text-white transition-all hover:from-fuchsia-500 hover:to-purple-500 hover:shadow-lg hover:shadow-fuchsia-500/20"
 						>
 							<span className="text-lg">+</span> 本を追加
+						</Link>
+						<Link
+							to={`/books/${group.groupCode}/add-from-personal`}
+							className="inline-flex items-center gap-2 rounded-xl bg-white/10 border border-white/20 px-5 py-2.5 font-medium text-purple-200 transition-all hover:bg-white/20"
+						>
+							📚 積読リストから追加
 						</Link>
 					</div>
 				)}

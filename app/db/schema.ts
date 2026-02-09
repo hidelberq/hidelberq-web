@@ -141,6 +141,50 @@ export const bookMemberStatuses = sqliteTable("book_member_statuses", {
 	),
 });
 
+// 個人積読リスト
+export const personalBooks = sqliteTable("personal_books", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	memberId: text("member_id").notNull(), // localStorage の UUID
+	memberName: text("member_name").notNull(),
+	// 本の情報
+	googleBooksId: text("google_books_id"),
+	title: text("title").notNull(),
+	author: text("author").notNull(),
+	isbn: text("isbn"),
+	publishedYear: text("published_year"),
+	publisher: text("publisher"),
+	coverImageUrl: text("cover_image_url"),
+	description: text("description"),
+	pageCount: integer("page_count"),
+	genre: text("genre"),
+	// ステータス・評価
+	status: text("status").notNull().default("interested"), // unowned, interested, reading, completed, abandoned
+	difficulty: integer("difficulty"), // 1-5
+	importance: integer("importance"), // 1-5
+	recommendation: integer("recommendation"), // 1-5
+	visibility: text("visibility").notNull().default("public"), // public, private
+	memo: text("memo"),
+	startedAt: text("started_at"), // YYYY-MM-DD
+	completedAt: text("completed_at"), // YYYY-MM-DD
+	tags: text("tags"), // JSON 配列: ["輪読会向き", "入門書"]
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
+// 前提本（先に読んでおいた方がいい本）
+export const bookPrerequisites = sqliteTable("book_prerequisites", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	personalBookId: integer("personal_book_id").notNull(), // この本を読む前に
+	prerequisitePersonalBookId: integer("prerequisite_personal_book_id").notNull(), // この本を先に読んでおくべき
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const scrapedArticles = sqliteTable("scraped_articles", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	siteId: text("site_id").notNull(),
