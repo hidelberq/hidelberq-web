@@ -454,10 +454,51 @@ export default function BookDetail({
 									/>
 								</div>
 
+								{/* 追加メタ情報 */}
+								{(book.importanceLevel || book.difficultyLevel || book.prerequisiteText || book.videoUrl) && (
+									<div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-2 gap-3 text-sm">
+										{book.importanceLevel && (
+											<InfoItem label="重要度" value={book.importanceLevel} />
+										)}
+										{book.difficultyLevel && (
+											<InfoItem label="難易度" value={"★".repeat(book.difficultyLevel) + "☆".repeat(5 - book.difficultyLevel)} />
+										)}
+										{book.prerequisiteText && (
+											<div className="col-span-2">
+												<InfoItem label="先に読んでおくべき本" value={book.prerequisiteText} />
+											</div>
+										)}
+										{book.videoUrl && (
+											<div className="col-span-2">
+												<span className="text-purple-300/50 text-xs">参考動画</span>
+												<p>
+													<a
+														href={book.videoUrl}
+														target="_blank"
+														rel="noopener noreferrer"
+														className="text-cyan-400 hover:text-cyan-300 text-sm break-all transition-colors"
+													>
+														{book.videoUrl}
+													</a>
+												</p>
+											</div>
+										)}
+									</div>
+								)}
+
 								{book.description && (
 									<div className="mt-4 pt-4 border-t border-white/10">
 										<p className="text-sm text-purple-200/80 leading-relaxed">
 											{book.description}
+										</p>
+									</div>
+								)}
+
+								{book.memo && (
+									<div className="mt-3 rounded-lg bg-yellow-500/5 border border-yellow-500/10 p-3">
+										<span className="text-xs text-yellow-400/60">メモ</span>
+										<p className="text-sm text-purple-200/80 mt-1">
+											{book.memo}
 										</p>
 									</div>
 								)}
