@@ -80,7 +80,17 @@ export const activityLog = sqliteTable("activity_log", {
 	),
 });
 
-// 読書リスト管理
+// Google Books API 検索キャッシュ
+export const bookSearchCache = sqliteTable("book_search_cache", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	query: text("query").notNull().unique(), // 正規化済みの検索クエリ
+	results: text("results").notNull(), // JSON: BookSearchResult[]
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
+// 積読リスト管理
 export const bookGroups = sqliteTable("book_groups", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	groupCode: text("group_code").notNull().unique(), // 6文字の招待コード

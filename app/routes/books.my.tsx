@@ -173,7 +173,7 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 					マイ積読リスト
 				</h1>
 				<p className="text-purple-200/60 mb-8">
-					あなたの読書を管理
+					あなたの積読を管理
 				</p>
 
 				{/* 読書統計 */}

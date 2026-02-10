@@ -10,7 +10,7 @@ import {
 	type BookVisibility,
 } from "~/books/types";
 import type { Route } from "./+types/books.my-add";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 export function meta(): Route.MetaDescriptors {
 	return [{ title: "本を追加 | マイ積読リスト | 積読 2.0 | hidelberq" }];
@@ -75,7 +75,9 @@ export default function BooksMyAdd({ actionData }: Route.ComponentProps) {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [searchResults, setSearchResults] = useState<BookSearchResult[]>([]);
 	const [searching, setSearching] = useState(false);
+	const [searchError, setSearchError] = useState("");
 	const [selectedBook, setSelectedBook] = useState<BookSearchResult | null>(null);
+	const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	// フォーム状態
 	const [title, setTitle] = useState("");
@@ -104,18 +106,39 @@ export default function BooksMyAdd({ actionData }: Route.ComponentProps) {
 	const searchBooks = useCallback(async () => {
 		if (!searchQuery.trim()) return;
 		setSearching(true);
+		setSearchError("");
 		try {
 			const res = await fetch(
 				`/api/books/search?q=${encodeURIComponent(searchQuery)}`,
 			);
-			const data = (await res.json()) as { results: BookSearchResult[] };
-			setSearchResults(data.results);
+			const data = (await res.json()) as { results: BookSearchResult[]; error?: string };
+			if (res.status === 429 || data.error === "rate_limited") {
+				setSearchError("検索の利用回数上限に達しました。しばらく待ってから再度お試しください。");
+				setSearchResults([]);
+			} else {
+				setSearchResults(data.results);
+			}
 		} catch {
 			setSearchResults([]);
 		} finally {
 			setSearching(false);
 		}
 	}, [searchQuery]);
+
+	// 入力時のデバウンス検索
+	useEffect(() => {
+		if (debounceTimer.current) {
+			clearTimeout(debounceTimer.current);
+		}
+		if (searchQuery.trim().length >= 2) {
+			debounceTimer.current = setTimeout(() => {
+				searchBooks();
+			}, 500);
+		}
+		return () => {
+			if (debounceTimer.current) clearTimeout(debounceTimer.current);
+		};
+	}, [searchQuery, searchBooks]);
 
 	const selectBook = (book: BookSearchResult) => {
 		setSelectedBook(book);
@@ -182,6 +205,13 @@ export default function BooksMyAdd({ actionData }: Route.ComponentProps) {
 							{searching ? "..." : "検索"}
 						</button>
 					</div>
+
+					{/* 検索エラー */}
+					{searchError && (
+						<div className="mt-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 px-4 py-3 text-sm text-yellow-300">
+							{searchError}
+						</div>
+					)}
 
 					{/* 検索結果 */}
 					{searchResults.length > 0 && (

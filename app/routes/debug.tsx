@@ -74,7 +74,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 		.select({ count: sql<number>`count(*)` })
 		.from(activityLog);
 
-	// 読書リスト関連
+	// 積読リスト関連
 	const allGroups = await db
 		.select()
 		.from(bookGroups)
@@ -176,7 +176,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 		return { ok: true, intent: "activity", message: "全アクティビティを削除しました" };
 	}
 
-	// --- 読書リスト: グループ削除 ---
+	// --- 積読リスト: グループ削除 ---
 	if (intent === "delete-book-group") {
 		const id = Number(formData.get("id"));
 		if (!id) return { error: "IDが不正です" };
@@ -195,7 +195,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 		return { ok: true, intent: "book-manage", message: "グループとその全データを削除しました" };
 	}
 
-	// --- 読書リスト: メンバー削除 ---
+	// --- 積読リスト: メンバー削除 ---
 	if (intent === "delete-book-member") {
 		const id = Number(formData.get("id"));
 		const memberId = formData.get("memberId") as string;
@@ -208,7 +208,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 		return { ok: true, intent: "book-manage", message: "メンバーを削除しました" };
 	}
 
-	// --- 読書リスト: 本を削除 ---
+	// --- 積読リスト: 本を削除 ---
 	if (intent === "delete-book") {
 		const id = Number(formData.get("id"));
 		if (!id) return { error: "IDが不正です" };
@@ -218,7 +218,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 		return { ok: true, intent: "book-manage", message: "本を削除しました" };
 	}
 
-	// --- 読書リスト: ステータス削除 ---
+	// --- 積読リスト: ステータス削除 ---
 	if (intent === "delete-book-status") {
 		const id = Number(formData.get("id"));
 		if (!id) return { error: "IDが不正です" };
