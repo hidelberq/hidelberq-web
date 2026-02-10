@@ -22,13 +22,9 @@ jobs:
         run: bun run typecheck
 
       - name: Build
-        run: |
-          for i in 1 2 3; do
-            rm -rf node_modules/.vite-child-compiler
-            bun run build && break
-            echo "Build attempt $i failed, retrying..."
-            [ $i -eq 3 ] && exit 1
-          done
+        run: bun run build
+
+  preview:
     name: Preview Deploy
     needs: check
     runs-on: ubuntu-latest
@@ -46,13 +42,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build
-        run: |
-          for i in 1 2 3; do
-            rm -rf node_modules/.vite-child-compiler
-            bun run build && break
-            echo "Build attempt $i failed, retrying..."
-            [ $i -eq 3 ] && exit 1
-          done
+        run: bun run build
 
       - name: Strip production-only config for preview
         run: jq 'del(.triggers, .routes)' build/server/wrangler.json > build/server/wrangler.tmp.json && mv build/server/wrangler.tmp.json build/server/wrangler.json
