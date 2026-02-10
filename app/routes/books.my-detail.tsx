@@ -1133,11 +1133,12 @@ export default function BookMyDetail({
 							{overlaps.publicUsers.length > 0 && (
 								<div className="grid gap-2 mb-3">
 									{overlaps.publicUsers.map((user) => (
-										<div
+										<Link
 											key={user.memberId}
-											className="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 px-4 py-2.5"
+											to={`/tsundoku_2_0/user/${user.memberId}`}
+											className="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 hover:bg-white/10 hover:border-fuchsia-500/30 transition-all"
 										>
-											<span className="text-sm text-white font-medium">
+											<span className="text-sm text-white font-medium hover:text-fuchsia-200 transition-colors">
 												{user.memberName}
 											</span>
 											<span
@@ -1145,7 +1146,7 @@ export default function BookMyDetail({
 											>
 												{BOOK_STATUSES[user.status as BookStatus]}
 											</span>
-										</div>
+										</Link>
 									))}
 								</div>
 							)}

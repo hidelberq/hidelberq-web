@@ -64,6 +64,11 @@ export function formatRating(value: number | null): string {
 	return "\u2605".repeat(value) + "\u2606".repeat(5 - value);
 }
 
+export const AVATAR_EMOJIS = [
+	"📚", "📖", "📕", "📗", "📘", "📙", "🎓", "🧠", "💡", "✏️",
+	"🔬", "🎨", "🎵", "🌏", "🌱", "🐱", "🐶", "🦊", "🐻", "🐼",
+] as const;
+
 export function getStatusColor(status: BookStatus): string {
 	switch (status) {
 		case "unowned":

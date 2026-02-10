@@ -283,6 +283,48 @@ export default function Books({ actionData }: Route.ComponentProps) {
 								</span>
 							</Link>
 
+							{/* ユーザーを探す */}
+							<Link
+								to="/tsundoku_2_0/users"
+								className="group relative flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-6 py-5 transition-all duration-300 hover:border-emerald-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-emerald-500/10"
+							>
+								<div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/30 to-teal-600/30 text-2xl flex-shrink-0">
+									🔍
+								</div>
+								<div className="flex-1 min-w-0">
+									<h2 className="text-lg font-semibold text-white mb-0.5">
+										ユーザーを探す
+									</h2>
+									<p className="text-sm text-purple-200/60">
+										他のユーザーの本棚を閲覧
+									</p>
+								</div>
+								<span className="text-purple-300/40 group-hover:text-emerald-300 transition-colors">
+									&rarr;
+								</span>
+							</Link>
+
+							{/* プロフィール設定 */}
+							<Link
+								to="/tsundoku_2_0/settings"
+								className="group relative flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-6 py-5 transition-all duration-300 hover:border-amber-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-amber-500/10"
+							>
+								<div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/30 to-orange-600/30 text-2xl flex-shrink-0">
+									⚙️
+								</div>
+								<div className="flex-1 min-w-0">
+									<h2 className="text-lg font-semibold text-white mb-0.5">
+										プロフィール設定
+									</h2>
+									<p className="text-sm text-purple-200/60">
+										プロフィールやアバターを編集
+									</p>
+								</div>
+								<span className="text-purple-300/40 group-hover:text-amber-300 transition-colors">
+									&rarr;
+								</span>
+							</Link>
+
 							{/* グループ積読セクション */}
 							<button
 								type="button"

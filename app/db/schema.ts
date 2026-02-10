@@ -200,6 +200,23 @@ export const bookPrerequisites = sqliteTable("book_prerequisites", {
 	),
 });
 
+// ユーザープロフィール（SNS機能の基盤）
+export const userProfiles = sqliteTable("user_profiles", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	memberId: text("member_id").notNull().unique(),
+	displayName: text("display_name").notNull(),
+	bio: text("bio"),
+	favoriteGenre: text("favorite_genre"),
+	avatarEmoji: text("avatar_emoji").notNull().default("📚"),
+	isPublic: integer("is_public", { mode: "boolean" }).notNull().default(true),
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const scrapedArticles = sqliteTable("scraped_articles", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	siteId: text("site_id").notNull(),
