@@ -88,7 +88,7 @@ export default function BookReviewDetail({
 
 				<div className="w-full max-w-2xl">
 					{/* レビューカード */}
-					<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 p-6 mb-6">
+					<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 p-6 mb-6 overflow-hidden">
 						{/* 投稿者 */}
 						<Link
 							to={`/tsundoku_2_0/user/${author.memberId}`}
@@ -117,10 +117,10 @@ export default function BookReviewDetail({
 								</div>
 							)}
 							<div className="flex-1 min-w-0">
-								<h2 className="text-lg font-bold text-white">
+								<h2 className="text-lg font-bold text-white break-all">
 									{review.bookTitle}
 								</h2>
-								<p className="text-sm text-purple-300/60">
+								<p className="text-sm text-purple-300/60 break-all">
 									{review.bookAuthor}
 								</p>
 								{review.rating !== null && (
@@ -133,7 +133,7 @@ export default function BookReviewDetail({
 
 						{/* レビュー内容 */}
 						{review.title && (
-							<h3 className="text-xl font-bold text-white mb-3">
+							<h3 className="text-xl font-bold text-white mb-3 break-all">
 								{review.title}
 							</h3>
 						)}

@@ -189,17 +189,17 @@ export default function BookFeed({ loaderData }: Route.ComponentProps) {
 											<div className="flex items-center gap-2 mb-1">
 												<Link
 													to={`/tsundoku_2_0/user/${activity.memberId}`}
-													className="text-sm font-semibold text-white hover:text-fuchsia-200 transition-colors"
+													className="text-sm font-semibold text-white hover:text-fuchsia-200 transition-colors truncate flex-shrink-0 max-w-[50%]"
 												>
 													{activity.displayName}
 												</Link>
-												<span className="text-xs text-purple-300/40">
+												<span className="text-xs text-purple-300/40 flex-shrink-0">
 													{dateStr}
 												</span>
 											</div>
 
 											{/* アクティビティメッセージ */}
-											<p className="text-sm text-purple-200/70">
+											<p className="text-sm text-purple-200/70 break-all">
 												{icon} {message}
 											</p>
 
@@ -208,7 +208,7 @@ export default function BookFeed({ loaderData }: Route.ComponentProps) {
 												activity.metadata.reviewSnippet && (
 													<div className="mt-2 rounded-lg bg-white/5 border border-white/10 p-3">
 														{activity.metadata.reviewTitle && (
-															<p className="text-sm font-medium text-white mb-1">
+															<p className="text-sm font-medium text-white mb-1 break-all">
 																{activity.metadata.reviewTitle}
 															</p>
 														)}
@@ -245,14 +245,14 @@ export default function BookFeed({ loaderData }: Route.ComponentProps) {
 									<Link
 										key={activity.id}
 										to={linkTo}
-										className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm transition-all duration-300 hover:border-fuchsia-500/40 hover:bg-white/10 block"
+										className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm transition-all duration-300 hover:border-fuchsia-500/40 hover:bg-white/10 block overflow-hidden"
 									>
 										{Content}
 									</Link>
 								) : (
 									<div
 										key={activity.id}
-										className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm"
+										className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm overflow-hidden"
 									>
 										{Content}
 									</div>

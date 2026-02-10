@@ -240,12 +240,12 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 				</Link>
 
 				{/* ヘッダー */}
-				<div className="text-center mb-8">
-					<h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-2 bg-gradient-to-r from-white via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent">
+				<div className="text-center mb-8 w-full max-w-2xl">
+					<h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-2 bg-gradient-to-r from-white via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent break-all">
 						{group.name}
 					</h1>
 					{group.description && (
-						<p className="text-purple-200/60 mb-3">
+						<p className="text-purple-200/60 mb-3 break-all">
 							{group.description}
 						</p>
 					)}
@@ -398,7 +398,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 									<Link
 										key={book.id}
 										to={`/tsundoku_2_0/${group.groupCode}/book/${book.id}`}
-										className="flex gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-5 py-4 transition-all duration-300 hover:border-cyan-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-cyan-500/10"
+										className="flex gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-5 py-4 transition-all duration-300 hover:border-cyan-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-cyan-500/10 overflow-hidden"
 									>
 										{book.coverImageUrl ? (
 											<img

@@ -487,7 +487,7 @@ export default function Books({ actionData, loaderData }: Route.ComponentProps) 
 										return (
 											<div
 												key={activity.id}
-												className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+												className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 overflow-hidden"
 											>
 												<Link
 													to={`/tsundoku_2_0/user/${activity.memberId}`}
@@ -495,7 +495,7 @@ export default function Books({ actionData, loaderData }: Route.ComponentProps) 
 												>
 													{activity.avatarEmoji}
 												</Link>
-												<div className="flex-1 min-w-0">
+												<div className="flex-1 min-w-0 overflow-hidden">
 													<p className="text-sm text-purple-200/80 truncate">
 														<Link
 															to={`/tsundoku_2_0/user/${activity.memberId}`}

@@ -475,7 +475,7 @@ export default function BookDetail({
 					{!editing ? (
 						<>
 							{/* 表示モード */}
-							<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 p-6 mb-6">
+							<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 p-6 mb-6 overflow-hidden">
 								<div className="flex gap-5">
 									{book.coverImageUrl ? (
 										<img
@@ -489,10 +489,10 @@ export default function BookDetail({
 										</div>
 									)}
 									<div className="flex-1 min-w-0">
-										<h1 className="text-xl font-bold text-white mb-1">
+										<h1 className="text-xl font-bold text-white mb-1 break-all">
 											{book.title}
 										</h1>
-										<p className="text-purple-200/80 mb-2">
+										<p className="text-purple-200/80 mb-2 break-all">
 											{book.author}
 										</p>
 										{myStatus && (
