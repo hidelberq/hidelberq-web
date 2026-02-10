@@ -361,9 +361,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 						>
 							<span className="text-2xl leading-none">📚</span>
 							<div>
-								<span className="text-lg font-semibold">読書リスト</span>
+								<span className="text-lg font-semibold">積読 2.0</span>
 								<p className="text-sm text-purple-200/60">
-									グループで読書リストを管理・共有
+									積読と読書を管理・みんなで共有
 								</p>
 							</div>
 						</Link>
