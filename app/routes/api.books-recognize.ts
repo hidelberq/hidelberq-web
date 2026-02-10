@@ -180,19 +180,26 @@ export async function action({ request, context }: Route.ActionArgs) {
 	const bytes = new Uint8Array(arrayBuffer);
 	const mimeType = imageFile.type || "image/jpeg";
 
-	// R2 に画像を保存
-	const ext = getExtension(mimeType);
-	const timestamp = Date.now();
-	const photoKey = `book-photos/${memberId}/${timestamp}.${ext}`;
+	// R2 に画像を保存（バケット未作成でも認識処理は続行）
+	let photoUrl: string | null = null;
+	if (env.BOOK_BUCKET) {
+		try {
+			const ext = getExtension(mimeType);
+			const timestamp = Date.now();
+			const photoKey = `book-photos/${memberId}/${timestamp}.${ext}`;
 
-	await env.BOOK_BUCKET.put(photoKey, bytes, {
-		httpMetadata: {
-			contentType: mimeType,
-			cacheControl: "public, max-age=31536000, immutable",
-		},
-	});
+			await env.BOOK_BUCKET.put(photoKey, bytes, {
+				httpMetadata: {
+					contentType: mimeType,
+					cacheControl: "public, max-age=31536000, immutable",
+				},
+			});
 
-	const photoUrl = `/book-photo/${photoKey}`;
+			photoUrl = `/book-photo/${photoKey}`;
+		} catch (e) {
+			console.error("R2 save failed (continuing with recognition):", e);
+		}
+	}
 
 	// base64 に変換（Gemini Vision 用）
 	let base64 = "";
