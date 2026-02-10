@@ -133,6 +133,18 @@ async function searchGoogleBooks(
 	}
 }
 
+// 拡張子を MIME タイプから決定
+function getExtension(mimeType: string): string {
+	const map: Record<string, string> = {
+		"image/jpeg": "jpg",
+		"image/png": "png",
+		"image/webp": "webp",
+		"image/heic": "heic",
+		"image/heif": "heif",
+	};
+	return map[mimeType] ?? "jpg";
+}
+
 export async function action({ request, context }: Route.ActionArgs) {
 	const env = context.cloudflare.env;
 	const geminiApiKey = env.GEMINI_API_KEY;
@@ -146,6 +158,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 	const formData = await request.formData();
 	const imageFile = formData.get("image") as File | null;
+	const memberId = (formData.get("memberId") as string) || "anonymous";
 
 	if (!imageFile || imageFile.size === 0) {
 		return Response.json(
@@ -162,18 +175,32 @@ export async function action({ request, context }: Route.ActionArgs) {
 		);
 	}
 
-	// 画像を base64 に変換
+	// 画像を ArrayBuffer として読み込み
 	const arrayBuffer = await imageFile.arrayBuffer();
 	const bytes = new Uint8Array(arrayBuffer);
+	const mimeType = imageFile.type || "image/jpeg";
+
+	// R2 に画像を保存
+	const ext = getExtension(mimeType);
+	const timestamp = Date.now();
+	const photoKey = `book-photos/${memberId}/${timestamp}.${ext}`;
+
+	await env.BOOK_BUCKET.put(photoKey, bytes, {
+		httpMetadata: {
+			contentType: mimeType,
+			cacheControl: "public, max-age=31536000, immutable",
+		},
+	});
+
+	const photoUrl = `/book-photo/${photoKey}`;
+
+	// base64 に変換（Gemini Vision 用）
 	let base64 = "";
-	// chunk して btoa に渡す（大きいデータの場合）
 	const chunkSize = 8192;
 	for (let i = 0; i < bytes.length; i += chunkSize) {
 		const chunk = bytes.subarray(i, i + chunkSize);
 		base64 += btoa(String.fromCharCode(...chunk));
 	}
-
-	const mimeType = imageFile.type || "image/jpeg";
 
 	// Gemini Vision で書籍を認識
 	const ai = new GoogleGenAI({ apiKey: geminiApiKey });
@@ -251,7 +278,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 		}
 
 		if (!Array.isArray(recognizedBooks) || recognizedBooks.length === 0) {
-			return Response.json({ books: [], message: "本が認識されませんでした" });
+			return Response.json({ books: [], message: "本が認識されませんでした", photoUrl });
 		}
 
 		// Google Books API で各書籍の情報を補完
@@ -286,7 +313,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 			}
 		}
 
-		return Response.json({ books: enrichedBooks });
+		return Response.json({ books: enrichedBooks, photoUrl });
 	} catch (e) {
 		console.error("Book recognition error:", e);
 		return Response.json(

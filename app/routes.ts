@@ -5,6 +5,7 @@ export default [
 	route("aitter", "routes/aitter.tsx"),
 	route("debug", "routes/debug.tsx"),
 	route("hero-image/:date", "routes/hero-image.ts"),
+	route("book-photo/*", "routes/book-photo.ts"),
 	route("whitespace-remover", "routes/whitespace-remover.tsx"),
 	route("shogi", "routes/shogi.tsx"),
 	route("shogi/local", "routes/shogi.local.tsx"),

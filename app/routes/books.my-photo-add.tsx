@@ -106,6 +106,7 @@ export default function BooksMyPhotoAdd({
 
 	// 状態管理
 	const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+	const [savedPhotoUrl, setSavedPhotoUrl] = useState<string | null>(null);
 	const [recognizing, setRecognizing] = useState(false);
 	const [error, setError] = useState("");
 	const [recognizedBooks, setRecognizedBooks] = useState<
@@ -155,6 +156,7 @@ export default function BooksMyPhotoAdd({
 		try {
 			const formData = new FormData();
 			formData.append("image", file);
+			formData.append("memberId", memberId);
 
 			const res = await fetch("/api/tsundoku_2_0/recognize", {
 				method: "POST",
@@ -163,9 +165,14 @@ export default function BooksMyPhotoAdd({
 
 			const data = (await res.json()) as {
 				books?: RecognizedBookResult[];
+				photoUrl?: string;
 				error?: string;
 				message?: string;
 			};
+
+			if (data.photoUrl) {
+				setSavedPhotoUrl(data.photoUrl);
+			}
 
 			if (!res.ok || data.error) {
 				setError(data.error || "認識に失敗しました");
@@ -280,10 +287,10 @@ export default function BooksMyPhotoAdd({
 						className="relative rounded-2xl border-2 border-dashed border-white/20 hover:border-fuchsia-500/40 transition-colors cursor-pointer overflow-hidden"
 						onClick={() => fileInputRef.current?.click()}
 					>
-						{previewUrl ? (
+						{(savedPhotoUrl || previewUrl) ? (
 							<div className="relative">
 								<img
-									src={previewUrl}
+									src={savedPhotoUrl || previewUrl || ""}
 									alt="アップロードした写真"
 									className="w-full max-h-80 object-contain bg-black/20"
 								/>
@@ -328,13 +335,12 @@ export default function BooksMyPhotoAdd({
 						ref={fileInputRef}
 						type="file"
 						accept="image/*"
-						capture="environment"
 						onChange={handleFileSelect}
 						className="hidden"
 					/>
 
 					{/* 認識ボタン */}
-					{previewUrl && !recognizing && recognizedBooks.length === 0 && (
+					{previewUrl && !savedPhotoUrl && !recognizing && recognizedBooks.length === 0 && (
 						<button
 							type="button"
 							onClick={handleRecognize}
@@ -484,6 +490,7 @@ export default function BooksMyPhotoAdd({
 							type="button"
 							onClick={() => {
 								setPreviewUrl(null);
+								setSavedPhotoUrl(null);
 								setRecognizedBooks([]);
 								setSelectedIndexes(new Set());
 								setError("");
