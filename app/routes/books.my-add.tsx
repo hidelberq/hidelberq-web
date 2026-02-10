@@ -99,7 +99,7 @@ export default function BooksMyAdd({ actionData }: Route.ComponentProps) {
 
 	useEffect(() => {
 		if (actionData?.success) {
-			navigate("/books/my");
+			navigate("/tsundoku_2_0/my");
 		}
 	}, [actionData, navigate]);
 
@@ -109,7 +109,7 @@ export default function BooksMyAdd({ actionData }: Route.ComponentProps) {
 		setSearchError("");
 		try {
 			const res = await fetch(
-				`/api/books/search?q=${encodeURIComponent(searchQuery)}`,
+				`/api/tsundoku_2_0/search?q=${encodeURIComponent(searchQuery)}`,
 			);
 			const data = (await res.json()) as { results: BookSearchResult[]; error?: string };
 			if (res.status === 429 || data.error === "rate_limited") {
@@ -167,7 +167,7 @@ export default function BooksMyAdd({ actionData }: Route.ComponentProps) {
 
 			<div className="relative flex flex-col items-center px-4 py-16">
 				<Link
-					to="/books/my"
+					to="/tsundoku_2_0/my"
 					className="text-sm text-purple-300/60 hover:text-purple-200 transition-colors mb-8"
 				>
 					&larr; マイ積読リストに戻る

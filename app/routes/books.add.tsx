@@ -204,7 +204,7 @@ export default function BooksAdd({
 
 	useEffect(() => {
 		if (actionData?.success) {
-			navigate(`/books/${group.groupCode}`);
+			navigate(`/tsundoku_2_0/${group.groupCode}`);
 		}
 	}, [actionData, navigate, group.groupCode]);
 
@@ -214,7 +214,7 @@ export default function BooksAdd({
 		setSearchError("");
 		try {
 			const res = await fetch(
-				`/api/books/search?q=${encodeURIComponent(searchQuery)}`,
+				`/api/tsundoku_2_0/search?q=${encodeURIComponent(searchQuery)}`,
 			);
 			const data = (await res.json()) as { results: BookSearchResult[]; error?: string };
 			if (res.status === 429 || data.error === "rate_limited") {
@@ -272,7 +272,7 @@ export default function BooksAdd({
 
 			<div className="relative flex flex-col items-center px-4 py-16">
 				<Link
-					to={`/books/${group.groupCode}`}
+					to={`/tsundoku_2_0/${group.groupCode}`}
 					className="text-sm text-purple-300/60 hover:text-purple-200 transition-colors mb-8"
 				>
 					&larr; {group.name} に戻る

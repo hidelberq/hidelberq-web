@@ -168,7 +168,7 @@ export default function BooksGroupAddFromPersonal({
 
 	useEffect(() => {
 		if (actionData?.success) {
-			navigate(`/books/${group.groupCode}`);
+			navigate(`/tsundoku_2_0/${group.groupCode}`);
 		}
 	}, [actionData, navigate, group.groupCode]);
 
@@ -181,7 +181,7 @@ export default function BooksGroupAddFromPersonal({
 
 			<div className="relative flex flex-col items-center px-4 py-16">
 				<Link
-					to={`/books/${group.groupCode}`}
+					to={`/tsundoku_2_0/${group.groupCode}`}
 					className="text-sm text-purple-300/60 hover:text-purple-200 transition-colors mb-8"
 				>
 					&larr; {group.name} に戻る
@@ -207,7 +207,7 @@ export default function BooksGroupAddFromPersonal({
 								個人の積読リストに本がありません
 							</p>
 							<Link
-								to="/books/my/add"
+								to="/tsundoku_2_0/my/add"
 								className="text-sm text-fuchsia-300 hover:text-fuchsia-200 transition-colors"
 							>
 								まず積読リストに本を追加 &rarr;

@@ -458,7 +458,7 @@ export default function BookMyDetail({
 
 	useEffect(() => {
 		if (actionData?.success && actionData.intent === "deleteBook") {
-			navigate("/books/my");
+			navigate("/tsundoku_2_0/my");
 		}
 		if (actionData?.success && actionData.intent === "editBook") {
 			setEditing(false);
@@ -481,7 +481,7 @@ export default function BookMyDetail({
 		setSearchError("");
 		try {
 			const res = await fetch(
-				`/api/books/search?q=${encodeURIComponent(searchQuery)}`,
+				`/api/tsundoku_2_0/search?q=${encodeURIComponent(searchQuery)}`,
 			);
 			const data = (await res.json()) as { results: BookSearchResult[]; error?: string };
 			if (res.status === 429 || data.error === "rate_limited") {
@@ -558,7 +558,7 @@ export default function BookMyDetail({
 
 			<div className="relative flex flex-col items-center px-4 py-16">
 				<Link
-					to="/books/my"
+					to="/tsundoku_2_0/my"
 					className="text-sm text-purple-300/60 hover:text-purple-200 transition-colors mb-8"
 				>
 					&larr; マイ積読リストに戻る
@@ -1193,7 +1193,7 @@ export default function BookMyDetail({
 										className="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 px-4 py-2.5"
 									>
 										<Link
-											to={`/books/my/book/${prereq.id}`}
+											to={`/tsundoku_2_0/my/book/${prereq.id}`}
 											className="flex items-center gap-3 flex-1 min-w-0 hover:text-fuchsia-200 transition-colors"
 										>
 											{prereq.coverImageUrl ? (
