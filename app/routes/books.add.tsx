@@ -1,11 +1,12 @@
 import { Link, useNavigate } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
-import { eq, and } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import {
 	bookGroups,
 	bookGroupMembers,
 	books,
 	bookMemberStatuses,
+	personalBooks,
 } from "~/db/schema";
 import {
 	GENRES,
@@ -99,21 +100,70 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
 	// 自分のステータスも同時に保存
 	const status = formData.get("status") as BookStatus | null;
+	const difficulty = formData.get("difficulty")
+		? Number(formData.get("difficulty"))
+		: null;
+	const importance = formData.get("importance")
+		? Number(formData.get("importance"))
+		: null;
+	const recommendation = formData.get("recommendation")
+		? Number(formData.get("recommendation"))
+		: null;
+
 	if (status) {
 		await db.insert(bookMemberStatuses).values({
 			bookId: book.id,
 			memberId,
 			memberName: member.displayName,
 			status,
-			difficulty: formData.get("difficulty")
-				? Number(formData.get("difficulty"))
+			difficulty,
+			importance,
+			recommendation,
+		});
+	}
+
+	// 個人の積読リストにも追加（重複チェック: ISBN or タイトル+著者名）
+	const isbn = (formData.get("isbn") as string)?.trim() || null;
+	const duplicateConditions = [
+		eq(personalBooks.memberId, memberId),
+	];
+	const matchConditions = [];
+	if (isbn) {
+		matchConditions.push(eq(personalBooks.isbn, isbn));
+	}
+	matchConditions.push(
+		and(eq(personalBooks.title, title), eq(personalBooks.author, author))!,
+	);
+	duplicateConditions.push(or(...matchConditions)!);
+
+	const [existingPersonal] = await db
+		.select()
+		.from(personalBooks)
+		.where(and(...duplicateConditions))
+		.limit(1);
+
+	if (!existingPersonal) {
+		await db.insert(personalBooks).values({
+			memberId,
+			memberName: member.displayName,
+			title,
+			author,
+			isbn,
+			publishedYear:
+				(formData.get("publishedYear") as string)?.trim() || null,
+			publisher: (formData.get("publisher") as string)?.trim() || null,
+			coverImageUrl:
+				(formData.get("coverImageUrl") as string)?.trim() || null,
+			description:
+				(formData.get("description") as string)?.trim() || null,
+			pageCount: formData.get("pageCount")
+				? Number(formData.get("pageCount"))
 				: null,
-			importance: formData.get("importance")
-				? Number(formData.get("importance"))
-				: null,
-			recommendation: formData.get("recommendation")
-				? Number(formData.get("recommendation"))
-				: null,
+			genre: (formData.get("genre") as string) || null,
+			status: status || "interested",
+			difficulty,
+			importance,
+			recommendation,
 		});
 	}
 
