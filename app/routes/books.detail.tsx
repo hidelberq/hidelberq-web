@@ -21,7 +21,7 @@ import { useState, useEffect } from "react";
 export function meta({ data }: Route.MetaArgs) {
 	return [
 		{
-			title: `${data?.book?.title ?? "本の詳細"} | 読書リスト | hidelberq`,
+			title: `${data?.book?.title ?? "本の詳細"} | 積読 2.0 | hidelberq`,
 		},
 	];
 }

@@ -11,7 +11,7 @@ export function meta(): Route.MetaDescriptors {
 		{ title: "積読 2.0 | hidelberq" },
 		{
 			name: "description",
-			content: "個人の積読リストとグループ読書を管理するアプリ",
+			content: "個人の積読リストとグループ積読を管理するアプリ",
 		},
 	];
 }
@@ -224,7 +224,7 @@ export default function Books({ actionData }: Route.ComponentProps) {
 					積読 2.0
 				</h1>
 				<p className="text-purple-200/60 mb-12">
-					個人の積読リストとグループ読書を管理
+					個人の積読リストとグループ積読を管理
 				</p>
 
 				{/* 表示名設定（初回のみ） */}
@@ -275,7 +275,7 @@ export default function Books({ actionData }: Route.ComponentProps) {
 										マイ積読リスト
 									</h2>
 									<p className="text-sm text-purple-200/60">
-										個人の読書リストを管理・公開
+										個人の積読リストを管理・公開
 									</p>
 								</div>
 								<span className="text-purple-300/40 group-hover:text-fuchsia-300 transition-colors">
@@ -283,7 +283,7 @@ export default function Books({ actionData }: Route.ComponentProps) {
 								</span>
 							</Link>
 
-							{/* グループ読書セクション */}
+							{/* グループ積読セクション */}
 							<button
 								type="button"
 								onClick={() => setShowGroupSection(!showGroupSection)}
@@ -294,10 +294,10 @@ export default function Books({ actionData }: Route.ComponentProps) {
 								</div>
 								<div className="flex-1 min-w-0">
 									<h2 className="text-lg font-semibold text-white mb-0.5">
-										グループ読書
+										グループ積読
 									</h2>
 									<p className="text-sm text-purple-200/60">
-										グループでの読書リスト管理
+										グループでの積読リスト管理
 									</p>
 								</div>
 								<span className={`text-purple-300/40 transition-transform ${showGroupSection ? "rotate-90" : ""}`}>

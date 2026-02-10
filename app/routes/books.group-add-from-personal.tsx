@@ -13,7 +13,7 @@ import type { Route } from "./+types/books.group-add-from-personal";
 import { useState, useEffect } from "react";
 
 export function meta(): Route.MetaDescriptors {
-	return [{ title: "マイ積読リストから追加 | 読書リスト | 積読 2.0 | hidelberq" }];
+	return [{ title: "マイ積読リストから追加 | 積読 2.0 | hidelberq" }];
 }
 
 export async function loader({ params, request, context }: Route.LoaderArgs) {
