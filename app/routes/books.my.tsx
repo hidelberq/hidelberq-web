@@ -163,7 +163,7 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 
 			<div className="relative flex flex-col items-center px-4 py-16">
 				<Link
-					to="/books"
+					to="/tsundoku_2_0"
 					className="text-sm text-purple-300/60 hover:text-purple-200 transition-colors mb-8"
 				>
 					&larr; 積読 2.0 に戻る
@@ -267,7 +267,7 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 				{/* 追加ボタン */}
 				<div className="w-full max-w-2xl mb-6">
 					<Link
-						to="/books/my/add"
+						to="/tsundoku_2_0/my/add"
 						className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 px-5 py-2.5 font-medium text-white transition-all hover:from-fuchsia-500 hover:to-purple-500 hover:shadow-lg hover:shadow-fuchsia-500/20"
 					>
 						<span className="text-lg">+</span> 本を追加
@@ -287,7 +287,7 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 							{bookList.map((book) => (
 								<Link
 									key={book.id}
-									to={`/books/my/book/${book.id}`}
+									to={`/tsundoku_2_0/my/book/${book.id}`}
 									className="flex gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-5 py-4 transition-all duration-300 hover:border-fuchsia-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-fuchsia-500/10"
 								>
 									{book.coverImageUrl ? (

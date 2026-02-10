@@ -233,7 +233,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 
 			<div className="relative flex flex-col items-center px-4 py-16">
 				<Link
-					to="/books"
+					to="/tsundoku_2_0"
 					className="text-sm text-purple-300/60 hover:text-purple-200 transition-colors mb-8"
 				>
 					&larr; 積読 2.0 に戻る
@@ -366,13 +366,13 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 				{isMember && (
 					<div className="w-full max-w-2xl mb-6 flex gap-3 flex-wrap">
 						<Link
-							to={`/books/${group.groupCode}/add`}
+							to={`/tsundoku_2_0/${group.groupCode}/add`}
 							className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 px-5 py-2.5 font-medium text-white transition-all hover:from-fuchsia-500 hover:to-purple-500 hover:shadow-lg hover:shadow-fuchsia-500/20"
 						>
 							<span className="text-lg">+</span> 本を追加
 						</Link>
 						<Link
-							to={`/books/${group.groupCode}/add-from-personal`}
+							to={`/tsundoku_2_0/${group.groupCode}/add-from-personal`}
 							className="inline-flex items-center gap-2 rounded-xl bg-white/10 border border-white/20 px-5 py-2.5 font-medium text-purple-200 transition-all hover:bg-white/20"
 						>
 							📚 マイ積読リストから追加
@@ -397,7 +397,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 								return (
 									<Link
 										key={book.id}
-										to={`/books/${group.groupCode}/book/${book.id}`}
+										to={`/tsundoku_2_0/${group.groupCode}/book/${book.id}`}
 										className="flex gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-5 py-4 transition-all duration-300 hover:border-cyan-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-cyan-500/10"
 									>
 										{book.coverImageUrl ? (
