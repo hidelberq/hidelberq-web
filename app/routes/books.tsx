@@ -458,9 +458,12 @@ export default function Books({ actionData }: Route.ComponentProps) {
 
 				{/* 表示名情報 */}
 				{displayName && (
-					<p className="text-xs text-purple-300/30 mt-8">
-						表示名: {displayName}
-					</p>
+					<div className="text-xs text-purple-300/30 mt-8 space-y-1">
+						<p>表示名: {displayName}</p>
+						{memberId && (
+							<p className="font-mono">UUID: {memberId}</p>
+						)}
+					</div>
 				)}
 			</div>
 		</div>
