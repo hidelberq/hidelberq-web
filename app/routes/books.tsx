@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
-import { eq, and } from "drizzle-orm";
-import { bookGroups, bookGroupMembers } from "~/db/schema";
+import { eq, and, or } from "drizzle-orm";
+import { bookGroups, bookGroupMembers, personalBooks } from "~/db/schema";
 import { generateGroupCode } from "~/books/types";
 import type { Route } from "./+types/books";
 import { useState, useEffect } from "react";
@@ -118,7 +118,29 @@ export async function action({ request, context }: Route.ActionArgs) {
 			return { error: "表示名を入力してください" };
 		}
 
-		return { success: true, intent: "setName", displayName };
+		// 同じ表示名の既存ユーザーを検索（デバイス間同期）
+		const [existingMember] = await db
+			.select({ memberId: bookGroupMembers.memberId })
+			.from(bookGroupMembers)
+			.where(eq(bookGroupMembers.displayName, displayName))
+			.limit(1);
+
+		if (existingMember) {
+			return { success: true, intent: "setName", displayName, memberId: existingMember.memberId };
+		}
+
+		// グループメンバーに見つからない場合、個人積読リストも検索
+		const [existingPersonal] = await db
+			.select({ memberId: personalBooks.memberId })
+			.from(personalBooks)
+			.where(eq(personalBooks.memberName, displayName))
+			.limit(1);
+
+		if (existingPersonal) {
+			return { success: true, intent: "setName", displayName, memberId: existingPersonal.memberId };
+		}
+
+		return { success: true, intent: "setName", displayName, memberId };
 	}
 
 	return { error: "不明な操作です" };
@@ -159,6 +181,11 @@ export default function Books({ actionData }: Route.ComponentProps) {
 		if (actionData?.success && actionData.intent === "setName" && "displayName" in actionData) {
 			localStorage.setItem("bookDisplayName", actionData.displayName as string);
 			setDisplayName(actionData.displayName as string);
+			// サーバーから返された memberId で localStorage を更新（デバイス間同期）
+			if ("memberId" in actionData && actionData.memberId) {
+				localStorage.setItem("bookMemberId", actionData.memberId as string);
+				setMemberId(actionData.memberId as string);
+			}
 		}
 		if (actionData?.success && actionData.groupCode) {
 			const groups = JSON.parse(
