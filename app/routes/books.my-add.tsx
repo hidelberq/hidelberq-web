@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
-import { personalBooks } from "~/db/schema";
+import { eq } from "drizzle-orm";
+import { personalBooks, bookActivities, userProfiles } from "~/db/schema";
 import {
 	GENRES,
 	BOOK_STATUSES,
@@ -64,6 +65,27 @@ export async function action({ request, context }: Route.ActionArgs) {
 			tags,
 		})
 		.returning();
+
+	// アクティビティを記録: 本を積んだ
+	const [profile] = await db
+		.select()
+		.from(userProfiles)
+		.where(eq(userProfiles.memberId, memberId))
+		.limit(1);
+
+	await db.insert(bookActivities).values({
+		memberId,
+		type: "book_added",
+		targetType: "book",
+		targetId: book.id,
+		metadata: JSON.stringify({
+			displayName: profile?.displayName ?? memberName,
+			avatarEmoji: profile?.avatarEmoji ?? "📚",
+			bookTitle: title,
+			bookAuthor: author,
+			bookCoverImageUrl: (formData.get("coverImageUrl") as string)?.trim() || null,
+		}),
+	});
 
 	return { success: true, bookId: book.id };
 }
