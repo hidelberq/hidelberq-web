@@ -175,7 +175,7 @@ function ReviewCard({
 	return (
 		<Link
 			to={`/tsundoku_2_0/review/${review.id}`}
-			className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-5 transition-all duration-300 hover:border-fuchsia-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-fuchsia-500/10 block"
+			className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-5 transition-all duration-300 hover:border-fuchsia-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-fuchsia-500/10 block overflow-hidden"
 		>
 			{/* ヘッダー: ユーザー情報 */}
 			<div className="flex items-center gap-2 mb-3">
@@ -211,7 +211,7 @@ function ReviewCard({
 						</p>
 					)}
 					{review.title && (
-						<p className="text-sm font-semibold text-white mt-1 break-words">
+						<p className="text-sm font-semibold text-white mt-1 break-all">
 							{review.title}
 						</p>
 					)}

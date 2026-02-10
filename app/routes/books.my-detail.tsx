@@ -609,7 +609,7 @@ export default function BookMyDetail({
 					{!editing ? (
 						<>
 							{/* 表示モード */}
-							<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 p-6 mb-6">
+							<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 p-6 mb-6 overflow-hidden">
 								<div className="flex gap-5">
 									{book.coverImageUrl ? (
 										<img
@@ -623,10 +623,10 @@ export default function BookMyDetail({
 										</div>
 									)}
 									<div className="flex-1 min-w-0">
-										<h1 className="text-xl font-bold text-white mb-1 break-words">
+										<h1 className="text-xl font-bold text-white mb-1 break-all">
 											{book.title}
 										</h1>
-										<p className="text-purple-200/80 mb-2 break-words">{book.author}</p>
+										<p className="text-purple-200/80 mb-2 break-all">{book.author}</p>
 										<div className="flex flex-wrap gap-1.5">
 											<span
 												className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(book.status as BookStatus)}`}
@@ -1206,7 +1206,7 @@ export default function BookMyDetail({
 										<p className="text-sm text-cyan-200 font-medium mb-1">
 											📖 読書会のご提案
 										</p>
-										<p className="text-sm text-purple-200/70 break-words">
+										<p className="text-sm text-purple-200/70 break-all">
 											{publicNames.length > 0
 												? `${publicNames.join("さん、")}さん${overlaps.privateCount > 0 ? `たち(他${overlaps.privateCount}人)` : ""}と「${book.title}」の読書会をしませんか？`
 												: `${totalOverlap}人がこの本を持っています。読書会を開きませんか？`}

@@ -487,7 +487,7 @@ export default function Books({ actionData, loaderData }: Route.ComponentProps) 
 										return (
 											<div
 												key={activity.id}
-												className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+												className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 overflow-hidden"
 											>
 												<Link
 													to={`/tsundoku_2_0/user/${activity.memberId}`}

@@ -288,7 +288,7 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 								<Link
 									key={book.id}
 									to={`/tsundoku_2_0/my/book/${book.id}`}
-									className="flex gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-5 py-4 transition-all duration-300 hover:border-fuchsia-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-fuchsia-500/10"
+									className="flex gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-5 py-4 transition-all duration-300 hover:border-fuchsia-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-fuchsia-500/10 overflow-hidden"
 								>
 									{book.coverImageUrl ? (
 										<img

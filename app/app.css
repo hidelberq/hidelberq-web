@@ -11,4 +11,5 @@ html,
 body {
     @apply bg-violet-950 text-white;
     color-scheme: dark;
+    overflow-x: hidden;
 }
