@@ -98,14 +98,12 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
 	}> = [];
 
 	if (bookIds.length > 0) {
+		// D1のバインドパラメータ上限(100)を超える場合があるためサブクエリを使用
 		allStatuses = await db
 			.select()
 			.from(bookMemberStatuses)
 			.where(
-				sql`${bookMemberStatuses.bookId} IN (${sql.join(
-					bookIds.map((id) => sql`${id}`),
-					sql`,`,
-				)})`,
+				sql`${bookMemberStatuses.bookId} IN (SELECT ${books.id} FROM ${books} WHERE ${books.groupId} = ${group.id})`,
 			);
 	}
 
