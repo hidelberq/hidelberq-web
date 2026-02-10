@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, and } from "drizzle-orm";
 import {
@@ -13,7 +13,7 @@ import type { Route } from "./+types/books.group-add-from-personal";
 import { useState, useEffect } from "react";
 
 export function meta(): Route.MetaDescriptors {
-	return [{ title: "個人リストから追加 | 読書リスト | 積読 2.0 | hidelberq" }];
+	return [{ title: "マイ積読リストから追加 | 読書リスト | 積読 2.0 | hidelberq" }];
 }
 
 export async function loader({ params, request, context }: Route.LoaderArgs) {
@@ -151,12 +151,20 @@ export default function BooksGroupAddFromPersonal({
 }: Route.ComponentProps) {
 	const { group, myBooks } = loaderData;
 	const navigate = useNavigate();
+	const [searchParams, setSearchParams] = useSearchParams();
 	const [memberId, setMemberId] = useState("");
 
 	useEffect(() => {
 		const id = localStorage.getItem("bookMemberId") || "";
 		setMemberId(id);
-	}, []);
+
+		// loader 用に memberId をクエリパラメータに設定
+		if (id && !searchParams.get("memberId")) {
+			const params = new URLSearchParams(searchParams);
+			params.set("memberId", id);
+			setSearchParams(params, { replace: true });
+		}
+	}, [searchParams, setSearchParams]);
 
 	useEffect(() => {
 		if (actionData?.success) {
@@ -180,10 +188,10 @@ export default function BooksGroupAddFromPersonal({
 				</Link>
 
 				<h1 className="text-3xl font-bold tracking-tight mb-2 bg-gradient-to-r from-white via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent">
-					積読リストから追加
+					マイ積読リストから追加
 				</h1>
 				<p className="text-purple-200/60 mb-8">
-					個人の積読リストからグループに本を追加
+					マイ積読リストからグループに本を追加
 				</p>
 
 				{actionData?.error && (

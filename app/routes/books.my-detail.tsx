@@ -1,7 +1,14 @@
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, and, or, ne, sql } from "drizzle-orm";
-import { personalBooks, bookPrerequisites } from "~/db/schema";
+import {
+	personalBooks,
+	bookPrerequisites,
+	bookGroups,
+	bookGroupMembers,
+	books,
+	bookMemberStatuses,
+} from "~/db/schema";
 import {
 	GENRES,
 	BOOK_STATUSES,
@@ -131,6 +138,8 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
 
 	// 自分の他の本のリスト（前提本として追加するため）
 	let myOtherBooks: Array<{ id: number; title: string; author: string }> = [];
+	// 自分が所属するグループのリスト
+	let myGroups: Array<{ groupId: number; groupCode: string; groupName: string }> = [];
 	if (isOwner) {
 		myOtherBooks = await db
 			.select({
@@ -145,6 +154,34 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
 					ne(personalBooks.id, bookId),
 				),
 			);
+
+		const memberships = await db
+			.select({
+				groupId: bookGroupMembers.groupId,
+			})
+			.from(bookGroupMembers)
+			.where(eq(bookGroupMembers.memberId, currentMemberId));
+
+		if (memberships.length > 0) {
+			const groupList = await db
+				.select({
+					id: bookGroups.id,
+					groupCode: bookGroups.groupCode,
+					name: bookGroups.name,
+				})
+				.from(bookGroups)
+				.where(
+					sql`${bookGroups.id} IN (${sql.join(
+						memberships.map((m) => sql`${m.groupId}`),
+						sql`,`,
+					)})`,
+				);
+			myGroups = groupList.map((g) => ({
+				groupId: g.id,
+				groupCode: g.groupCode,
+				groupName: g.name,
+			}));
+		}
 	}
 
 	return {
@@ -163,6 +200,7 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
 		prerequisiteBooks,
 		prerequisiteBookIds,
 		myOtherBooks,
+		myGroups,
 	};
 }
 
@@ -265,6 +303,64 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 		return { success: true, intent: "deleteBook" };
 	}
 
+	if (intent === "addToGroup") {
+		const groupId = Number(formData.get("groupId"));
+		if (!groupId) {
+			return { error: "グループを選択してください" };
+		}
+
+		// メンバーか確認
+		const [member] = await db
+			.select()
+			.from(bookGroupMembers)
+			.where(
+				and(
+					eq(bookGroupMembers.groupId, groupId),
+					eq(bookGroupMembers.memberId, memberId),
+				),
+			)
+			.limit(1);
+
+		if (!member) {
+			return { error: "グループのメンバーではありません" };
+		}
+
+		// グループに本を追加
+		const [newBook] = await db
+			.insert(books)
+			.values({
+				groupId,
+				title: book.title,
+				author: book.author,
+				isbn: book.isbn,
+				publishedYear: book.publishedYear,
+				publisher: book.publisher,
+				coverImageUrl: book.coverImageUrl,
+				description: book.description,
+				pageCount: book.pageCount,
+				genre: book.genre,
+				addedByMemberId: memberId,
+				addedByName: member.displayName,
+			})
+			.returning();
+
+		// ステータスも同期
+		await db.insert(bookMemberStatuses).values({
+			bookId: newBook.id,
+			memberId,
+			memberName: member.displayName,
+			status: book.status,
+			difficulty: book.difficulty,
+			importance: book.importance,
+			recommendation: book.recommendation,
+			memo: book.memo,
+			startedAt: book.startedAt,
+			completedAt: book.completedAt,
+		});
+
+		return { success: true, intent: "addToGroup" };
+	}
+
 	if (intent === "addPrerequisite") {
 		const prerequisiteBookId = Number(formData.get("prerequisiteBookId"));
 
@@ -318,18 +414,27 @@ export default function BookMyDetail({
 	loaderData,
 	actionData,
 }: Route.ComponentProps) {
-	const { book, isOwner, overlaps, prerequisiteBooks, myOtherBooks } = loaderData;
+	const { book, isOwner, overlaps, prerequisiteBooks, myOtherBooks, myGroups } = loaderData;
 	const navigate = useNavigate();
+	const [searchParams, setSearchParams] = useSearchParams();
 	const [memberId, setMemberId] = useState("");
 	const [editing, setEditing] = useState(false);
 	const [showStatusForm, setShowStatusForm] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
 	const [showPrereqForm, setShowPrereqForm] = useState(false);
+	const [showGroupForm, setShowGroupForm] = useState(false);
 
 	useEffect(() => {
 		const id = localStorage.getItem("bookMemberId") || "";
 		setMemberId(id);
-	}, []);
+
+		// loader 用に memberId をクエリパラメータに設定
+		if (id && !searchParams.get("memberId")) {
+			const params = new URLSearchParams(searchParams);
+			params.set("memberId", id);
+			setSearchParams(params, { replace: true });
+		}
+	}, [searchParams, setSearchParams]);
 
 	useEffect(() => {
 		if (actionData?.success && actionData.intent === "deleteBook") {
@@ -343,6 +448,9 @@ export default function BookMyDetail({
 		}
 		if (actionData?.success && actionData.intent === "addPrerequisite") {
 			setShowPrereqForm(false);
+		}
+		if (actionData?.success && actionData.intent === "addToGroup") {
+			setShowGroupForm(false);
 		}
 	}, [actionData, navigate]);
 
@@ -503,9 +611,63 @@ export default function BookMyDetail({
 										>
 											削除
 										</button>
+										{myGroups.length > 0 && (
+											<button
+												type="button"
+												onClick={() => setShowGroupForm(!showGroupForm)}
+												className="text-sm rounded-lg bg-cyan-500/20 border border-cyan-500/30 px-4 py-2 text-cyan-200 hover:bg-cyan-500/30 transition-colors"
+											>
+												グループに追加
+											</button>
+										)}
 									</div>
 								)}
 							</div>
+
+							{/* グループに追加フォーム */}
+							{showGroupForm && isOwner && (
+								<div className="w-full mb-6 rounded-xl bg-cyan-500/10 border border-cyan-500/20 p-4">
+									<h3 className="text-sm font-semibold text-cyan-300 mb-3">
+										グループの積読リストに追加
+									</h3>
+									{actionData?.success && actionData.intent === "addToGroup" && (
+										<div className="mb-3 rounded-lg bg-green-500/20 border border-green-500/30 px-3 py-2 text-sm text-green-300">
+											グループに追加しました
+										</div>
+									)}
+									<form method="post" className="flex gap-2 items-end">
+										<input type="hidden" name="intent" value="addToGroup" />
+										<input type="hidden" name="memberId" value={memberId} />
+										<div className="flex-1">
+											<select
+												name="groupId"
+												required
+												className={`${inputClass} appearance-none`}
+											>
+												<option value="">グループを選択</option>
+												{myGroups.map((g) => (
+													<option key={g.groupId} value={g.groupId}>
+														{g.groupName}
+													</option>
+												))}
+											</select>
+										</div>
+										<button
+											type="submit"
+											className="rounded-xl bg-cyan-500/20 border border-cyan-500/30 px-4 py-3 text-sm text-cyan-200 hover:bg-cyan-500/30 transition-colors"
+										>
+											追加
+										</button>
+										<button
+											type="button"
+											onClick={() => setShowGroupForm(false)}
+											className="rounded-xl bg-white/10 border border-white/20 px-4 py-3 text-sm text-purple-200 hover:bg-white/20 transition-colors"
+										>
+											取消
+										</button>
+									</form>
+								</div>
+							)}
 
 							{/* 削除確認 */}
 							{confirmDelete && (

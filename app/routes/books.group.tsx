@@ -374,7 +374,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 							to={`/books/${group.groupCode}/add-from-personal`}
 							className="inline-flex items-center gap-2 rounded-xl bg-white/10 border border-white/20 px-5 py-2.5 font-medium text-purple-200 transition-all hover:bg-white/20"
 						>
-							📚 積読リストから追加
+							📚 マイ積読リストから追加
 						</Link>
 					</div>
 				)}
