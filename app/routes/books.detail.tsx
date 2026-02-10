@@ -13,10 +13,11 @@ import {
 	BOOK_STATUSES,
 	getStatusColor,
 	formatRating,
+	type BookSearchResult,
 	type BookStatus,
 } from "~/books/types";
 import type { Route } from "./+types/books.detail";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 export function meta({ data }: Route.MetaArgs) {
 	return [
@@ -223,6 +224,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 					(formData.get("publishedYear") as string)?.trim() || null,
 				publisher:
 					(formData.get("publisher") as string)?.trim() || null,
+				coverImageUrl:
+					(formData.get("coverImageUrl") as string)?.trim() || null,
 				description:
 					(formData.get("description") as string)?.trim() || null,
 				pageCount: formData.get("pageCount")
@@ -325,6 +328,24 @@ export default function BookDetail({
 	const [confirmDelete, setConfirmDelete] = useState(false);
 	const [addedToPersonal, setAddedToPersonal] = useState(false);
 
+	// 編集モード: Google Books 検索
+	const [searchQuery, setSearchQuery] = useState("");
+	const [searchResults, setSearchResults] = useState<BookSearchResult[]>([]);
+	const [searching, setSearching] = useState(false);
+	const [searchError, setSearchError] = useState("");
+	const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	// 編集モード: フォーム状態
+	const [editTitle, setEditTitle] = useState(book.title);
+	const [editAuthor, setEditAuthor] = useState(book.author);
+	const [editIsbn, setEditIsbn] = useState(book.isbn ?? "");
+	const [editPublishedYear, setEditPublishedYear] = useState(book.publishedYear ?? "");
+	const [editPublisher, setEditPublisher] = useState(book.publisher ?? "");
+	const [editCoverImageUrl, setEditCoverImageUrl] = useState(book.coverImageUrl ?? "");
+	const [editDescription, setEditDescription] = useState(book.description ?? "");
+	const [editPageCount, setEditPageCount] = useState(book.pageCount?.toString() ?? "");
+	const [editGenre, setEditGenre] = useState(book.genre ?? "");
+
 	useEffect(() => {
 		const id = localStorage.getItem("bookMemberId") || "";
 		setMemberId(id);
@@ -353,6 +374,72 @@ export default function BookDetail({
 			setAddedToPersonal(true);
 		}
 	}, [actionData, navigate, group.groupCode]);
+
+	// 編集モード: Google Books 検索
+	const searchBooks = useCallback(async () => {
+		if (!searchQuery.trim()) return;
+		setSearching(true);
+		setSearchError("");
+		try {
+			const res = await fetch(
+				`/api/books/search?q=${encodeURIComponent(searchQuery)}`,
+			);
+			const data = (await res.json()) as { results: BookSearchResult[]; error?: string };
+			if (res.status === 429 || data.error === "rate_limited") {
+				setSearchError("検索の利用回数上限に達しました。しばらく待ってから再度お試しください。");
+				setSearchResults([]);
+			} else {
+				setSearchResults(data.results);
+			}
+		} catch {
+			setSearchResults([]);
+		} finally {
+			setSearching(false);
+		}
+	}, [searchQuery]);
+
+	useEffect(() => {
+		if (debounceTimer.current) {
+			clearTimeout(debounceTimer.current);
+		}
+		if (searchQuery.trim().length >= 2) {
+			debounceTimer.current = setTimeout(() => {
+				searchBooks();
+			}, 500);
+		}
+		return () => {
+			if (debounceTimer.current) clearTimeout(debounceTimer.current);
+		};
+	}, [searchQuery, searchBooks]);
+
+	const selectSearchResult = (result: BookSearchResult) => {
+		setEditTitle(result.title);
+		setEditAuthor(result.author);
+		setEditIsbn(result.isbn ?? "");
+		setEditPublishedYear(result.publishedYear ?? "");
+		setEditPublisher(result.publisher ?? "");
+		setEditCoverImageUrl(result.coverImageUrl ?? "");
+		setEditDescription(result.description ?? "");
+		setEditPageCount(result.pageCount?.toString() ?? "");
+		setSearchResults([]);
+		setSearchQuery("");
+	};
+
+	const startEditing = () => {
+		setEditTitle(book.title);
+		setEditAuthor(book.author);
+		setEditIsbn(book.isbn ?? "");
+		setEditPublishedYear(book.publishedYear ?? "");
+		setEditPublisher(book.publisher ?? "");
+		setEditCoverImageUrl(book.coverImageUrl ?? "");
+		setEditDescription(book.description ?? "");
+		setEditPageCount(book.pageCount?.toString() ?? "");
+		setEditGenre(book.genre ?? "");
+		setSearchQuery("");
+		setSearchResults([]);
+		setSearchError("");
+		setEditing(true);
+	};
 
 	const myStatus = statuses.find((s) => s.memberId === memberId || (displayName && s.memberName === displayName));
 	const isOwner = book.addedByMemberId === memberId || (displayName && book.addedByName === displayName);
@@ -535,7 +622,7 @@ export default function BookDetail({
 										)}
 										<button
 											type="button"
-											onClick={() => setEditing(true)}
+											onClick={startEditing}
 											className="text-sm rounded-lg bg-white/10 border border-white/20 px-4 py-2 text-purple-200 hover:bg-white/20 transition-colors"
 										>
 											編集
@@ -599,44 +686,114 @@ export default function BookDetail({
 							method="post"
 							className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 p-6 mb-6 space-y-4"
 						>
-							<input
-								type="hidden"
-								name="intent"
-								value="editBook"
-							/>
-							<input
-								type="hidden"
-								name="memberId"
-								value={memberId}
-							/>
+							<input type="hidden" name="intent" value="editBook" />
+							<input type="hidden" name="memberId" value={memberId} />
+							<input type="hidden" name="coverImageUrl" value={editCoverImageUrl} />
+
+							{/* Google Books 検索 */}
+							<div>
+								<h3 className="text-sm font-semibold uppercase tracking-widest text-cyan-400/80 mb-3">
+									書籍を検索して入力
+								</h3>
+								<div className="flex gap-2">
+									<input
+										type="text"
+										value={searchQuery}
+										onChange={(e) => setSearchQuery(e.target.value)}
+										onKeyDown={(e) => {
+											if (e.key === "Enter") {
+												e.preventDefault();
+												searchBooks();
+											}
+										}}
+										placeholder="タイトルまたは著者名で検索..."
+										className={`${inputClass} flex-1`}
+									/>
+									<button
+										type="button"
+										onClick={searchBooks}
+										disabled={searching}
+										className="rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-3 font-medium text-white transition-all hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50"
+									>
+										{searching ? "..." : "検索"}
+									</button>
+								</div>
+								{searchError && (
+									<div className="mt-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 px-4 py-3 text-sm text-yellow-300">
+										{searchError}
+									</div>
+								)}
+								{searchResults.length > 0 && (
+									<div className="mt-3 rounded-xl bg-white/5 border border-white/10 divide-y divide-white/5 max-h-80 overflow-y-auto">
+										{searchResults.map((result, i) => (
+											<button
+												key={`${result.isbn ?? i}-${result.title}`}
+												type="button"
+												onClick={() => selectSearchResult(result)}
+												className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-white/10 transition-colors"
+											>
+												{result.coverImageUrl ? (
+													<img
+														src={result.coverImageUrl}
+														alt=""
+														className="w-10 h-14 object-cover rounded flex-shrink-0"
+													/>
+												) : (
+													<div className="w-10 h-14 bg-white/10 rounded flex-shrink-0 flex items-center justify-center text-purple-300/40 text-xs">
+														No img
+													</div>
+												)}
+												<div className="min-w-0">
+													<p className="text-sm font-medium text-white truncate">
+														{result.title}
+													</p>
+													<p className="text-xs text-purple-300/60">
+														{result.author}
+														{result.publishedYear && ` (${result.publishedYear})`}
+													</p>
+												</div>
+											</button>
+										))}
+									</div>
+								)}
+							</div>
+
+							<div className="border-t border-white/10 pt-4" />
+
+							{/* 表紙プレビュー */}
+							{editCoverImageUrl && (
+								<div className="flex justify-center">
+									<img
+										src={editCoverImageUrl}
+										alt="表紙"
+										className="h-32 object-cover rounded-lg border border-white/10"
+									/>
+								</div>
+							)}
 
 							<div>
 								<label className={labelClass}>
-									タイトル
-									<span className="text-red-400 ml-1">
-										*
-									</span>
+									タイトル<span className="text-red-400 ml-1">*</span>
 								</label>
 								<input
 									type="text"
 									name="title"
 									required
-									defaultValue={book.title}
+									value={editTitle}
+									onChange={(e) => setEditTitle(e.target.value)}
 									className={inputClass}
 								/>
 							</div>
 							<div>
 								<label className={labelClass}>
-									著者名
-									<span className="text-red-400 ml-1">
-										*
-									</span>
+									著者名<span className="text-red-400 ml-1">*</span>
 								</label>
 								<input
 									type="text"
 									name="author"
 									required
-									defaultValue={book.author}
+									value={editAuthor}
+									onChange={(e) => setEditAuthor(e.target.value)}
 									className={inputClass}
 								/>
 							</div>
@@ -646,44 +803,38 @@ export default function BookDetail({
 									<input
 										type="text"
 										name="isbn"
-										defaultValue={book.isbn ?? ""}
+										value={editIsbn}
+										onChange={(e) => setEditIsbn(e.target.value)}
 										className={inputClass}
 									/>
 								</div>
 								<div>
-									<label className={labelClass}>
-										出版年
-									</label>
+									<label className={labelClass}>出版年</label>
 									<input
 										type="text"
 										name="publishedYear"
-										defaultValue={
-											book.publishedYear ?? ""
-										}
+										value={editPublishedYear}
+										onChange={(e) => setEditPublishedYear(e.target.value)}
 										className={inputClass}
 									/>
 								</div>
 								<div>
-									<label className={labelClass}>
-										出版社
-									</label>
+									<label className={labelClass}>出版社</label>
 									<input
 										type="text"
 										name="publisher"
-										defaultValue={book.publisher ?? ""}
+										value={editPublisher}
+										onChange={(e) => setEditPublisher(e.target.value)}
 										className={inputClass}
 									/>
 								</div>
 								<div>
-									<label className={labelClass}>
-										ページ数
-									</label>
+									<label className={labelClass}>ページ数</label>
 									<input
 										type="number"
 										name="pageCount"
-										defaultValue={
-											book.pageCount?.toString() ?? ""
-										}
+										value={editPageCount}
+										onChange={(e) => setEditPageCount(e.target.value)}
 										className={inputClass}
 									/>
 								</div>
@@ -692,7 +843,8 @@ export default function BookDetail({
 								<label className={labelClass}>ジャンル</label>
 								<select
 									name="genre"
-									defaultValue={book.genre ?? ""}
+									value={editGenre}
+									onChange={(e) => setEditGenre(e.target.value)}
 									className={`${inputClass} appearance-none`}
 								>
 									<option value="">選択してください</option>
@@ -704,13 +856,12 @@ export default function BookDetail({
 								</select>
 							</div>
 							<div>
-								<label className={labelClass}>
-									内容（短く）
-								</label>
+								<label className={labelClass}>内容（短く）</label>
 								<textarea
 									name="description"
 									rows={3}
-									defaultValue={book.description ?? ""}
+									value={editDescription}
+									onChange={(e) => setEditDescription(e.target.value)}
 									className={`${inputClass} resize-none`}
 								/>
 							</div>
