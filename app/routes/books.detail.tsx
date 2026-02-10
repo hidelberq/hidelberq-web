@@ -319,6 +319,7 @@ export default function BookDetail({
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [memberId, setMemberId] = useState("");
+	const [displayName, setDisplayName] = useState("");
 	const [editing, setEditing] = useState(false);
 	const [showStatusForm, setShowStatusForm] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
@@ -327,6 +328,8 @@ export default function BookDetail({
 	useEffect(() => {
 		const id = localStorage.getItem("bookMemberId") || "";
 		setMemberId(id);
+		const name = localStorage.getItem("bookDisplayName") || "";
+		setDisplayName(name);
 
 		// loader 用に memberId をクエリパラメータに設定
 		if (id && !searchParams.get("memberId")) {
@@ -351,9 +354,9 @@ export default function BookDetail({
 		}
 	}, [actionData, navigate, group.groupCode]);
 
-	const myStatus = statuses.find((s) => s.memberId === memberId);
-	const isOwner = book.addedByMemberId === memberId;
-	const isMember = members.some((m) => m.memberId === memberId);
+	const myStatus = statuses.find((s) => s.memberId === memberId || (displayName && s.memberName === displayName));
+	const isOwner = book.addedByMemberId === memberId || (displayName && book.addedByName === displayName);
+	const isMember = members.some((m) => m.memberId === memberId || (displayName && m.displayName === displayName));
 
 	const inputClass =
 		"w-full rounded-xl bg-white/10 border border-white/20 px-4 py-3 text-white placeholder:text-purple-300/40 focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/30";
@@ -833,7 +836,7 @@ export default function BookDetail({
 										<div className="flex items-center justify-between mb-2">
 											<span className="font-medium text-white">
 												{s.memberName}
-												{s.memberId === memberId &&
+												{(s.memberId === memberId || (displayName && s.memberName === displayName)) &&
 													" (あなた)"}
 											</span>
 											<span

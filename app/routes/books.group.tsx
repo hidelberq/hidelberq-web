@@ -168,6 +168,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 	const { group, members, books: bookList } = loaderData;
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [memberId, setMemberId] = useState("");
+	const [displayName, setDisplayName] = useState("");
 	const [localSearch, setLocalSearch] = useState(loaderData.search);
 	const [showMembers, setShowMembers] = useState(false);
 	const [copied, setCopied] = useState(false);
@@ -175,6 +176,8 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 	useEffect(() => {
 		const id = localStorage.getItem("bookMemberId") || "";
 		setMemberId(id);
+		const name = localStorage.getItem("bookDisplayName") || "";
+		setDisplayName(name);
 
 		// グループ名をローカルに保存
 		const groups = JSON.parse(
@@ -209,7 +212,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 		? bookList.filter((book) =>
 				book.statuses.some(
 					(s) =>
-						s.memberId === memberId && s.status === statusFilter,
+						(s.memberId === memberId || (displayName && s.memberName === displayName)) && s.status === statusFilter,
 				),
 			)
 		: bookList;
@@ -220,7 +223,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 		setTimeout(() => setCopied(false), 2000);
 	};
 
-	const isMember = members.some((m) => m.memberId === memberId);
+	const isMember = members.some((m) => m.memberId === memberId || (displayName && m.displayName === displayName));
 
 	return (
 		<div className="min-h-dvh bg-gradient-to-br from-violet-950 via-fuchsia-950 to-indigo-950">
@@ -391,7 +394,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 						<div className="grid gap-3">
 							{filteredBooks.map((book) => {
 								const myStatus = book.statuses.find(
-									(s) => s.memberId === memberId,
+									(s) => s.memberId === memberId || (displayName && s.memberName === displayName),
 								);
 								return (
 									<Link
