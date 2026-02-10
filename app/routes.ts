@@ -21,4 +21,5 @@ export default [
 	route("books/:groupCode/book/:bookId", "routes/books.detail.tsx"),
 	route("api/activity", "routes/api.activity.ts"),
 	route("api/books/search", "routes/api.books-search.ts"),
+	route("api/books/seed", "routes/api.books-seed.ts"),
 ] satisfies RouteConfig;

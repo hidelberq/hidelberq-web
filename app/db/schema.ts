@@ -126,6 +126,11 @@ export const books = sqliteTable("books", {
 	genre: text("genre"),
 	addedByMemberId: text("added_by_member_id").notNull(),
 	addedByName: text("added_by_name").notNull(),
+	videoUrl: text("video_url"),
+	prerequisiteText: text("prerequisite_text"),
+	importanceLevel: text("importance_level"), // "S" | "A" | "B"
+	difficultyLevel: integer("difficulty_level"), // 1-5
+	memo: text("memo"),
 	createdAt: integer("created_at", { mode: "timestamp" }).default(
 		sql`(strftime('%s', 'now'))`,
 	),
