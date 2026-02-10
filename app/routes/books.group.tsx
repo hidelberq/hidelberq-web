@@ -168,6 +168,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 	const { group, members, books: bookList } = loaderData;
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [memberId, setMemberId] = useState("");
+	const [displayName, setDisplayName] = useState("");
 	const [localSearch, setLocalSearch] = useState(loaderData.search);
 	const [showMembers, setShowMembers] = useState(false);
 	const [copied, setCopied] = useState(false);
@@ -175,6 +176,8 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 	useEffect(() => {
 		const id = localStorage.getItem("bookMemberId") || "";
 		setMemberId(id);
+		const name = localStorage.getItem("bookDisplayName") || "";
+		setDisplayName(name);
 
 		// グループ名をローカルに保存
 		const groups = JSON.parse(
@@ -209,7 +212,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 		? bookList.filter((book) =>
 				book.statuses.some(
 					(s) =>
-						s.memberId === memberId && s.status === statusFilter,
+						(s.memberId === memberId || (displayName && s.memberName === displayName)) && s.status === statusFilter,
 				),
 			)
 		: bookList;
@@ -220,7 +223,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 		setTimeout(() => setCopied(false), 2000);
 	};
 
-	const isMember = members.some((m) => m.memberId === memberId);
+	const isMember = members.some((m) => m.memberId === memberId || (displayName && m.displayName === displayName));
 
 	return (
 		<div className="min-h-dvh bg-gradient-to-br from-violet-950 via-fuchsia-950 to-indigo-950">
@@ -235,7 +238,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 					to="/books"
 					className="text-sm text-purple-300/60 hover:text-purple-200 transition-colors mb-8"
 				>
-					&larr; 読書リストに戻る
+					&larr; 積読 2.0 に戻る
 				</Link>
 
 				{/* ヘッダー */}
@@ -363,12 +366,18 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 
 				{/* 追加ボタン */}
 				{isMember && (
-					<div className="w-full max-w-2xl mb-6">
+					<div className="w-full max-w-2xl mb-6 flex gap-3 flex-wrap">
 						<Link
 							to={`/books/${group.groupCode}/add`}
 							className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 px-5 py-2.5 font-medium text-white transition-all hover:from-fuchsia-500 hover:to-purple-500 hover:shadow-lg hover:shadow-fuchsia-500/20"
 						>
 							<span className="text-lg">+</span> 本を追加
+						</Link>
+						<Link
+							to={`/books/${group.groupCode}/add-from-personal`}
+							className="inline-flex items-center gap-2 rounded-xl bg-white/10 border border-white/20 px-5 py-2.5 font-medium text-purple-200 transition-all hover:bg-white/20"
+						>
+							📚 マイ積読リストから追加
 						</Link>
 					</div>
 				)}
@@ -385,7 +394,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 						<div className="grid gap-3">
 							{filteredBooks.map((book) => {
 								const myStatus = book.statuses.find(
-									(s) => s.memberId === memberId,
+									(s) => s.memberId === memberId || (displayName && s.memberName === displayName),
 								);
 								return (
 									<Link

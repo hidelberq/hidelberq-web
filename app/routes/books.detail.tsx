@@ -1,11 +1,12 @@
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
-import { eq, and } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import {
 	bookGroups,
 	bookGroupMembers,
 	books,
 	bookMemberStatuses,
+	personalBooks,
 } from "~/db/schema";
 import {
 	GENRES,
@@ -25,8 +26,10 @@ export function meta({ data }: Route.MetaArgs) {
 	];
 }
 
-export async function loader({ params, context }: Route.LoaderArgs) {
+export async function loader({ params, request, context }: Route.LoaderArgs) {
 	const db = drizzle(context.cloudflare.env.DB);
+	const url = new URL(request.url);
+	const currentMemberId = url.searchParams.get("memberId") ?? "";
 
 	const [group] = await db
 		.select()
@@ -58,6 +61,29 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 		.from(bookGroupMembers)
 		.where(eq(bookGroupMembers.groupId, group.id));
 
+	// 個人リストに既にあるかチェック
+	let alreadyInPersonalList = false;
+	if (currentMemberId) {
+		const matchConditions = [];
+		if (book.isbn) {
+			matchConditions.push(eq(personalBooks.isbn, book.isbn));
+		}
+		matchConditions.push(
+			and(eq(personalBooks.title, book.title), eq(personalBooks.author, book.author))!,
+		);
+		const [existing] = await db
+			.select()
+			.from(personalBooks)
+			.where(
+				and(
+					eq(personalBooks.memberId, currentMemberId),
+					or(...matchConditions),
+				),
+			)
+			.limit(1);
+		alreadyInPersonalList = !!existing;
+	}
+
 	return {
 		group: { name: group.name, groupCode: group.groupCode },
 		book: {
@@ -73,6 +99,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 			memberId: m.memberId,
 			displayName: m.displayName,
 		})),
+		alreadyInPersonalList,
 	};
 }
 
@@ -208,6 +235,66 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 		return { success: true, intent: "editBook" };
 	}
 
+	if (intent === "addToPersonal") {
+		// 個人リストに追加（重複チェック）
+		const matchConditions = [];
+		if (book.isbn) {
+			matchConditions.push(eq(personalBooks.isbn, book.isbn));
+		}
+		matchConditions.push(
+			and(eq(personalBooks.title, book.title), eq(personalBooks.author, book.author))!,
+		);
+		const [existingPersonal] = await db
+			.select()
+			.from(personalBooks)
+			.where(
+				and(
+					eq(personalBooks.memberId, memberId),
+					or(...matchConditions),
+				),
+			)
+			.limit(1);
+
+		if (existingPersonal) {
+			return { error: "既に積読リストに登録されています" };
+		}
+
+		// グループでの自分のステータスを取得
+		const [myStatus] = await db
+			.select()
+			.from(bookMemberStatuses)
+			.where(
+				and(
+					eq(bookMemberStatuses.bookId, book.id),
+					eq(bookMemberStatuses.memberId, memberId),
+				),
+			)
+			.limit(1);
+
+		await db.insert(personalBooks).values({
+			memberId,
+			memberName: member.displayName,
+			title: book.title,
+			author: book.author,
+			isbn: book.isbn,
+			publishedYear: book.publishedYear,
+			publisher: book.publisher,
+			coverImageUrl: book.coverImageUrl,
+			description: book.description,
+			pageCount: book.pageCount,
+			genre: book.genre,
+			status: myStatus?.status ?? "interested",
+			difficulty: myStatus?.difficulty ?? null,
+			importance: myStatus?.importance ?? null,
+			recommendation: myStatus?.recommendation ?? null,
+			memo: myStatus?.memo ?? null,
+			startedAt: myStatus?.startedAt ?? null,
+			completedAt: myStatus?.completedAt ?? null,
+		});
+
+		return { success: true, intent: "addToPersonal" };
+	}
+
 	if (intent === "deleteBook") {
 		if (book.addedByMemberId !== memberId) {
 			return { error: "本を削除できるのは起票者のみです" };
@@ -228,17 +315,29 @@ export default function BookDetail({
 	loaderData,
 	actionData,
 }: Route.ComponentProps) {
-	const { group, book, statuses, members } = loaderData;
+	const { group, book, statuses, members, alreadyInPersonalList } = loaderData;
 	const navigate = useNavigate();
+	const [searchParams, setSearchParams] = useSearchParams();
 	const [memberId, setMemberId] = useState("");
+	const [displayName, setDisplayName] = useState("");
 	const [editing, setEditing] = useState(false);
 	const [showStatusForm, setShowStatusForm] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
+	const [addedToPersonal, setAddedToPersonal] = useState(false);
 
 	useEffect(() => {
 		const id = localStorage.getItem("bookMemberId") || "";
 		setMemberId(id);
-	}, []);
+		const name = localStorage.getItem("bookDisplayName") || "";
+		setDisplayName(name);
+
+		// loader 用に memberId をクエリパラメータに設定
+		if (id && !searchParams.get("memberId")) {
+			const params = new URLSearchParams(searchParams);
+			params.set("memberId", id);
+			setSearchParams(params, { replace: true });
+		}
+	}, [searchParams, setSearchParams]);
 
 	useEffect(() => {
 		if (actionData?.success && actionData.intent === "deleteBook") {
@@ -250,11 +349,14 @@ export default function BookDetail({
 		if (actionData?.success && actionData.intent === "updateStatus") {
 			setShowStatusForm(false);
 		}
+		if (actionData?.success && actionData.intent === "addToPersonal") {
+			setAddedToPersonal(true);
+		}
 	}, [actionData, navigate, group.groupCode]);
 
-	const myStatus = statuses.find((s) => s.memberId === memberId);
-	const isOwner = book.addedByMemberId === memberId;
-	const isMember = members.some((m) => m.memberId === memberId);
+	const myStatus = statuses.find((s) => s.memberId === memberId || (displayName && s.memberName === displayName));
+	const isOwner = book.addedByMemberId === memberId || (displayName && book.addedByName === displayName);
+	const isMember = members.some((m) => m.memberId === memberId || (displayName && m.displayName === displayName));
 
 	const inputClass =
 		"w-full rounded-xl bg-white/10 border border-white/20 px-4 py-3 text-white placeholder:text-purple-300/40 focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/30";
@@ -374,6 +476,22 @@ export default function BookDetail({
 												? "ステータスを更新"
 												: "ステータスを設定"}
 										</button>
+										{!alreadyInPersonalList && !addedToPersonal ? (
+											<form method="post" className="inline">
+												<input type="hidden" name="intent" value="addToPersonal" />
+												<input type="hidden" name="memberId" value={memberId} />
+												<button
+													type="submit"
+													className="text-sm rounded-lg bg-cyan-500/20 border border-cyan-500/30 px-4 py-2 text-cyan-200 hover:bg-cyan-500/30 transition-colors"
+												>
+													📚 積読リストに追加
+												</button>
+											</form>
+										) : (
+											<span className="text-sm rounded-lg bg-green-500/10 border border-green-500/20 px-4 py-2 text-green-300">
+												積読リストに追加済み
+											</span>
+										)}
 										<button
 											type="button"
 											onClick={() => setEditing(true)}
@@ -593,7 +711,7 @@ export default function BookDetail({
 								value={memberId}
 							/>
 
-							<div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+							<div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
 								{(
 									Object.entries(BOOK_STATUSES) as [
 										BookStatus,
@@ -718,7 +836,7 @@ export default function BookDetail({
 										<div className="flex items-center justify-between mb-2">
 											<span className="font-medium text-white">
 												{s.memberName}
-												{s.memberId === memberId &&
+												{(s.memberId === memberId || (displayName && s.memberName === displayName)) &&
 													" (あなた)"}
 											</span>
 											<span

@@ -1,11 +1,19 @@
 export const BOOK_STATUSES = {
-	unowned: "持ってない",
+	unowned: "未所持",
 	interested: "気になる",
 	reading: "途中",
 	completed: "読了",
+	abandoned: "挫折",
 } as const;
 
 export type BookStatus = keyof typeof BOOK_STATUSES;
+
+export const BOOK_VISIBILITY = {
+	public: "公開",
+	private: "非公開",
+} as const;
+
+export type BookVisibility = keyof typeof BOOK_VISIBILITY;
 
 export const GENRES = [
 	"小説・文学",
@@ -66,5 +74,7 @@ export function getStatusColor(status: BookStatus): string {
 			return "text-blue-400 bg-blue-500/20";
 		case "completed":
 			return "text-green-400 bg-green-500/20";
+		case "abandoned":
+			return "text-red-400 bg-red-500/20";
 	}
 }
