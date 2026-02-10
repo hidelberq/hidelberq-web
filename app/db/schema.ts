@@ -217,6 +217,48 @@ export const userProfiles = sqliteTable("user_profiles", {
 	),
 });
 
+// レビュー（SNS機能）
+export const bookReviews = sqliteTable("book_reviews", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	memberId: text("member_id").notNull(),
+	personalBookId: integer("personal_book_id"),
+	// 本の情報（JOINを避けるための非正規化）
+	bookTitle: text("book_title").notNull(),
+	bookAuthor: text("book_author").notNull(),
+	bookIsbn: text("book_isbn"),
+	bookCoverImageUrl: text("book_cover_image_url"),
+	// レビュー内容
+	title: text("title"),
+	content: text("content").notNull(),
+	rating: integer("rating"), // 1-5
+	containsSpoiler: integer("contains_spoiler", { mode: "boolean" })
+		.notNull()
+		.default(false),
+	// メタ（非正規化カウンター）
+	likesCount: integer("likes_count").notNull().default(0),
+	commentsCount: integer("comments_count").notNull().default(0),
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
+// アクティビティフィード（SNS機能）
+export const bookActivities = sqliteTable("book_activities", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	memberId: text("member_id").notNull(),
+	type: text("type").notNull(), // "book_added" | "status_changed" | "review_posted" | "started_reading" | "completed_reading"
+	targetType: text("target_type").notNull(), // "book" | "review"
+	targetId: integer("target_id").notNull(),
+	// スナップショットデータ（JOINを避けるための非正規化）
+	metadata: text("metadata").notNull(), // JSON
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const scrapedArticles = sqliteTable("scraped_articles", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	siteId: text("site_id").notNull(),

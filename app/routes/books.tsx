@@ -283,12 +283,54 @@ export default function Books({ actionData }: Route.ComponentProps) {
 								</span>
 							</Link>
 
-							{/* ユーザーを探す */}
+							{/* フィード */}
 							<Link
-								to="/tsundoku_2_0/users"
+								to="/tsundoku_2_0/feed"
+								className="group relative flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-6 py-5 transition-all duration-300 hover:border-rose-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-rose-500/10"
+							>
+								<div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500/30 to-pink-600/30 text-2xl flex-shrink-0">
+									📢
+								</div>
+								<div className="flex-1 min-w-0">
+									<h2 className="text-lg font-semibold text-white mb-0.5">
+										フィード
+									</h2>
+									<p className="text-sm text-purple-200/60">
+										みんなの読書アクティビティ
+									</p>
+								</div>
+								<span className="text-purple-300/40 group-hover:text-rose-300 transition-colors">
+									&rarr;
+								</span>
+							</Link>
+
+							{/* レビュー一覧 */}
+							<Link
+								to="/tsundoku_2_0/reviews"
 								className="group relative flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-6 py-5 transition-all duration-300 hover:border-emerald-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-emerald-500/10"
 							>
 								<div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/30 to-teal-600/30 text-2xl flex-shrink-0">
+									✍️
+								</div>
+								<div className="flex-1 min-w-0">
+									<h2 className="text-lg font-semibold text-white mb-0.5">
+										レビュー一覧
+									</h2>
+									<p className="text-sm text-purple-200/60">
+										みんなの本のレビューを読む
+									</p>
+								</div>
+								<span className="text-purple-300/40 group-hover:text-emerald-300 transition-colors">
+									&rarr;
+								</span>
+							</Link>
+
+							{/* ユーザーを探す */}
+							<Link
+								to="/tsundoku_2_0/users"
+								className="group relative flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-6 py-5 transition-all duration-300 hover:border-sky-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-sky-500/10"
+							>
+								<div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/30 to-blue-600/30 text-2xl flex-shrink-0">
 									🔍
 								</div>
 								<div className="flex-1 min-w-0">
@@ -299,7 +341,7 @@ export default function Books({ actionData }: Route.ComponentProps) {
 										他のユーザーの本棚を閲覧
 									</p>
 								</div>
-								<span className="text-purple-300/40 group-hover:text-emerald-300 transition-colors">
+								<span className="text-purple-300/40 group-hover:text-sky-300 transition-colors">
 									&rarr;
 								</span>
 							</Link>
