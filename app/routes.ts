@@ -14,6 +14,8 @@ export default [
 	route("tsundoku_2_0", "routes/books.tsx"),
 	route("tsundoku_2_0/my", "routes/books.my.tsx"),
 	route("tsundoku_2_0/my/add", "routes/books.my-add.tsx"),
+	route("tsundoku_2_0/my/photo-add", "routes/books.my-photo-add.tsx"),
+	route("api/tsundoku_2_0/recognize", "routes/api.books-recognize.ts"),
 	route("tsundoku_2_0/my/book/:personalBookId", "routes/books.my-detail.tsx"),
 	route("tsundoku_2_0/:groupCode", "routes/books.group.tsx"),
 	route("tsundoku_2_0/:groupCode/add", "routes/books.add.tsx"),

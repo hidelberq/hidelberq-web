@@ -199,6 +199,26 @@ export default function BooksMyAdd({ actionData }: Route.ComponentProps) {
 					本を追加
 				</h1>
 
+				{/* 写真から追加リンク */}
+				<Link
+					to="/tsundoku_2_0/my/photo-add"
+					className="w-full max-w-lg mb-8 flex items-center gap-3 rounded-xl bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 px-4 py-3 hover:from-cyan-500/20 hover:to-blue-500/20 transition-all group"
+				>
+					<div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-500/30 transition-colors">
+						<svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+							<path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+							<path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+						</svg>
+					</div>
+					<div className="min-w-0">
+						<p className="text-sm font-medium text-cyan-200">写真から本を追加</p>
+						<p className="text-xs text-purple-300/40">積まれた本を撮影して、まとめてリストに追加</p>
+					</div>
+					<svg className="w-4 h-4 text-purple-300/40 ml-auto flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+						<path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+					</svg>
+				</Link>
+
 				{/* Google Books 検索 */}
 				<section className="w-full max-w-lg mb-8">
 					<h2 className="text-sm font-semibold uppercase tracking-widest text-fuchsia-400/80 mb-4">
