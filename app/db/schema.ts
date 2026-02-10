@@ -144,7 +144,7 @@ export const bookMemberStatuses = sqliteTable("book_member_statuses", {
 	bookId: integer("book_id").notNull(),
 	memberId: text("member_id").notNull(),
 	memberName: text("member_name").notNull(),
-	status: text("status").notNull().default("interested"), // unowned, interested, reading, completed
+	status: text("status").notNull().default("tsundoku"), // wishlist, tsundoku, reading, completed, abandoned
 	difficulty: integer("difficulty"), // 1-5
 	importance: integer("importance"), // 1-5
 	recommendation: integer("recommendation"), // 1-5
@@ -173,7 +173,7 @@ export const personalBooks = sqliteTable("personal_books", {
 	pageCount: integer("page_count"),
 	genre: text("genre"),
 	// ステータス・評価
-	status: text("status").notNull().default("interested"), // unowned, interested, reading, completed, abandoned
+	status: text("status").notNull().default("tsundoku"), // wishlist, tsundoku, reading, completed, abandoned
 	difficulty: integer("difficulty"), // 1-5
 	importance: integer("importance"), // 1-5
 	recommendation: integer("recommendation"), // 1-5

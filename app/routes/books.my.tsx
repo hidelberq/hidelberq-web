@@ -92,8 +92,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		total: allBooks.length,
 		completed: allBooks.filter((b) => b.status === "completed").length,
 		reading: allBooks.filter((b) => b.status === "reading").length,
-		interested: allBooks.filter((b) => b.status === "interested").length,
-		unowned: allBooks.filter((b) => b.status === "unowned").length,
+		tsundoku: allBooks.filter((b) => b.status === "tsundoku").length,
+		wishlist: allBooks.filter((b) => b.status === "wishlist").length,
 		abandoned: allBooks.filter((b) => b.status === "abandoned").length,
 		totalPages: allBooks
 			.filter((b) => b.status === "completed" && b.pageCount)
@@ -181,9 +181,9 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 					<div className="w-full max-w-2xl mb-8 grid grid-cols-3 sm:grid-cols-6 gap-2">
 						<StatCard label="合計" value={stats.total} color="text-white" />
 						<StatCard label="読了" value={stats.completed} color="text-green-400" />
-						<StatCard label="途中" value={stats.reading} color="text-blue-400" />
-						<StatCard label="気になる" value={stats.interested} color="text-yellow-400" />
-						<StatCard label="未所持" value={stats.unowned} color="text-gray-400" />
+						<StatCard label="読書中" value={stats.reading} color="text-blue-400" />
+						<StatCard label="積読中" value={stats.tsundoku} color="text-purple-400" />
+						<StatCard label="ほしい" value={stats.wishlist} color="text-yellow-400" />
 						<StatCard label="挫折" value={stats.abandoned} color="text-red-400" />
 					</div>
 				)}

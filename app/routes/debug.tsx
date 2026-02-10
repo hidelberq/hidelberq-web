@@ -1412,9 +1412,9 @@ function HeroImageCard({
 }
 
 const STATUS_LABELS: Record<string, string> = {
-	unowned: "持ってない",
-	interested: "気になる",
-	reading: "途中",
+	wishlist: "ほしい",
+	tsundoku: "積読中",
+	reading: "読書中",
 	completed: "読了",
 	abandoned: "挫折",
 };
@@ -1578,7 +1578,7 @@ function BookManagementSection({
 											<span className={`text-[10px] px-1 py-0.5 rounded ${
 												pb.status === "completed" ? "bg-green-500/10 text-green-400" :
 												pb.status === "reading" ? "bg-blue-500/10 text-blue-400" :
-												pb.status === "interested" ? "bg-yellow-500/10 text-yellow-400" :
+												pb.status === "tsundoku" ? "bg-purple-500/10 text-purple-400" :
 												pb.status === "abandoned" ? "bg-red-500/10 text-red-400" :
 												"bg-gray-800 text-gray-400"
 											}`}>
@@ -1844,7 +1844,7 @@ function BookManagementSection({
 																							<span className={`px-1 py-0.5 rounded ${
 																								s.status === "completed" ? "bg-green-500/10 text-green-400" :
 																								s.status === "reading" ? "bg-blue-500/10 text-blue-400" :
-																								s.status === "interested" ? "bg-yellow-500/10 text-yellow-400" :
+																								s.status === "tsundoku" ? "bg-purple-500/10 text-purple-400" :
 																								"bg-gray-800 text-gray-400"
 																							}`}>
 																								{STATUS_LABELS[s.status] ?? s.status}

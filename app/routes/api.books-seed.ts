@@ -94,12 +94,12 @@ function mapStatus(raw: string): { status: string; memo: string | null } | null 
 	if (t === "読了" || t === "了") return { status: "completed", memo: null };
 	if (t === "一応読了") return { status: "completed", memo: "一応読了" };
 	if (t === "読んだ面白かった") return { status: "completed", memo: "読んだ面白かった" };
-	if (t === "持ってない") return { status: "unowned", memo: null };
+	if (t === "持ってない") return { status: "wishlist", memo: null };
 	if (t === "途中") return { status: "reading", memo: null };
 	if (t === "未了") return { status: "reading", memo: null };
-	if (t === "興味あり") return { status: "interested", memo: null };
+	if (t === "興味あり") return { status: "wishlist", memo: null };
 	if (t.startsWith("挫折")) return { status: "abandoned", memo: t };
-	return { status: "interested", memo: t };
+	return { status: "tsundoku", memo: t };
 }
 
 // 難易度パース (★5 → 5)

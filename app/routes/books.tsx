@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
-import { eq, and, or } from "drizzle-orm";
-import { bookGroups, bookGroupMembers, personalBooks } from "~/db/schema";
+import { eq, and, or, desc, sql } from "drizzle-orm";
+import { bookGroups, bookGroupMembers, personalBooks, bookActivities, userProfiles } from "~/db/schema";
 import { generateGroupCode } from "~/books/types";
 import type { Route } from "./+types/books";
 import { useState, useEffect } from "react";
@@ -14,6 +14,98 @@ export function meta(): Route.MetaDescriptors {
 			content: "個人の積読リストとグループ積読を管理するアプリ",
 		},
 	];
+}
+
+interface ActivityMetadata {
+	displayName: string;
+	avatarEmoji: string;
+	bookTitle?: string;
+	bookAuthor?: string;
+	bookCoverImageUrl?: string | null;
+	reviewTitle?: string | null;
+	reviewSnippet?: string;
+	rating?: number | null;
+	oldStatus?: string;
+	newStatus?: string;
+}
+
+export async function loader({ context }: Route.LoaderArgs) {
+	const db = drizzle(context.cloudflare.env.DB);
+
+	const activities = await db
+		.select()
+		.from(bookActivities)
+		.orderBy(desc(bookActivities.createdAt))
+		.limit(10);
+
+	const memberIds = [...new Set(activities.map((a) => a.memberId))];
+	let profiles: Array<{ memberId: string; displayName: string; avatarEmoji: string }> = [];
+	if (memberIds.length > 0) {
+		profiles = await db
+			.select({
+				memberId: userProfiles.memberId,
+				displayName: userProfiles.displayName,
+				avatarEmoji: userProfiles.avatarEmoji,
+			})
+			.from(userProfiles)
+			.where(sql`${userProfiles.memberId} IN (${sql.join(memberIds.map((id) => sql`${id}`), sql`,`)})`);
+	}
+	const profileMap = new Map(profiles.map((p) => [p.memberId, p]));
+
+	return {
+		activities: activities.map((a) => {
+			const metadata = JSON.parse(a.metadata) as ActivityMetadata;
+			const profile = profileMap.get(a.memberId);
+			return {
+				id: a.id,
+				memberId: a.memberId,
+				type: a.type,
+				targetId: a.targetId,
+				displayName: profile?.displayName ?? metadata.displayName ?? "不明",
+				avatarEmoji: profile?.avatarEmoji ?? metadata.avatarEmoji ?? "📚",
+				metadata,
+				createdAt: a.createdAt?.getTime() ?? Date.now(),
+			};
+		}),
+	};
+}
+
+const STATUS_LABELS: Record<string, string> = {
+	wishlist: "ほしい",
+	tsundoku: "積読中",
+	reading: "読書中",
+	completed: "読了",
+	abandoned: "挫折",
+};
+
+function getActivityMessage(type: string, metadata: ActivityMetadata): string {
+	switch (type) {
+		case "review_posted":
+			return `「${metadata.bookTitle}」のレビューを投稿`;
+		case "started_reading":
+			return `「${metadata.bookTitle}」を読み始めた`;
+		case "completed_reading":
+			return `「${metadata.bookTitle}」を読了`;
+		case "book_added":
+			return `「${metadata.bookTitle}」を積んだ`;
+		case "status_changed": {
+			const newLabel = STATUS_LABELS[metadata.newStatus ?? ""] ?? metadata.newStatus;
+			return `「${metadata.bookTitle}」→「${newLabel}」`;
+		}
+		default:
+			return `「${metadata.bookTitle ?? ""}」`;
+	}
+}
+
+function getActivityIcon(type: string): string {
+	switch (type) {
+		case "review_posted": return "✍️";
+		case "started_reading": return "📖";
+		case "completed_reading": return "🎉";
+		case "book_added": return "📚";
+		case "status_changed": return "🔄";
+		default: return "📌";
+	}
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -146,7 +238,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 	return { error: "不明な操作です" };
 }
 
-export default function Books({ actionData }: Route.ComponentProps) {
+export default function Books({ actionData, loaderData }: Route.ComponentProps) {
+	const { activities } = loaderData;
 	const navigate = useNavigate();
 	const [memberId, setMemberId] = useState("");
 	const [displayName, setDisplayName] = useState("");
@@ -283,27 +376,6 @@ export default function Books({ actionData }: Route.ComponentProps) {
 								</span>
 							</Link>
 
-							{/* フィード */}
-							<Link
-								to="/tsundoku_2_0/feed"
-								className="group relative flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-6 py-5 transition-all duration-300 hover:border-rose-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-rose-500/10"
-							>
-								<div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500/30 to-pink-600/30 text-2xl flex-shrink-0">
-									📢
-								</div>
-								<div className="flex-1 min-w-0">
-									<h2 className="text-lg font-semibold text-white mb-0.5">
-										フィード
-									</h2>
-									<p className="text-sm text-purple-200/60">
-										みんなの読書アクティビティ
-									</p>
-								</div>
-								<span className="text-purple-300/40 group-hover:text-rose-300 transition-colors">
-									&rarr;
-								</span>
-							</Link>
-
 							{/* レビュー一覧 */}
 							<Link
 								to="/tsundoku_2_0/reviews"
@@ -389,6 +461,67 @@ export default function Books({ actionData }: Route.ComponentProps) {
 								</span>
 							</button>
 						</div>
+
+						{/* フィード */}
+						{activities.length > 0 && (
+							<section className="w-full max-w-md mb-8">
+								<h2 className="text-sm font-semibold uppercase tracking-widest text-rose-400/80 mb-4">
+									みんなのアクティビティ
+								</h2>
+								<div className="grid gap-2">
+									{activities.map((activity) => {
+										const date = new Date(activity.createdAt);
+										const now = Date.now();
+										const diff = now - activity.createdAt;
+										let timeStr: string;
+										if (diff < 60 * 60 * 1000) {
+											timeStr = `${Math.max(1, Math.floor(diff / (60 * 1000)))}分前`;
+										} else if (diff < 24 * 60 * 60 * 1000) {
+											timeStr = `${Math.floor(diff / (60 * 60 * 1000))}時間前`;
+										} else {
+											timeStr = `${date.getMonth() + 1}/${date.getDate()}`;
+										}
+										const message = getActivityMessage(activity.type, activity.metadata);
+										const icon = getActivityIcon(activity.type);
+
+										return (
+											<div
+												key={activity.id}
+												className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+											>
+												<Link
+													to={`/tsundoku_2_0/user/${activity.memberId}`}
+													className="text-xl flex-shrink-0"
+												>
+													{activity.avatarEmoji}
+												</Link>
+												<div className="flex-1 min-w-0">
+													<p className="text-sm text-purple-200/80 truncate">
+														<Link
+															to={`/tsundoku_2_0/user/${activity.memberId}`}
+															className="font-semibold text-white hover:text-fuchsia-200 transition-colors"
+														>
+															{activity.displayName}
+														</Link>
+														{" "}
+														{icon} {message}
+													</p>
+												</div>
+												<span className="text-xs text-purple-300/40 flex-shrink-0">
+													{timeStr}
+												</span>
+											</div>
+										);
+									})}
+								</div>
+								<Link
+									to="/tsundoku_2_0/feed"
+									className="block text-center text-sm text-purple-300/50 hover:text-fuchsia-300 transition-colors mt-3"
+								>
+									すべてのアクティビティを見る &rarr;
+								</Link>
+							</section>
+						)}
 
 						{/* 参加済みグループ */}
 						{savedGroups.length > 0 && (

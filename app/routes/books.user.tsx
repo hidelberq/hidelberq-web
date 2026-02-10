@@ -68,8 +68,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 		total: publicBooksAll.length,
 		completed: publicBooksAll.filter((b) => b.status === "completed").length,
 		reading: publicBooksAll.filter((b) => b.status === "reading").length,
-		interested: publicBooksAll.filter((b) => b.status === "interested")
-			.length,
+		tsundoku: publicBooksAll.filter((b) => b.status === "tsundoku").length,
 	};
 
 	return {
@@ -150,14 +149,14 @@ export default function BookUserProfile({
 								color="text-green-400"
 							/>
 							<StatCard
-								label="途中"
+								label="読書中"
 								value={stats.reading}
 								color="text-blue-400"
 							/>
 							<StatCard
-								label="気になる"
-								value={stats.interested}
-								color="text-yellow-400"
+								label="積読中"
+								value={stats.tsundoku}
+								color="text-purple-400"
 							/>
 						</div>
 					)}

@@ -160,7 +160,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 				? Number(formData.get("pageCount"))
 				: null,
 			genre: (formData.get("genre") as string) || null,
-			status: status || "interested",
+			status: status || "tsundoku",
 			difficulty,
 			importance,
 			recommendation,

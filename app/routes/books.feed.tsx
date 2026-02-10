@@ -78,9 +78,9 @@ export async function loader({ context }: Route.LoaderArgs) {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-	unowned: "未所持",
-	interested: "気になる",
-	reading: "途中",
+	wishlist: "ほしい",
+	tsundoku: "積読中",
+	reading: "読書中",
 	completed: "読了",
 	abandoned: "挫折",
 };

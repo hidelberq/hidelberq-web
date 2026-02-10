@@ -34,7 +34,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 		return { error: "タイトルと著者名は必須です" };
 	}
 
-	const status = (formData.get("status") as BookStatus) || "interested";
+	const status = (formData.get("status") as BookStatus) || "tsundoku";
 	const visibility = (formData.get("visibility") as BookVisibility) || "public";
 
 	const tagsRaw = (formData.get("tags") as string)?.trim();
@@ -407,7 +407,7 @@ export default function BooksMyAdd({ actionData }: Route.ComponentProps) {
 											type="radio"
 											name="status"
 											value={key}
-											defaultChecked={key === "interested"}
+											defaultChecked={key === "tsundoku"}
 											className="accent-fuchsia-500"
 										/>
 										<span className="text-sm text-purple-200">{label}</span>

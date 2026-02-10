@@ -1,7 +1,7 @@
 export const BOOK_STATUSES = {
-	unowned: "未所持",
-	interested: "気になる",
-	reading: "途中",
+	wishlist: "ほしい",
+	tsundoku: "積読中",
+	reading: "読書中",
 	completed: "読了",
 	abandoned: "挫折",
 } as const;
@@ -71,10 +71,10 @@ export const AVATAR_EMOJIS = [
 
 export function getStatusColor(status: BookStatus): string {
 	switch (status) {
-		case "unowned":
-			return "text-gray-400 bg-gray-500/20";
-		case "interested":
+		case "wishlist":
 			return "text-yellow-400 bg-yellow-500/20";
+		case "tsundoku":
+			return "text-purple-400 bg-purple-500/20";
 		case "reading":
 			return "text-blue-400 bg-blue-500/20";
 		case "completed":
