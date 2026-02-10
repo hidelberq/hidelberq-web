@@ -117,10 +117,10 @@ export default function BookReviewDetail({
 								</div>
 							)}
 							<div className="flex-1 min-w-0">
-								<h2 className="text-lg font-bold text-white">
+								<h2 className="text-lg font-bold text-white break-words">
 									{review.bookTitle}
 								</h2>
-								<p className="text-sm text-purple-300/60">
+								<p className="text-sm text-purple-300/60 break-words">
 									{review.bookAuthor}
 								</p>
 								{review.rating !== null && (
@@ -133,7 +133,7 @@ export default function BookReviewDetail({
 
 						{/* レビュー内容 */}
 						{review.title && (
-							<h3 className="text-xl font-bold text-white mb-3">
+							<h3 className="text-xl font-bold text-white mb-3 break-words">
 								{review.title}
 							</h3>
 						)}

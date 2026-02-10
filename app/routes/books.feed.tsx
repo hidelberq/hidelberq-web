@@ -189,17 +189,17 @@ export default function BookFeed({ loaderData }: Route.ComponentProps) {
 											<div className="flex items-center gap-2 mb-1">
 												<Link
 													to={`/tsundoku_2_0/user/${activity.memberId}`}
-													className="text-sm font-semibold text-white hover:text-fuchsia-200 transition-colors"
+													className="text-sm font-semibold text-white hover:text-fuchsia-200 transition-colors truncate flex-shrink-0 max-w-[50%]"
 												>
 													{activity.displayName}
 												</Link>
-												<span className="text-xs text-purple-300/40">
+												<span className="text-xs text-purple-300/40 flex-shrink-0">
 													{dateStr}
 												</span>
 											</div>
 
 											{/* アクティビティメッセージ */}
-											<p className="text-sm text-purple-200/70">
+											<p className="text-sm text-purple-200/70 break-words">
 												{icon} {message}
 											</p>
 

@@ -211,7 +211,7 @@ function ReviewCard({
 						</p>
 					)}
 					{review.title && (
-						<p className="text-sm font-semibold text-white mt-1">
+						<p className="text-sm font-semibold text-white mt-1 break-words">
 							{review.title}
 						</p>
 					)}

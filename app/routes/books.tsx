@@ -495,7 +495,7 @@ export default function Books({ actionData, loaderData }: Route.ComponentProps) 
 												>
 													{activity.avatarEmoji}
 												</Link>
-												<div className="flex-1 min-w-0">
+												<div className="flex-1 min-w-0 overflow-hidden">
 													<p className="text-sm text-purple-200/80 truncate">
 														<Link
 															to={`/tsundoku_2_0/user/${activity.memberId}`}

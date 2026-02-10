@@ -489,10 +489,10 @@ export default function BookDetail({
 										</div>
 									)}
 									<div className="flex-1 min-w-0">
-										<h1 className="text-xl font-bold text-white mb-1">
+										<h1 className="text-xl font-bold text-white mb-1 break-words">
 											{book.title}
 										</h1>
-										<p className="text-purple-200/80 mb-2">
+										<p className="text-purple-200/80 mb-2 break-words">
 											{book.author}
 										</p>
 										{myStatus && (

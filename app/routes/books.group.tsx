@@ -240,12 +240,12 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 				</Link>
 
 				{/* ヘッダー */}
-				<div className="text-center mb-8">
-					<h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-2 bg-gradient-to-r from-white via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent">
+				<div className="text-center mb-8 w-full max-w-2xl">
+					<h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-2 bg-gradient-to-r from-white via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent break-words">
 						{group.name}
 					</h1>
 					{group.description && (
-						<p className="text-purple-200/60 mb-3">
+						<p className="text-purple-200/60 mb-3 break-words">
 							{group.description}
 						</p>
 					)}
