@@ -202,12 +202,15 @@ export async function action({ request, context }: Route.ActionArgs) {
 	}
 
 	// base64 に変換（Gemini Vision 用）
-	let base64 = "";
+	// チャンクごとにバイナリ文字列を構築してから一括で btoa する
+	// （チャンクごとに btoa するとパディングが混入して不正な base64 になる）
+	let binaryString = "";
 	const chunkSize = 8192;
 	for (let i = 0; i < bytes.length; i += chunkSize) {
 		const chunk = bytes.subarray(i, i + chunkSize);
-		base64 += btoa(String.fromCharCode(...chunk));
+		binaryString += String.fromCharCode(...chunk);
 	}
+	const base64 = btoa(binaryString);
 
 	// Gemini Vision で書籍を認識
 	const ai = new GoogleGenAI({ apiKey: geminiApiKey });
