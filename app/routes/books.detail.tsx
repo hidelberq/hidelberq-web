@@ -286,7 +286,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 			description: book.description,
 			pageCount: book.pageCount,
 			genre: book.genre,
-			status: myStatus?.status ?? "interested",
+			status: myStatus?.status ?? "tsundoku",
 			difficulty: myStatus?.difficulty ?? null,
 			importance: myStatus?.importance ?? null,
 			recommendation: myStatus?.recommendation ?? null,

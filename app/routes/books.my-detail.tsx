@@ -8,6 +8,8 @@ import {
 	bookGroupMembers,
 	books,
 	bookMemberStatuses,
+	bookActivities,
+	userProfiles,
 } from "~/db/schema";
 import {
 	GENRES,
@@ -246,6 +248,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 			? JSON.stringify(tagsRaw.split(",").map((t) => t.trim()).filter(Boolean))
 			: null;
 
+		const oldStatus = book.status;
+
 		await db
 			.update(personalBooks)
 			.set({
@@ -260,6 +264,37 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 				tags,
 			})
 			.where(eq(personalBooks.id, bookId));
+
+		// ステータスが変更された場合、アクティビティを記録
+		if (status !== oldStatus) {
+			const [profile] = await db
+				.select()
+				.from(userProfiles)
+				.where(eq(userProfiles.memberId, memberId))
+				.limit(1);
+			const displayName = profile?.displayName ?? book.memberName;
+			const avatarEmoji = profile?.avatarEmoji ?? "📚";
+
+			let activityType = "status_changed";
+			if (status === "reading") activityType = "started_reading";
+			else if (status === "completed") activityType = "completed_reading";
+
+			await db.insert(bookActivities).values({
+				memberId,
+				type: activityType,
+				targetType: "book",
+				targetId: bookId,
+				metadata: JSON.stringify({
+					displayName,
+					avatarEmoji,
+					bookTitle: book.title,
+					bookAuthor: book.author,
+					bookCoverImageUrl: book.coverImageUrl,
+					oldStatus: oldStatus,
+					newStatus: status,
+				}),
+			});
+		}
 
 		return { success: true, intent: "updateStatus" };
 	}
@@ -697,6 +732,12 @@ export default function BookMyDetail({
 										>
 											削除
 										</button>
+										<Link
+											to={`/tsundoku_2_0/my/book/${book.id}/review`}
+											className="text-sm rounded-lg bg-emerald-500/20 border border-emerald-500/30 px-4 py-2 text-emerald-200 hover:bg-emerald-500/30 transition-colors"
+										>
+											レビューを書く
+										</Link>
 										{myGroups.length > 0 && (
 											<button
 												type="button"
@@ -1133,11 +1174,12 @@ export default function BookMyDetail({
 							{overlaps.publicUsers.length > 0 && (
 								<div className="grid gap-2 mb-3">
 									{overlaps.publicUsers.map((user) => (
-										<div
+										<Link
 											key={user.memberId}
-											className="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 px-4 py-2.5"
+											to={`/tsundoku_2_0/user/${user.memberId}`}
+											className="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 hover:bg-white/10 hover:border-fuchsia-500/30 transition-all"
 										>
-											<span className="text-sm text-white font-medium">
+											<span className="text-sm text-white font-medium hover:text-fuchsia-200 transition-colors">
 												{user.memberName}
 											</span>
 											<span
@@ -1145,7 +1187,7 @@ export default function BookMyDetail({
 											>
 												{BOOK_STATUSES[user.status as BookStatus]}
 											</span>
-										</div>
+										</Link>
 									))}
 								</div>
 							)}

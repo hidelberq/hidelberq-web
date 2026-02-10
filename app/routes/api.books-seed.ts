@@ -5,6 +5,8 @@ import {
 	bookGroupMembers,
 	books,
 	bookMemberStatuses,
+	personalBooks,
+	userProfiles,
 } from "~/db/schema";
 import { generateGroupCode, generateMemberId } from "~/books/types";
 import type { Route } from "./+types/api.books-seed";
@@ -92,12 +94,12 @@ function mapStatus(raw: string): { status: string; memo: string | null } | null 
 	if (t === "読了" || t === "了") return { status: "completed", memo: null };
 	if (t === "一応読了") return { status: "completed", memo: "一応読了" };
 	if (t === "読んだ面白かった") return { status: "completed", memo: "読んだ面白かった" };
-	if (t === "持ってない") return { status: "unowned", memo: null };
+	if (t === "持ってない") return { status: "wishlist", memo: null };
 	if (t === "途中") return { status: "reading", memo: null };
 	if (t === "未了") return { status: "reading", memo: null };
-	if (t === "興味あり") return { status: "interested", memo: null };
+	if (t === "興味あり") return { status: "wishlist", memo: null };
 	if (t.startsWith("挫折")) return { status: "abandoned", memo: t };
-	return { status: "interested", memo: t };
+	return { status: "tsundoku", memo: t };
 }
 
 // 難易度パース (★5 → 5)
@@ -1162,11 +1164,148 @@ export async function action({ request, context }: Route.ActionArgs) {
 		}
 	}
 
+	// プロフィールも自動作成
+	const profileResults = await seedProfiles(db, memberIds);
+
 	return Response.json({
 		success: true,
 		groupCode,
 		insertedBooks,
 		insertedStatuses,
 		members: Object.keys(memberIds).length,
+		profiles: profileResults,
+	});
+}
+
+// メンバーごとの仮プロフィール設定
+const PROFILE_PRESETS: Record<string, { emoji: string; bio: string; genre: string }> = {
+	hidelberq: {
+		emoji: "🧠",
+		bio: "Web開発と哲学が好き。宮台真司、吉本隆明あたりが原点。",
+		genre: "哲学・思想",
+	},
+	いのまり: {
+		emoji: "🌱",
+		bio: "すみっこ塾メンバー。読書の幅を広げたい。",
+		genre: "",
+	},
+	はっとり: {
+		emoji: "📕",
+		bio: "多読派。古典から現代思想、文学、科学まで幅広く。モリエール推し。",
+		genre: "小説・文学",
+	},
+	りょうま: {
+		emoji: "💡",
+		bio: "心理学・精神医学に関心あり。プラトンも読む。",
+		genre: "心理学",
+	},
+	しゅんた: {
+		emoji: "📖",
+		bio: "村上春樹好き。",
+		genre: "小説・文学",
+	},
+	えいすけ: {
+		emoji: "🔬",
+		bio: "見田宗介を全部読んだ。社会学と思想系。",
+		genre: "社会学",
+	},
+	ゆき: {
+		emoji: "📗",
+		bio: "すみっこ塾メンバー。",
+		genre: "",
+	},
+	まさち: {
+		emoji: "📘",
+		bio: "社会学に興味あり。",
+		genre: "社会学",
+	},
+};
+
+async function seedProfiles(
+	db: ReturnType<typeof drizzle>,
+	knownMemberIds?: Record<string, string>,
+) {
+	// 1. bookGroupMembers から全ユニークユーザーを取得
+	const groupMembers = await db
+		.select({
+			memberId: bookGroupMembers.memberId,
+			displayName: bookGroupMembers.displayName,
+		})
+		.from(bookGroupMembers);
+
+	// 2. personalBooks から全ユニークユーザーを取得
+	const personalBookUsers = await db
+		.select({
+			memberId: personalBooks.memberId,
+			displayName: personalBooks.memberName,
+		})
+		.from(personalBooks);
+
+	// 3. マージして重複排除（memberId ベース）
+	const userMap = new Map<string, string>();
+	for (const m of groupMembers) {
+		if (!userMap.has(m.memberId)) {
+			userMap.set(m.memberId, m.displayName);
+		}
+	}
+	for (const p of personalBookUsers) {
+		if (!userMap.has(p.memberId)) {
+			userMap.set(p.memberId, p.displayName);
+		}
+	}
+
+	// knownMemberIds がある場合はそちらも追加
+	if (knownMemberIds) {
+		for (const [name, id] of Object.entries(knownMemberIds)) {
+			if (!userMap.has(id)) {
+				userMap.set(id, name);
+			}
+		}
+	}
+
+	// 4. 既存プロフィールを取得
+	const existingProfiles = await db
+		.select({ memberId: userProfiles.memberId })
+		.from(userProfiles);
+	const existingIds = new Set(existingProfiles.map((p) => p.memberId));
+
+	// 5. プロフィール作成
+	let created = 0;
+	let skipped = 0;
+
+	for (const [memberId, displayName] of userMap.entries()) {
+		if (existingIds.has(memberId)) {
+			skipped++;
+			continue;
+		}
+
+		const preset = PROFILE_PRESETS[displayName];
+		await db.insert(userProfiles).values({
+			memberId,
+			displayName,
+			bio: preset?.bio ?? null,
+			favoriteGenre: preset?.genre || null,
+			avatarEmoji: preset?.emoji ?? "📚",
+			isPublic: true,
+		});
+		created++;
+	}
+
+	return { created, skipped, total: userMap.size };
+}
+
+// GET: プロフィールのみ一括作成
+export async function loader({ request, context }: Route.LoaderArgs) {
+	const url = new URL(request.url);
+	if (url.searchParams.get("action") !== "seed-profiles") {
+		return Response.json({ error: "Use ?action=seed-profiles" }, { status: 400 });
+	}
+
+	const db = drizzle(context.cloudflare.env.DB);
+	const results = await seedProfiles(db);
+
+	return Response.json({
+		success: true,
+		profiles: results,
 	});
 }
