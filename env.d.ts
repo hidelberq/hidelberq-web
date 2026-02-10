@@ -5,5 +5,6 @@ declare namespace Cloudflare {
 		GEMINI_API_KEY: string;
 		WORKFLOWY_API_KEY: string;
 		ACTIVITY_API_KEY: string;
+		GOOGLE_BOOKS_API_KEY: string;
 	}
 }

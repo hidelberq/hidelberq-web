@@ -91,6 +91,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	googleBooksUrl.searchParams.set("langRestrict", "ja");
 	googleBooksUrl.searchParams.set("printType", "books");
 
+	// API キーが設定されていれば使用（レート制限緩和）
+	const apiKey = context.cloudflare.env.GOOGLE_BOOKS_API_KEY;
+	if (apiKey) {
+		googleBooksUrl.searchParams.set("key", apiKey);
+	}
+
 	const response = await fetch(googleBooksUrl.toString());
 
 	if (response.status === 429) {
