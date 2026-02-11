@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSubmit, useNavigation } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { personalBooks, bookActivities, userProfiles } from "~/db/schema";
@@ -100,6 +100,9 @@ export default function BooksMyPhotoAdd({
 	actionData,
 }: Route.ComponentProps) {
 	const navigate = useNavigate();
+	const submit = useSubmit();
+	const navigation = useNavigation();
+	const submitting = navigation.state === "submitting";
 	const [memberId, setMemberId] = useState("");
 	const [memberName, setMemberName] = useState("");
 	const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,7 +118,6 @@ export default function BooksMyPhotoAdd({
 	const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(
 		new Set(),
 	);
-	const [submitting, setSubmitting] = useState(false);
 
 	useEffect(() => {
 		const id = localStorage.getItem("bookMemberId") || "";
@@ -220,7 +222,7 @@ export default function BooksMyPhotoAdd({
 		}
 	};
 
-	const handleSubmit = async () => {
+	const handleSubmit = () => {
 		const selectedBooks = recognizedBooks.filter((_, i) =>
 			selectedIndexes.has(i),
 		);
@@ -229,34 +231,12 @@ export default function BooksMyPhotoAdd({
 			return;
 		}
 
-		setSubmitting(true);
-		try {
-			const formData = new FormData();
-			formData.append("memberId", memberId);
-			formData.append("memberName", memberName);
-			formData.append("books", JSON.stringify(selectedBooks));
+		const formData = new FormData();
+		formData.append("memberId", memberId);
+		formData.append("memberName", memberName);
+		formData.append("books", JSON.stringify(selectedBooks));
 
-			const res = await fetch("/tsundoku_2_0/my/photo-add", {
-				method: "POST",
-				body: formData,
-			});
-
-			const data = (await res.json()) as {
-				success?: boolean;
-				addedCount?: number;
-				error?: string;
-			};
-
-			if (data.success) {
-				navigate("/tsundoku_2_0/my");
-			} else {
-				setError(data.error || "追加に失敗しました");
-			}
-		} catch {
-			setError("通信エラーが発生しました");
-		} finally {
-			setSubmitting(false);
-		}
+		submit(formData, { method: "post" });
 	};
 
 	return (
