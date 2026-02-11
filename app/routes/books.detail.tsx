@@ -1,4 +1,4 @@
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useSearchParams, redirect } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, and, or } from "drizzle-orm";
 import {
@@ -308,7 +308,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 			.where(eq(bookMemberStatuses.bookId, book.id));
 		await db.delete(books).where(eq(books.id, book.id));
 
-		return { success: true, intent: "deleteBook" };
+		return redirect(`/tsundoku_2_0/${params.groupCode}`);
 	}
 
 	return { error: "不明な操作です" };
@@ -319,7 +319,6 @@ export default function BookDetail({
 	actionData,
 }: Route.ComponentProps) {
 	const { group, book, statuses, members, alreadyInPersonalList } = loaderData;
-	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [memberId, setMemberId] = useState("");
 	const [displayName, setDisplayName] = useState("");
@@ -361,9 +360,6 @@ export default function BookDetail({
 	}, [searchParams, setSearchParams]);
 
 	useEffect(() => {
-		if (actionData?.success && actionData.intent === "deleteBook") {
-			navigate(`/tsundoku_2_0/${group.groupCode}`);
-		}
 		if (actionData?.success && actionData.intent === "editBook") {
 			setEditing(false);
 		}
@@ -373,7 +369,7 @@ export default function BookDetail({
 		if (actionData?.success && actionData.intent === "addToPersonal") {
 			setAddedToPersonal(true);
 		}
-	}, [actionData, navigate, group.groupCode]);
+	}, [actionData]);
 
 	// 編集モード: Google Books 検索
 	const searchBooks = useCallback(async () => {

@@ -1,4 +1,4 @@
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useSearchParams, redirect } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, and, or, ne, sql } from "drizzle-orm";
 import {
@@ -337,7 +337,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 			);
 		await db.delete(personalBooks).where(eq(personalBooks.id, bookId));
 
-		return { success: true, intent: "deleteBook" };
+		return redirect("/tsundoku_2_0/my");
 	}
 
 	if (intent === "addToGroup") {
@@ -452,7 +452,6 @@ export default function BookMyDetail({
 	actionData,
 }: Route.ComponentProps) {
 	const { book, isOwner, overlaps, prerequisiteBooks, myOtherBooks, myGroups } = loaderData;
-	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [memberId, setMemberId] = useState("");
 	const [editing, setEditing] = useState(false);
@@ -492,9 +491,6 @@ export default function BookMyDetail({
 	}, [searchParams, setSearchParams]);
 
 	useEffect(() => {
-		if (actionData?.success && actionData.intent === "deleteBook") {
-			navigate("/tsundoku_2_0/my");
-		}
 		if (actionData?.success && actionData.intent === "editBook") {
 			setEditing(false);
 		}
@@ -507,7 +503,7 @@ export default function BookMyDetail({
 		if (actionData?.success && actionData.intent === "addToGroup") {
 			setShowGroupForm(false);
 		}
-	}, [actionData, navigate]);
+	}, [actionData]);
 
 	// 編集モード: Google Books 検索
 	const searchBooks = useCallback(async () => {
