@@ -256,6 +256,69 @@ export async function action({ request, context }: Route.ActionArgs) {
 		return { ok: true, intent: "book-manage", message: "前提本の関連を削除しました" };
 	}
 
+	// --- 積読 2.0: bookMemberStatuses から personalBooks へバックフィル ---
+	if (intent === "backfill-personal-books") {
+		const db = drizzle(context.cloudflare.env.DB);
+
+		// 全 bookMemberStatuses を取得
+		const allStatuses = await db.select().from(bookMemberStatuses);
+		// 全 books を取得（メタデータ用）
+		const allBooks = await db.select().from(books);
+		// 全 personalBooks を取得（重複チェック用）
+		const allPersonal = await db.select().from(personalBooks);
+
+		const booksMap = new Map(allBooks.map((b) => [b.id, b]));
+		let insertedCount = 0;
+
+		for (const status of allStatuses) {
+			const book = booksMap.get(status.bookId);
+			if (!book) continue;
+
+			// 既に personalBooks にあるかチェック（ISBN or タイトル+著者）
+			const alreadyExists = allPersonal.some(
+				(pb) =>
+					pb.memberId === status.memberId &&
+					((book.isbn && pb.isbn === book.isbn) ||
+						(pb.title === book.title && pb.author === book.author)),
+			);
+			if (alreadyExists) continue;
+
+			const inserted = await db
+				.insert(personalBooks)
+				.values({
+					memberId: status.memberId,
+					memberName: status.memberName,
+					title: book.title,
+					author: book.author,
+					isbn: book.isbn,
+					publishedYear: book.publishedYear,
+					publisher: book.publisher,
+					coverImageUrl: book.coverImageUrl,
+					description: book.description,
+					pageCount: book.pageCount,
+					genre: book.genre,
+					status: status.status,
+					difficulty: status.difficulty ?? null,
+					importance: status.importance ?? null,
+					recommendation: status.recommendation ?? null,
+					memo: status.memo ?? null,
+					startedAt: status.startedAt ?? null,
+					completedAt: status.completedAt ?? null,
+				})
+				.returning();
+
+			// 新しく挿入した分も allPersonal に追加（同じメンバーの別の本で重複しないように）
+			allPersonal.push(...inserted);
+			insertedCount++;
+		}
+
+		return {
+			ok: true,
+			intent: "book-manage",
+			message: `個人積読リストにバックフィル完了: ${insertedCount}件追加（${allStatuses.length}件のステータスを確認）`,
+		};
+	}
+
 	// --- 積読 2.0: 全データクリア ---
 	if (intent === "clear-all-book-data") {
 		const db = drizzle(context.cloudflare.env.DB);
@@ -1543,6 +1606,22 @@ function BookManagementSection({
 						<span>{showPersonalBooks ? "▼" : "▶"}</span>
 						個人積読リスト ({personalBookCount}冊)
 					</button>
+					<div className="flex items-center gap-2">
+					<bookFetcher.Form method="post">
+						<input type="hidden" name="intent" value="backfill-personal-books" />
+						<button
+							type="submit"
+							disabled={isBookAction}
+							className="text-xs text-purple-400 hover:text-purple-300 px-2 py-1 rounded border border-purple-400/30 hover:bg-purple-400/10 transition-colors disabled:opacity-50"
+							onClick={(e) => {
+								if (!confirm("グループのステータスから個人積読リストに不足データをバックフィルしますか？")) {
+									e.preventDefault();
+								}
+							}}
+						>
+							ステータスからバックフィル
+						</button>
+					</bookFetcher.Form>
 					<bookFetcher.Form method="post">
 						<input type="hidden" name="intent" value="clear-all-personal-books" />
 						<button
@@ -1558,6 +1637,7 @@ function BookManagementSection({
 							個人リスト全削除
 						</button>
 					</bookFetcher.Form>
+					</div>
 				</div>
 				{showPersonalBooks && (
 					<div className="space-y-2">
