@@ -1,6 +1,6 @@
 import { Link, useNavigate, useSubmit, useNavigation } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
-import { eq } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import { personalBooks, bookActivities, userProfiles } from "~/db/schema";
 import type { BookSearchResult } from "~/books/types";
 import type { Route } from "./+types/books.my-photo-add";
@@ -52,10 +52,35 @@ export async function action({ request, context }: Route.ActionArgs) {
 		.limit(1);
 
 	let addedCount = 0;
+	let skippedCount = 0;
 	for (const book of booksToAdd) {
 		const title = book.title?.trim();
 		const author = book.author?.trim();
 		if (!title || !author) continue;
+
+		// 重複チェック: ISBN またはタイトル+著者名で既に登録済みかを確認
+		const matchConditions = [];
+		if (book.isbn) {
+			matchConditions.push(eq(personalBooks.isbn, book.isbn));
+		}
+		matchConditions.push(
+			and(eq(personalBooks.title, title), eq(personalBooks.author, author))!,
+		);
+		const [existing] = await db
+			.select({ id: personalBooks.id })
+			.from(personalBooks)
+			.where(
+				and(
+					eq(personalBooks.memberId, memberId),
+					or(...matchConditions),
+				),
+			)
+			.limit(1);
+
+		if (existing) {
+			skippedCount++;
+			continue;
+		}
 
 		const [inserted] = await db
 			.insert(personalBooks)
@@ -93,7 +118,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 		addedCount++;
 	}
 
-	return { success: true, addedCount };
+	return { success: true, addedCount, skippedCount };
 }
 
 export default function BooksMyPhotoAdd({
