@@ -355,6 +355,32 @@ export default function Books({ actionData, loaderData }: Route.ComponentProps) 
 				{!needsName && (
 					<>
 						<div className="w-full max-w-md grid gap-4 mb-12">
+							{/* AI写真認識プロモーション */}
+							<Link
+								to="/tsundoku_2_0/my/photo-add"
+								className="group relative rounded-2xl border border-fuchsia-500/40 bg-gradient-to-r from-fuchsia-500/15 to-cyan-500/15 backdrop-blur-sm px-6 py-5 transition-all duration-300 hover:border-fuchsia-400/60 hover:from-fuchsia-500/25 hover:to-cyan-500/25 hover:shadow-lg hover:shadow-fuchsia-500/20 overflow-hidden"
+							>
+								<div className="absolute top-2 right-3 text-[10px] font-bold uppercase tracking-widest text-fuchsia-300/70 bg-fuchsia-500/20 px-2 py-0.5 rounded-full">
+									New
+								</div>
+								<div className="flex items-center gap-4">
+									<div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-500/40 to-cyan-500/40 text-2xl flex-shrink-0">
+										📸
+									</div>
+									<div className="flex-1 min-w-0">
+										<h2 className="text-lg font-semibold text-white mb-0.5">
+											写真で一括追加
+										</h2>
+										<p className="text-sm text-fuchsia-200/70">
+											本棚を撮るだけ。AIが自動で認識
+										</p>
+									</div>
+									<span className="text-fuchsia-300/60 group-hover:text-fuchsia-200 transition-colors">
+										&rarr;
+									</span>
+								</div>
+							</Link>
+
 							{/* 個人積読リスト */}
 							<Link
 								to="/tsundoku_2_0/my"
