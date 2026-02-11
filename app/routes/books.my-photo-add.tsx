@@ -143,6 +143,9 @@ export default function BooksMyPhotoAdd({
 	const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(
 		new Set(),
 	);
+	const [editingIndex, setEditingIndex] = useState<number | null>(null);
+	const [editTitle, setEditTitle] = useState("");
+	const [editAuthor, setEditAuthor] = useState("");
 
 	useEffect(() => {
 		const id = localStorage.getItem("bookMemberId") || "";
@@ -235,6 +238,34 @@ export default function BooksMyPhotoAdd({
 			}
 			return next;
 		});
+	};
+
+	const startEditing = (index: number) => {
+		setEditingIndex(index);
+		setEditTitle(recognizedBooks[index].title);
+		setEditAuthor(recognizedBooks[index].author);
+	};
+
+	const saveEdit = () => {
+		if (editingIndex === null) return;
+		const trimmedTitle = editTitle.trim();
+		const trimmedAuthor = editAuthor.trim();
+		if (!trimmedTitle) return;
+
+		setRecognizedBooks((prev) => {
+			const next = [...prev];
+			next[editingIndex] = {
+				...next[editingIndex],
+				title: trimmedTitle,
+				author: trimmedAuthor,
+			};
+			return next;
+		});
+		setEditingIndex(null);
+	};
+
+	const cancelEdit = () => {
+		setEditingIndex(null);
 	};
 
 	const toggleAll = () => {
@@ -402,10 +433,8 @@ export default function BooksMyPhotoAdd({
 
 						<div className="space-y-3 mb-6">
 							{recognizedBooks.map((book, index) => (
-								<button
-									key={`${book.title}-${index}`}
-									type="button"
-									onClick={() => toggleSelect(index)}
+								<div
+									key={`${book.recognized.title}-${index}`}
 									className={`w-full flex items-start gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
 										selectedIndexes.has(index)
 											? "bg-fuchsia-500/10 border-fuchsia-500/40"
@@ -413,29 +442,35 @@ export default function BooksMyPhotoAdd({
 									}`}
 								>
 									{/* チェックボックス */}
-									<div
-										className={`mt-1 w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border ${
-											selectedIndexes.has(index)
-												? "bg-fuchsia-500 border-fuchsia-500"
-												: "border-white/30"
-										}`}
+									<button
+										type="button"
+										onClick={() => toggleSelect(index)}
+										className="mt-1 flex-shrink-0"
 									>
-										{selectedIndexes.has(index) && (
-											<svg
-												className="w-3 h-3 text-white"
-												fill="none"
-												viewBox="0 0 24 24"
-												strokeWidth={3}
-												stroke="currentColor"
-											>
-												<path
-													strokeLinecap="round"
-													strokeLinejoin="round"
-													d="M4.5 12.75l6 6 9-13.5"
-												/>
-											</svg>
-										)}
-									</div>
+										<div
+											className={`w-5 h-5 rounded flex items-center justify-center border ${
+												selectedIndexes.has(index)
+													? "bg-fuchsia-500 border-fuchsia-500"
+													: "border-white/30"
+											}`}
+										>
+											{selectedIndexes.has(index) && (
+												<svg
+													className="w-3 h-3 text-white"
+													fill="none"
+													viewBox="0 0 24 24"
+													strokeWidth={3}
+													stroke="currentColor"
+												>
+													<path
+														strokeLinecap="round"
+														strokeLinejoin="round"
+														d="M4.5 12.75l6 6 9-13.5"
+													/>
+												</svg>
+											)}
+										</div>
+									</button>
 
 									{/* 書影 */}
 									{book.coverImageUrl ? (
@@ -450,29 +485,92 @@ export default function BooksMyPhotoAdd({
 										</div>
 									)}
 
-									{/* 情報 */}
-									<div className="min-w-0 flex-1">
-										<p className="text-sm font-medium text-white line-clamp-2">
-											{book.title}
-										</p>
-										<p className="text-xs text-purple-300/60 mt-0.5">
-											{book.author}
-											{book.publishedYear &&
-												` (${book.publishedYear})`}
-										</p>
-										{book.publisher && (
-											<p className="text-xs text-purple-300/40 mt-0.5">
-												{book.publisher}
+									{/* 情報 or 編集フォーム */}
+									{editingIndex === index ? (
+										<div className="min-w-0 flex-1 space-y-2">
+											<div>
+												<label className="text-xs text-purple-300/60 block mb-0.5">
+													タイトル
+												</label>
+												<input
+													type="text"
+													value={editTitle}
+													onChange={(e) =>
+														setEditTitle(
+															e.target.value,
+														)
+													}
+													className="w-full rounded-lg bg-white/10 border border-white/20 px-3 py-1.5 text-sm text-white placeholder-purple-300/40 focus:outline-none focus:border-fuchsia-500/50"
+												/>
+											</div>
+											<div>
+												<label className="text-xs text-purple-300/60 block mb-0.5">
+													著者
+												</label>
+												<input
+													type="text"
+													value={editAuthor}
+													onChange={(e) =>
+														setEditAuthor(
+															e.target.value,
+														)
+													}
+													className="w-full rounded-lg bg-white/10 border border-white/20 px-3 py-1.5 text-sm text-white placeholder-purple-300/40 focus:outline-none focus:border-fuchsia-500/50"
+												/>
+											</div>
+											<div className="flex gap-2 pt-1">
+												<button
+													type="button"
+													onClick={saveEdit}
+													className="rounded-lg bg-fuchsia-500/30 border border-fuchsia-500/40 px-3 py-1 text-xs text-fuchsia-200 hover:bg-fuchsia-500/40 transition-colors"
+												>
+													保存
+												</button>
+												<button
+													type="button"
+													onClick={cancelEdit}
+													className="rounded-lg bg-white/10 border border-white/10 px-3 py-1 text-xs text-purple-300/60 hover:bg-white/20 transition-colors"
+												>
+													キャンセル
+												</button>
+											</div>
+										</div>
+									) : (
+										<div className="min-w-0 flex-1">
+											<p className="text-sm font-medium text-white line-clamp-2">
+												{book.title}
 											</p>
-										)}
-										{/* AI認識との差分表示 */}
-										{book.recognized.title !== book.title && (
-											<p className="text-xs text-cyan-400/60 mt-1">
-												AI認識: {book.recognized.title}
+											<p className="text-xs text-purple-300/60 mt-0.5">
+												{book.author}
+												{book.publishedYear &&
+													` (${book.publishedYear})`}
 											</p>
-										)}
-									</div>
-								</button>
+											{book.publisher && (
+												<p className="text-xs text-purple-300/40 mt-0.5">
+													{book.publisher}
+												</p>
+											)}
+											{/* AI認識との差分表示 */}
+											{book.recognized.title !==
+												book.title && (
+												<p className="text-xs text-cyan-400/60 mt-1">
+													AI認識:{" "}
+													{book.recognized.title}
+												</p>
+											)}
+											{/* 編集ボタン */}
+											<button
+												type="button"
+												onClick={() =>
+													startEditing(index)
+												}
+												className="text-xs text-purple-300/40 hover:text-fuchsia-400 mt-1.5 transition-colors"
+											>
+												編集
+											</button>
+										</div>
+									)}
+								</div>
 							))}
 						</div>
 
