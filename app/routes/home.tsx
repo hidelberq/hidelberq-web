@@ -363,7 +363,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 							<div>
 								<span className="text-lg font-semibold">積読 2.0</span>
 								<p className="text-sm text-purple-200/60">
-									積読を管理・みんなで共有
+									写真を撮るだけ。AIが本を自動認識してリスト化
 								</p>
 							</div>
 						</Link>

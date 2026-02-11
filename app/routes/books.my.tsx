@@ -265,12 +265,18 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 				</div>
 
 				{/* 追加ボタン */}
-				<div className="w-full max-w-2xl mb-6">
+				<div className="w-full max-w-2xl mb-6 flex flex-wrap gap-3">
 					<Link
 						to="/tsundoku_2_0/my/add"
 						className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 px-5 py-2.5 font-medium text-white transition-all hover:from-fuchsia-500 hover:to-purple-500 hover:shadow-lg hover:shadow-fuchsia-500/20"
 					>
 						<span className="text-lg">+</span> 本を追加
+					</Link>
+					<Link
+						to="/tsundoku_2_0/my/photo-add"
+						className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-fuchsia-600 px-5 py-2.5 font-medium text-white transition-all hover:from-cyan-500 hover:to-fuchsia-500 hover:shadow-lg hover:shadow-cyan-500/20"
+					>
+						📸 写真で一括追加
 					</Link>
 				</div>
 

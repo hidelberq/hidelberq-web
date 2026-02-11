@@ -33,6 +33,10 @@
 		{
 			"binding": "HERO_BUCKET",
 			"bucket_name": "hidelberq-hero-images"
+		},
+		{
+			"binding": "BOOK_BUCKET",
+			"bucket_name": "hidelberq-book-photos"
 		}
 	],
 	"triggers": {
