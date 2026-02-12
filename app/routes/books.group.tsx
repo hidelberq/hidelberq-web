@@ -11,6 +11,7 @@ import {
 	BOOK_STATUSES,
 	GENRES,
 	getStatusColor,
+	formatRating,
 	type BookStatus,
 } from "~/books/types";
 import type { Route } from "./+types/books.group";
@@ -69,6 +70,12 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
 			break;
 		case "oldest":
 			orderBy = asc(books.createdAt);
+			break;
+		case "author":
+			orderBy = asc(books.author);
+			break;
+		case "genre":
+			orderBy = asc(books.genre);
 			break;
 		default:
 			orderBy = desc(books.createdAt);
@@ -171,6 +178,8 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 	const [showMembers, setShowMembers] = useState(false);
 	const [copied, setCopied] = useState(false);
 
+	const [initialized, setInitialized] = useState(false);
+
 	useEffect(() => {
 		const id = localStorage.getItem("bookMemberId") || "";
 		setMemberId(id);
@@ -188,7 +197,31 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 			groups.push({ code: group.groupCode, name: group.name });
 		}
 		localStorage.setItem("bookGroups", JSON.stringify(groups));
-	}, [group.groupCode, group.name]);
+
+		// パラメータなしで戻ってきた場合、sessionStorage から復元
+		const storageKey = `tsundoku_group_list_params_${group.groupCode}`;
+		const hasFilters = searchParams.get("sort") || searchParams.get("status") || searchParams.get("genre") || searchParams.get("q");
+		if (!hasFilters) {
+			const saved = sessionStorage.getItem(storageKey);
+			if (saved) {
+				const params = new URLSearchParams(saved);
+				setSearchParams(params, { replace: true });
+				setInitialized(true);
+				return;
+			}
+		}
+		setInitialized(true);
+	}, [group.groupCode, group.name, searchParams, setSearchParams]);
+
+	// フィルタ状態を sessionStorage に保存
+	useEffect(() => {
+		if (!initialized) return;
+		const params = new URLSearchParams(searchParams);
+		const filterString = params.toString();
+		if (filterString) {
+			sessionStorage.setItem(`tsundoku_group_list_params_${group.groupCode}`, filterString);
+		}
+	}, [searchParams, initialized, group.groupCode]);
 
 	const updateFilter = (key: string, value: string) => {
 		const params = new URLSearchParams(searchParams);
@@ -240,7 +273,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 				</Link>
 
 				{/* ヘッダー */}
-				<div className="text-center mb-8 w-full max-w-2xl">
+				<div className="text-center mb-8 w-full max-w-2xl md:max-w-5xl">
 					<h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-2 bg-gradient-to-r from-white via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent break-all">
 						{group.name}
 					</h1>
@@ -271,7 +304,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 
 				{/* メンバー一覧 */}
 				{showMembers && (
-					<div className="w-full max-w-2xl mb-6 rounded-xl bg-white/5 border border-white/10 p-4">
+					<div className="w-full max-w-2xl md:max-w-5xl mb-6 rounded-xl bg-white/5 border border-white/10 p-4">
 						<div className="flex flex-wrap gap-2">
 							{members.map((m) => (
 								<span
@@ -291,7 +324,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 				)}
 
 				{/* 検索・フィルタ */}
-				<div className="w-full max-w-2xl mb-6 space-y-3">
+				<div className="w-full max-w-2xl md:max-w-5xl mb-6 space-y-3">
 					<div className="flex gap-2">
 						<input
 							type="text"
@@ -350,11 +383,13 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 							onChange={(e) =>
 								updateFilter("sort", e.target.value)
 							}
-							className="rounded-lg bg-white/10 border border-white/20 px-3 py-1.5 text-sm text-purple-200 focus:outline-none appearance-none"
+							className="rounded-lg bg-white/10 border border-white/20 px-3 py-1.5 text-sm text-purple-200 focus:outline-none appearance-none md:hidden"
 						>
 							<option value="newest">新しい順</option>
 							<option value="oldest">古い順</option>
 							<option value="title">タイトル順</option>
+							<option value="author">著者順</option>
+							<option value="genre">ジャンル順</option>
 							<option value="recommendation">
 								おすすめ度順
 							</option>
@@ -364,7 +399,7 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 
 				{/* 追加ボタン */}
 				{isMember && (
-					<div className="w-full max-w-2xl mb-6 flex gap-3 flex-wrap">
+					<div className="w-full max-w-2xl md:max-w-5xl mb-6 flex gap-3 flex-wrap">
 						<Link
 							to={`/tsundoku_2_0/${group.groupCode}/add`}
 							className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 px-5 py-2.5 font-medium text-white transition-all hover:from-fuchsia-500 hover:to-purple-500 hover:shadow-lg hover:shadow-fuchsia-500/20"
@@ -380,8 +415,8 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 					</div>
 				)}
 
-				{/* 本のリスト */}
-				<div className="w-full max-w-2xl">
+				{/* 本のリスト（モバイル） */}
+				<div className="w-full max-w-2xl md:hidden">
 					{filteredBooks.length === 0 ? (
 						<div className="text-center py-16 text-purple-300/40">
 							{bookList.length === 0
@@ -454,10 +489,144 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 					)}
 				</div>
 
+				{/* PC向けスプレッドシートビュー */}
+				<div className="w-full max-w-5xl hidden md:block">
+					{filteredBooks.length === 0 ? (
+						<div className="text-center py-16 text-purple-300/40">
+							{bookList.length === 0
+								? "まだ本が追加されていません"
+								: "条件に一致する本がありません"}
+						</div>
+					) : (
+						<div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm overflow-hidden">
+							<table className="w-full text-left">
+								<thead>
+									<tr className="border-b border-white/10 bg-white/5">
+										<th className="px-4 py-3 text-xs font-medium text-purple-300/60 w-10" />
+										<SortableHeader
+											label="タイトル"
+											sortKey="title"
+											currentSort={loaderData.sort}
+											onSort={(key) => updateFilter("sort", key)}
+										/>
+										<SortableHeader
+											label="著者"
+											sortKey="author"
+											currentSort={loaderData.sort}
+											onSort={(key) => updateFilter("sort", key)}
+										/>
+										<SortableHeader
+											label="ジャンル"
+											sortKey="genre"
+											currentSort={loaderData.sort}
+											onSort={(key) => updateFilter("sort", key)}
+										/>
+										<th className="px-3 py-3 text-xs font-medium text-purple-300/60 whitespace-nowrap">
+											自分のステータス
+										</th>
+										<SortableHeader
+											label="おすすめ (平均)"
+											sortKey="recommendation"
+											currentSort={loaderData.sort}
+											onSort={(key) => updateFilter("sort", key)}
+										/>
+										<th className="px-3 py-3 text-xs font-medium text-purple-300/60">
+											追加者
+										</th>
+									</tr>
+								</thead>
+								<tbody className="divide-y divide-white/5">
+									{filteredBooks.map((book) => {
+										const myStatus = book.statuses.find(
+											(s) => s.memberId === memberId || (displayName && s.memberName === displayName),
+										);
+										return (
+											<tr
+												key={book.id}
+												className="hover:bg-white/5 transition-colors cursor-pointer group"
+												onClick={() => {
+													window.location.href = `/tsundoku_2_0/${group.groupCode}/book/${book.id}`;
+												}}
+											>
+												<td className="px-4 py-3">
+													{book.coverImageUrl ? (
+														<img
+															src={book.coverImageUrl}
+															alt=""
+															className="w-8 h-10 object-cover rounded"
+														/>
+													) : (
+														<div className="w-8 h-10 bg-white/10 rounded flex items-center justify-center text-purple-300/20 text-[8px]">
+															No img
+														</div>
+													)}
+												</td>
+												<td className="px-3 py-3 text-sm text-white font-medium max-w-48 truncate group-hover:text-cyan-200 transition-colors">
+													{book.title}
+												</td>
+												<td className="px-3 py-3 text-sm text-purple-300/70 max-w-32 truncate">
+													{book.author}
+												</td>
+												<td className="px-3 py-3 text-xs text-purple-300/50">
+													{book.genre || "-"}
+												</td>
+												<td className="px-3 py-3">
+													{myStatus ? (
+														<span
+															className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${getStatusColor(myStatus.status as BookStatus)}`}
+														>
+															{BOOK_STATUSES[myStatus.status as BookStatus]}
+														</span>
+													) : (
+														<span className="text-xs text-purple-300/30">-</span>
+													)}
+												</td>
+												<td className="px-3 py-3 text-xs text-yellow-400">
+													{book.avgRecommendation !== null
+														? formatRating(Math.round(book.avgRecommendation))
+														: "-"}
+												</td>
+												<td className="px-3 py-3 text-xs text-purple-300/50">
+													{book.addedByName}
+												</td>
+											</tr>
+										);
+									})}
+								</tbody>
+							</table>
+						</div>
+					)}
+				</div>
+
 				<p className="text-sm text-purple-300/30 mt-8">
 					{filteredBooks.length} 冊
 				</p>
 			</div>
 		</div>
+	);
+}
+
+function SortableHeader({
+	label,
+	sortKey,
+	currentSort,
+	onSort,
+}: {
+	label: string;
+	sortKey: string;
+	currentSort: string;
+	onSort: (key: string) => void;
+}) {
+	const isActive = currentSort === sortKey;
+	return (
+		<th
+			className="px-3 py-3 text-xs font-medium text-purple-300/60 cursor-pointer hover:text-purple-200 transition-colors select-none whitespace-nowrap"
+			onClick={() => onSort(sortKey)}
+		>
+			{label}
+			<span className={`ml-1 ${isActive ? "text-fuchsia-400" : "text-purple-300/20"}`}>
+				{isActive ? "▼" : "▽"}
+			</span>
+		</th>
 	);
 }
