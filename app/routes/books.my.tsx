@@ -284,19 +284,29 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 							<option value="private">非公開のみ</option>
 						</select>
 						<select
-							value={loaderData.sort}
+							value={loaderData.sort === "author" ? "newest" : loaderData.sort}
 							onChange={(e) => updateFilter("sort", e.target.value)}
 							className="rounded-lg bg-white/10 border border-white/20 px-3 py-1.5 text-sm text-purple-200 focus:outline-none appearance-none md:hidden"
 						>
 							<option value="newest">新しい順</option>
 							<option value="oldest">古い順</option>
 							<option value="title">タイトル順</option>
-							<option value="author">著者順</option>
 							<option value="status">ステータス順</option>
 							<option value="genre">ジャンル順</option>
 							<option value="importance">重要度順</option>
 							<option value="recommendation">おすすめ度順</option>
 						</select>
+						<button
+							type="button"
+							onClick={() => updateFilter("sort", loaderData.sort === "author" ? "newest" : "author")}
+							className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
+								loaderData.sort === "author"
+									? "bg-fuchsia-500/30 border border-fuchsia-400/50 text-fuchsia-200"
+									: "bg-white/10 border border-white/20 text-purple-200 hover:bg-white/20"
+							}`}
+						>
+							著者順
+						</button>
 					</div>
 				</div>
 
