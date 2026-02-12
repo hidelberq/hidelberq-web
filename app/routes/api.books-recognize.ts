@@ -19,10 +19,64 @@ function normalizeQuery(query: string): string {
 	return query.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+// Google Books の検索結果から認識タイトルに最も近い結果を選ぶ
+function findBestMatch(
+	results: BookSearchResult[],
+	recognizedTitle: string,
+): BookSearchResult | null {
+	if (results.length === 0) return null;
+
+	const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+	const target = normalize(recognizedTitle);
+	if (!target) return results[0] ?? null;
+
+	let bestResult: BookSearchResult | null = null;
+	let bestScore = -1;
+
+	for (const result of results) {
+		const resultTitle = normalize(result.title);
+		let score = 0;
+
+		if (resultTitle === target) {
+			score = 1.0;
+		} else if (
+			resultTitle.includes(target) ||
+			target.includes(resultTitle)
+		) {
+			// 一方が他方を含む（副題ありなど）
+			const shorter = Math.min(resultTitle.length, target.length);
+			const longer = Math.max(resultTitle.length, target.length);
+			score = 0.7 + 0.3 * (shorter / longer);
+		} else {
+			// 文字の重複率で判定
+			const targetChars = [...target];
+			const resultCharsRemaining = [...resultTitle];
+			let matchCount = 0;
+			for (const c of targetChars) {
+				const idx = resultCharsRemaining.indexOf(c);
+				if (idx !== -1) {
+					matchCount++;
+					resultCharsRemaining.splice(idx, 1);
+				}
+			}
+			score =
+				matchCount / Math.max(target.length, resultTitle.length);
+		}
+
+		if (score > bestScore) {
+			bestScore = score;
+			bestResult = result;
+		}
+	}
+
+	return bestScore >= 0.3 ? bestResult : null;
+}
+
 // Google Books API で書籍情報を補完
 async function searchGoogleBooks(
 	query: string,
 	env: { DB: D1Database; GOOGLE_BOOKS_API_KEY?: string },
+	recognizedTitle?: string,
 ): Promise<BookSearchResult | null> {
 	const db = drizzle(env.DB);
 	const normalized = normalizeQuery(query);
@@ -43,6 +97,9 @@ async function searchGoogleBooks(
 			: 0;
 		if (cachedTime > cacheExpiry) {
 			const results = JSON.parse(cached.results) as BookSearchResult[];
+			if (recognizedTitle) {
+				return findBestMatch(results, recognizedTitle) ?? results[0] ?? null;
+			}
 			return results[0] ?? null;
 		}
 	}
@@ -51,7 +108,7 @@ async function searchGoogleBooks(
 		"https://www.googleapis.com/books/v1/volumes",
 	);
 	googleBooksUrl.searchParams.set("q", query);
-	googleBooksUrl.searchParams.set("maxResults", "3");
+	googleBooksUrl.searchParams.set("maxResults", "5");
 	googleBooksUrl.searchParams.set("langRestrict", "ja");
 	googleBooksUrl.searchParams.set("printType", "books");
 
@@ -127,6 +184,9 @@ async function searchGoogleBooks(
 				},
 			});
 
+		if (recognizedTitle) {
+			return findBestMatch(results, recognizedTitle) ?? results[0] ?? null;
+		}
 		return results[0] ?? null;
 	} catch {
 		return null;
@@ -300,7 +360,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 			const query = book.author
 				? `${book.title} ${book.author}`
 				: book.title;
-			const googleResult = await searchGoogleBooks(query, env);
+			const googleResult = await searchGoogleBooks(query, env, book.title);
 
 			if (googleResult) {
 				enrichedBooks.push({

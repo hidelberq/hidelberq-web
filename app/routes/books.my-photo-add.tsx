@@ -2,9 +2,16 @@ import { Link, useNavigate, useSubmit, useNavigation } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, and, or } from "drizzle-orm";
 import { personalBooks, bookActivities, userProfiles } from "~/db/schema";
-import type { BookSearchResult } from "~/books/types";
+import {
+	GENRES,
+	BOOK_STATUSES,
+	BOOK_VISIBILITY,
+	type BookSearchResult,
+	type BookStatus,
+	type BookVisibility,
+} from "~/books/types";
 import type { Route } from "./+types/books.my-photo-add";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 export function meta(): Route.MetaDescriptors {
 	return [
@@ -15,6 +22,24 @@ export function meta(): Route.MetaDescriptors {
 // 認識結果の型
 interface RecognizedBookResult extends BookSearchResult {
 	recognized: { title: string; author: string };
+}
+
+// 各本ごとの追加設定
+interface BookEditData {
+	genre: string;
+	status: BookStatus;
+	visibility: BookVisibility;
+	difficulty: number | null;
+	importance: number | null;
+	recommendation: number | null;
+	tags: string;
+	memo: string;
+}
+
+// action に送信するデータ型
+interface BookToAdd extends BookSearchResult {
+	recognized: { title: string; author: string };
+	editData: BookEditData;
 }
 
 // 一括追加の action
@@ -34,9 +59,9 @@ export async function action({ request, context }: Route.ActionArgs) {
 		return { error: "追加する本が選択されていません" };
 	}
 
-	let booksToAdd: RecognizedBookResult[];
+	let booksToAdd: BookToAdd[];
 	try {
-		booksToAdd = JSON.parse(booksJson) as RecognizedBookResult[];
+		booksToAdd = JSON.parse(booksJson) as BookToAdd[];
 	} catch {
 		return { error: "データの解析に失敗しました" };
 	}
@@ -82,6 +107,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 			continue;
 		}
 
+		const edit = book.editData;
+		const tagsJson = edit?.tags
+			? JSON.stringify(edit.tags.split(",").map((t) => t.trim()).filter(Boolean))
+			: null;
+
 		const [inserted] = await db
 			.insert(personalBooks)
 			.values({
@@ -95,8 +125,14 @@ export async function action({ request, context }: Route.ActionArgs) {
 				coverImageUrl: book.coverImageUrl || null,
 				description: book.description || null,
 				pageCount: book.pageCount || null,
-				status: "tsundoku",
-				visibility: "public",
+				genre: edit?.genre || null,
+				status: edit?.status || "tsundoku",
+				visibility: edit?.visibility || "public",
+				difficulty: edit?.difficulty || null,
+				importance: edit?.importance || null,
+				recommendation: edit?.recommendation || null,
+				tags: tagsJson,
+				memo: edit?.memo?.trim() || null,
 			})
 			.returning();
 
@@ -121,6 +157,19 @@ export async function action({ request, context }: Route.ActionArgs) {
 	return { success: true, addedCount, skippedCount };
 }
 
+function defaultEditData(): BookEditData {
+	return {
+		genre: "",
+		status: "tsundoku",
+		visibility: "public",
+		difficulty: null,
+		importance: null,
+		recommendation: null,
+		tags: "",
+		memo: "",
+	};
+}
+
 export default function BooksMyPhotoAdd({
 	actionData,
 }: Route.ComponentProps) {
@@ -143,6 +192,41 @@ export default function BooksMyPhotoAdd({
 	const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(
 		new Set(),
 	);
+	const [editingIndex, setEditingIndex] = useState<number | null>(null);
+
+	// 編集フォームの状態
+	const [editTitle, setEditTitle] = useState("");
+	const [editAuthor, setEditAuthor] = useState("");
+	const [editIsbn, setEditIsbn] = useState("");
+	const [editPublishedYear, setEditPublishedYear] = useState("");
+	const [editPublisher, setEditPublisher] = useState("");
+	const [editCoverImageUrl, setEditCoverImageUrl] = useState("");
+	const [editDescription, setEditDescription] = useState("");
+	const [editPageCount, setEditPageCount] = useState("");
+
+	// 各本ごとの追加設定 (index -> BookEditData)
+	const [editDataMap, setEditDataMap] = useState<Map<number, BookEditData>>(
+		new Map(),
+	);
+
+	// Google Books 検索の状態
+	const [editSearchQuery, setEditSearchQuery] = useState("");
+	const [editSearchResults, setEditSearchResults] = useState<BookSearchResult[]>([]);
+	const [editSearching, setEditSearching] = useState(false);
+	const [editSearchError, setEditSearchError] = useState("");
+	const editDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const getEditData = (index: number): BookEditData => {
+		return editDataMap.get(index) ?? defaultEditData();
+	};
+
+	const updateEditData = (index: number, partial: Partial<BookEditData>) => {
+		setEditDataMap((prev) => {
+			const next = new Map(prev);
+			next.set(index, { ...getEditData(index), ...partial });
+			return next;
+		});
+	};
 
 	useEffect(() => {
 		const id = localStorage.getItem("bookMemberId") || "";
@@ -157,15 +241,66 @@ export default function BooksMyPhotoAdd({
 		}
 	}, [actionData, navigate]);
 
+	// 編集フォーム内の Google Books 検索
+	const searchBooksForEdit = useCallback(async () => {
+		if (!editSearchQuery.trim()) return;
+		setEditSearching(true);
+		setEditSearchError("");
+		try {
+			const res = await fetch(
+				`/api/tsundoku_2_0/search?q=${encodeURIComponent(editSearchQuery)}`,
+			);
+			const data = (await res.json()) as { results: BookSearchResult[]; error?: string };
+			if (res.status === 429 || data.error === "rate_limited") {
+				setEditSearchError("検索の利用回数上限に達しました。しばらく待ってから再度お試しください。");
+				setEditSearchResults([]);
+			} else {
+				setEditSearchResults(data.results);
+			}
+		} catch {
+			setEditSearchResults([]);
+		} finally {
+			setEditSearching(false);
+		}
+	}, [editSearchQuery]);
+
+	// 編集中の検索デバウンス
+	useEffect(() => {
+		if (editDebounceTimer.current) {
+			clearTimeout(editDebounceTimer.current);
+		}
+		if (editSearchQuery.trim().length >= 2) {
+			editDebounceTimer.current = setTimeout(() => {
+				searchBooksForEdit();
+			}, 500);
+		}
+		return () => {
+			if (editDebounceTimer.current) clearTimeout(editDebounceTimer.current);
+		};
+	}, [editSearchQuery, searchBooksForEdit]);
+
+	const selectSearchResultForEdit = (result: BookSearchResult) => {
+		setEditTitle(result.title);
+		setEditAuthor(result.author);
+		setEditIsbn(result.isbn ?? "");
+		setEditPublishedYear(result.publishedYear ?? "");
+		setEditPublisher(result.publisher ?? "");
+		setEditCoverImageUrl(result.coverImageUrl ?? "");
+		setEditDescription(result.description ?? "");
+		setEditPageCount(result.pageCount?.toString() ?? "");
+		setEditSearchResults([]);
+		setEditSearchQuery("");
+	};
+
 	const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
 		if (!file) return;
 
-		// プレビュー表示
 		const url = URL.createObjectURL(file);
 		setPreviewUrl(url);
 		setRecognizedBooks([]);
 		setSelectedIndexes(new Set());
+		setEditDataMap(new Map());
 		setError("");
 	};
 
@@ -214,7 +349,6 @@ export default function BooksMyPhotoAdd({
 			}
 
 			setRecognizedBooks(data.books);
-			// 全て選択状態にする
 			setSelectedIndexes(
 				new Set(data.books.map((_: RecognizedBookResult, i: number) => i)),
 			);
@@ -237,6 +371,50 @@ export default function BooksMyPhotoAdd({
 		});
 	};
 
+	const startEditing = (index: number) => {
+		const book = recognizedBooks[index];
+		setEditingIndex(index);
+		setEditTitle(book.title);
+		setEditAuthor(book.author);
+		setEditIsbn(book.isbn ?? "");
+		setEditPublishedYear(book.publishedYear ?? "");
+		setEditPublisher(book.publisher ?? "");
+		setEditCoverImageUrl(book.coverImageUrl ?? "");
+		setEditDescription(book.description ?? "");
+		setEditPageCount(book.pageCount?.toString() ?? "");
+		setEditSearchQuery("");
+		setEditSearchResults([]);
+		setEditSearchError("");
+	};
+
+	const saveEdit = () => {
+		if (editingIndex === null) return;
+		const trimmedTitle = editTitle.trim();
+		const trimmedAuthor = editAuthor.trim();
+		if (!trimmedTitle) return;
+
+		setRecognizedBooks((prev) => {
+			const next = [...prev];
+			next[editingIndex] = {
+				...next[editingIndex],
+				title: trimmedTitle,
+				author: trimmedAuthor,
+				isbn: editIsbn.trim() || null,
+				publishedYear: editPublishedYear.trim() || null,
+				publisher: editPublisher.trim() || null,
+				coverImageUrl: editCoverImageUrl.trim() || null,
+				description: editDescription.trim() || null,
+				pageCount: editPageCount ? Number(editPageCount) : null,
+			};
+			return next;
+		});
+		setEditingIndex(null);
+	};
+
+	const cancelEdit = () => {
+		setEditingIndex(null);
+	};
+
 	const toggleAll = () => {
 		if (selectedIndexes.size === recognizedBooks.length) {
 			setSelectedIndexes(new Set());
@@ -248,9 +426,13 @@ export default function BooksMyPhotoAdd({
 	};
 
 	const handleSubmit = () => {
-		const selectedBooks = recognizedBooks.filter((_, i) =>
-			selectedIndexes.has(i),
-		);
+		const selectedBooks: BookToAdd[] = recognizedBooks
+			.map((book, i) => ({ book, i }))
+			.filter(({ i }) => selectedIndexes.has(i))
+			.map(({ book, i }) => ({
+				...book,
+				editData: getEditData(i),
+			}));
 		if (selectedBooks.length === 0) {
 			setError("追加する本を選択してください");
 			return;
@@ -263,6 +445,10 @@ export default function BooksMyPhotoAdd({
 
 		submit(formData, { method: "post" });
 	};
+
+	const inputClass =
+		"w-full rounded-lg bg-white/10 border border-white/20 px-3 py-1.5 text-sm text-white placeholder-purple-300/40 focus:outline-none focus:border-fuchsia-500/50";
+	const labelClass = "text-xs text-purple-300/60 block mb-0.5";
 
 	return (
 		<div className="min-h-dvh bg-gradient-to-br from-violet-950 via-fuchsia-950 to-indigo-950">
@@ -402,77 +588,429 @@ export default function BooksMyPhotoAdd({
 
 						<div className="space-y-3 mb-6">
 							{recognizedBooks.map((book, index) => (
-								<button
-									key={`${book.title}-${index}`}
-									type="button"
-									onClick={() => toggleSelect(index)}
-									className={`w-full flex items-start gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
+								<div
+									key={`${book.recognized.title}-${index}`}
+									className={`w-full rounded-xl border transition-all ${
 										selectedIndexes.has(index)
 											? "bg-fuchsia-500/10 border-fuchsia-500/40"
 											: "bg-white/5 border-white/10 opacity-60"
 									}`}
 								>
-									{/* チェックボックス */}
-									<div
-										className={`mt-1 w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border ${
-											selectedIndexes.has(index)
-												? "bg-fuchsia-500 border-fuchsia-500"
-												: "border-white/30"
-										}`}
-									>
-										{selectedIndexes.has(index) && (
-											<svg
-												className="w-3 h-3 text-white"
-												fill="none"
-												viewBox="0 0 24 24"
-												strokeWidth={3}
-												stroke="currentColor"
+									{/* ヘッダー行: チェックボックス + 書影 + 基本情報 */}
+									<div className="flex items-start gap-3 px-4 py-3">
+										{/* チェックボックス */}
+										<button
+											type="button"
+											onClick={() => toggleSelect(index)}
+											className="mt-1 flex-shrink-0"
+										>
+											<div
+												className={`w-5 h-5 rounded flex items-center justify-center border ${
+													selectedIndexes.has(index)
+														? "bg-fuchsia-500 border-fuchsia-500"
+														: "border-white/30"
+												}`}
 											>
-												<path
-													strokeLinecap="round"
-													strokeLinejoin="round"
-													d="M4.5 12.75l6 6 9-13.5"
-												/>
-											</svg>
+												{selectedIndexes.has(index) && (
+													<svg
+														className="w-3 h-3 text-white"
+														fill="none"
+														viewBox="0 0 24 24"
+														strokeWidth={3}
+														stroke="currentColor"
+													>
+														<path
+															strokeLinecap="round"
+															strokeLinejoin="round"
+															d="M4.5 12.75l6 6 9-13.5"
+														/>
+													</svg>
+												)}
+											</div>
+										</button>
+
+										{/* 書影 */}
+										{book.coverImageUrl ? (
+											<img
+												src={book.coverImageUrl}
+												alt=""
+												className="w-12 h-16 object-cover rounded flex-shrink-0"
+											/>
+										) : (
+											<div className="w-12 h-16 bg-white/10 rounded flex-shrink-0 flex items-center justify-center text-purple-300/40 text-xs">
+												No img
+											</div>
 										)}
+
+										{/* 情報表示 */}
+										<div className="min-w-0 flex-1">
+											<p className="text-sm font-medium text-white line-clamp-2">
+												{book.title}
+											</p>
+											<p className="text-xs text-purple-300/60 mt-0.5">
+												{book.author}
+												{book.publishedYear &&
+													` (${book.publishedYear})`}
+											</p>
+											{book.publisher && (
+												<p className="text-xs text-purple-300/40 mt-0.5">
+													{book.publisher}
+												</p>
+											)}
+											{/* カスタム設定の表示 */}
+											{editDataMap.has(index) && (
+												<div className="flex flex-wrap gap-1 mt-1">
+													{editDataMap.get(index)!.status !== "tsundoku" && (
+														<span className="text-xs bg-fuchsia-500/20 text-fuchsia-300 rounded px-1.5 py-0.5">
+															{BOOK_STATUSES[editDataMap.get(index)!.status]}
+														</span>
+													)}
+													{editDataMap.get(index)!.genre && (
+														<span className="text-xs bg-cyan-500/20 text-cyan-300 rounded px-1.5 py-0.5">
+															{editDataMap.get(index)!.genre}
+														</span>
+													)}
+												</div>
+											)}
+											{/* AI認識との差分表示 */}
+											{book.recognized.title !== book.title && (
+												<p className="text-xs text-cyan-400/60 mt-1">
+													AI認識: {book.recognized.title}
+												</p>
+											)}
+											{/* 編集ボタン */}
+											<button
+												type="button"
+												onClick={() => startEditing(index)}
+												className="text-xs text-purple-300/40 hover:text-fuchsia-400 mt-1.5 transition-colors"
+											>
+												{editingIndex === index ? "編集中..." : "編集"}
+											</button>
+										</div>
 									</div>
 
-									{/* 書影 */}
-									{book.coverImageUrl ? (
-										<img
-											src={book.coverImageUrl}
-											alt=""
-											className="w-12 h-16 object-cover rounded flex-shrink-0"
-										/>
-									) : (
-										<div className="w-12 h-16 bg-white/10 rounded flex-shrink-0 flex items-center justify-center text-purple-300/40 text-xs">
-											No img
+									{/* 展開型編集フォーム */}
+									{editingIndex === index && (
+										<div className="border-t border-white/10 px-4 py-4 space-y-4">
+											{/* Google Books 検索 */}
+											<div>
+												<h3 className="text-xs font-semibold uppercase tracking-widest text-cyan-400/80 mb-2">
+													書籍を検索して補完
+												</h3>
+												<div className="flex gap-2">
+													<input
+														type="text"
+														value={editSearchQuery}
+														onChange={(e) => setEditSearchQuery(e.target.value)}
+														onKeyDown={(e) => {
+															if (e.key === "Enter") {
+																e.preventDefault();
+																searchBooksForEdit();
+															}
+														}}
+														placeholder="タイトルまたは著者名で検索..."
+														className={`${inputClass} flex-1`}
+													/>
+													<button
+														type="button"
+														onClick={searchBooksForEdit}
+														disabled={editSearching}
+														className="rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-all hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50"
+													>
+														{editSearching ? "..." : "検索"}
+													</button>
+												</div>
+
+												{editSearchError && (
+													<div className="mt-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-xs text-yellow-300">
+														{editSearchError}
+													</div>
+												)}
+
+												{editSearchResults.length > 0 && (
+													<div className="mt-2 rounded-lg bg-white/5 border border-white/10 divide-y divide-white/5 max-h-48 overflow-y-auto">
+														{editSearchResults.map((result, i) => (
+															<button
+																key={`${result.isbn ?? i}-${result.title}`}
+																type="button"
+																onClick={() => selectSearchResultForEdit(result)}
+																className="w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-white/10 transition-colors"
+															>
+																{result.coverImageUrl ? (
+																	<img
+																		src={result.coverImageUrl}
+																		alt=""
+																		className="w-8 h-11 object-cover rounded flex-shrink-0"
+																	/>
+																) : (
+																	<div className="w-8 h-11 bg-white/10 rounded flex-shrink-0 flex items-center justify-center text-purple-300/40 text-[10px]">
+																		No img
+																	</div>
+																)}
+																<div className="min-w-0">
+																	<p className="text-xs font-medium text-white truncate">
+																		{result.title}
+																	</p>
+																	<p className="text-[10px] text-purple-300/60">
+																		{result.author}
+																		{result.publishedYear && ` (${result.publishedYear})`}
+																	</p>
+																</div>
+															</button>
+														))}
+													</div>
+												)}
+											</div>
+
+											{/* 書籍情報フォーム */}
+											<div className="space-y-3">
+												<h3 className="text-xs font-semibold uppercase tracking-widest text-fuchsia-400/80">
+													書籍情報
+												</h3>
+
+												{/* 表紙プレビュー */}
+												{editCoverImageUrl && (
+													<div className="flex justify-center">
+														<img
+															src={editCoverImageUrl}
+															alt="表紙"
+															className="h-24 object-cover rounded-lg border border-white/10"
+														/>
+													</div>
+												)}
+
+												<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+													<div className="sm:col-span-2">
+														<label className={labelClass}>
+															タイトル<span className="text-red-400 ml-1">*</span>
+														</label>
+														<input
+															type="text"
+															value={editTitle}
+															onChange={(e) => setEditTitle(e.target.value)}
+															className={inputClass}
+														/>
+													</div>
+													<div className="sm:col-span-2">
+														<label className={labelClass}>
+															著者<span className="text-red-400 ml-1">*</span>
+														</label>
+														<input
+															type="text"
+															value={editAuthor}
+															onChange={(e) => setEditAuthor(e.target.value)}
+															className={inputClass}
+														/>
+													</div>
+													<div>
+														<label className={labelClass}>ISBN</label>
+														<input
+															type="text"
+															value={editIsbn}
+															onChange={(e) => setEditIsbn(e.target.value)}
+															className={inputClass}
+														/>
+													</div>
+													<div>
+														<label className={labelClass}>出版年</label>
+														<input
+															type="text"
+															value={editPublishedYear}
+															onChange={(e) => setEditPublishedYear(e.target.value)}
+															className={inputClass}
+														/>
+													</div>
+													<div>
+														<label className={labelClass}>出版社</label>
+														<input
+															type="text"
+															value={editPublisher}
+															onChange={(e) => setEditPublisher(e.target.value)}
+															className={inputClass}
+														/>
+													</div>
+													<div>
+														<label className={labelClass}>ページ数</label>
+														<input
+															type="number"
+															value={editPageCount}
+															onChange={(e) => setEditPageCount(e.target.value)}
+															className={inputClass}
+														/>
+													</div>
+													<div className="sm:col-span-2">
+														<label className={labelClass}>ジャンル</label>
+														<select
+															value={getEditData(index).genre}
+															onChange={(e) => updateEditData(index, { genre: e.target.value })}
+															className={`${inputClass} appearance-none`}
+														>
+															<option value="">選択してください</option>
+															{GENRES.map((g) => (
+																<option key={g} value={g}>{g}</option>
+															))}
+														</select>
+													</div>
+													<div className="sm:col-span-2">
+														<label className={labelClass}>内容（短く）</label>
+														<textarea
+															rows={2}
+															value={editDescription}
+															onChange={(e) => setEditDescription(e.target.value)}
+															placeholder="本の内容を簡単に説明..."
+															className={`${inputClass} resize-none`}
+														/>
+													</div>
+												</div>
+											</div>
+
+											{/* ステータスと設定 */}
+											<div className="space-y-3">
+												<h3 className="text-xs font-semibold uppercase tracking-widest text-fuchsia-400/80">
+													ステータスと設定
+												</h3>
+
+												{/* ステータス */}
+												<div className="flex flex-wrap gap-1.5">
+													{(Object.entries(BOOK_STATUSES) as [BookStatus, string][]).map(
+														([key, label]) => (
+															<label
+																key={key}
+																className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 cursor-pointer transition-colors text-xs ${
+																	getEditData(index).status === key
+																		? "border-fuchsia-500/40 bg-fuchsia-500/10"
+																		: "border-white/10 bg-white/5 hover:bg-white/10"
+																}`}
+															>
+																<input
+																	type="radio"
+																	name={`status-${index}`}
+																	checked={getEditData(index).status === key}
+																	onChange={() => updateEditData(index, { status: key })}
+																	className="accent-fuchsia-500 w-3 h-3"
+																/>
+																<span className="text-purple-200">{label}</span>
+															</label>
+														),
+													)}
+												</div>
+
+												{/* 公開/非公開 */}
+												<div>
+													<label className={labelClass}>公開設定</label>
+													<div className="flex gap-1.5">
+														{(Object.entries(BOOK_VISIBILITY) as [BookVisibility, string][]).map(
+															([key, label]) => (
+																<label
+																	key={key}
+																	className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 cursor-pointer transition-colors text-xs ${
+																		getEditData(index).visibility === key
+																			? "border-fuchsia-500/40 bg-fuchsia-500/10"
+																			: "border-white/10 bg-white/5 hover:bg-white/10"
+																	}`}
+																>
+																	<input
+																		type="radio"
+																		name={`visibility-${index}`}
+																		checked={getEditData(index).visibility === key}
+																		onChange={() => updateEditData(index, { visibility: key })}
+																		className="accent-fuchsia-500 w-3 h-3"
+																	/>
+																	<span className="text-purple-200">{label}</span>
+																</label>
+															),
+														)}
+													</div>
+												</div>
+
+												{/* 評価 */}
+												<div className="grid grid-cols-3 gap-2">
+													<div>
+														<label className={labelClass}>難易度</label>
+														<select
+															value={getEditData(index).difficulty ?? ""}
+															onChange={(e) => updateEditData(index, { difficulty: e.target.value ? Number(e.target.value) : null })}
+															className={`${inputClass} appearance-none`}
+														>
+															<option value="">-</option>
+															{[1, 2, 3, 4, 5].map((v) => (
+																<option key={v} value={v}>{"★".repeat(v)}{"☆".repeat(5 - v)}</option>
+															))}
+														</select>
+													</div>
+													<div>
+														<label className={labelClass}>重要度</label>
+														<select
+															value={getEditData(index).importance ?? ""}
+															onChange={(e) => updateEditData(index, { importance: e.target.value ? Number(e.target.value) : null })}
+															className={`${inputClass} appearance-none`}
+														>
+															<option value="">-</option>
+															{[1, 2, 3, 4, 5].map((v) => (
+																<option key={v} value={v}>{"★".repeat(v)}{"☆".repeat(5 - v)}</option>
+															))}
+														</select>
+													</div>
+													<div>
+														<label className={labelClass}>おすすめ度</label>
+														<select
+															value={getEditData(index).recommendation ?? ""}
+															onChange={(e) => updateEditData(index, { recommendation: e.target.value ? Number(e.target.value) : null })}
+															className={`${inputClass} appearance-none`}
+														>
+															<option value="">-</option>
+															{[1, 2, 3, 4, 5].map((v) => (
+																<option key={v} value={v}>{"★".repeat(v)}{"☆".repeat(5 - v)}</option>
+															))}
+														</select>
+													</div>
+												</div>
+
+												{/* タグ */}
+												<div>
+													<label className={labelClass}>タグ（カンマ区切り）</label>
+													<input
+														type="text"
+														value={getEditData(index).tags}
+														onChange={(e) => updateEditData(index, { tags: e.target.value })}
+														placeholder="例: 入門書, 輪読会向き, 名著"
+														className={inputClass}
+													/>
+												</div>
+
+												{/* メモ */}
+												<div>
+													<label className={labelClass}>メモ / 感想</label>
+													<textarea
+														rows={2}
+														value={getEditData(index).memo}
+														onChange={(e) => updateEditData(index, { memo: e.target.value })}
+														placeholder="自由にメモや感想を..."
+														className={`${inputClass} resize-none`}
+													/>
+												</div>
+											</div>
+
+											{/* 保存/キャンセルボタン */}
+											<div className="flex gap-2 pt-1">
+												<button
+													type="button"
+													onClick={saveEdit}
+													className="rounded-lg bg-fuchsia-500/30 border border-fuchsia-500/40 px-4 py-1.5 text-xs text-fuchsia-200 hover:bg-fuchsia-500/40 transition-colors"
+												>
+													保存
+												</button>
+												<button
+													type="button"
+													onClick={cancelEdit}
+													className="rounded-lg bg-white/10 border border-white/10 px-4 py-1.5 text-xs text-purple-300/60 hover:bg-white/20 transition-colors"
+												>
+													キャンセル
+												</button>
+											</div>
 										</div>
 									)}
-
-									{/* 情報 */}
-									<div className="min-w-0 flex-1">
-										<p className="text-sm font-medium text-white line-clamp-2">
-											{book.title}
-										</p>
-										<p className="text-xs text-purple-300/60 mt-0.5">
-											{book.author}
-											{book.publishedYear &&
-												` (${book.publishedYear})`}
-										</p>
-										{book.publisher && (
-											<p className="text-xs text-purple-300/40 mt-0.5">
-												{book.publisher}
-											</p>
-										)}
-										{/* AI認識との差分表示 */}
-										{book.recognized.title !== book.title && (
-											<p className="text-xs text-cyan-400/60 mt-1">
-												AI認識: {book.recognized.title}
-											</p>
-										)}
-									</div>
-								</button>
+								</div>
 							))}
 						</div>
 
@@ -498,6 +1036,7 @@ export default function BooksMyPhotoAdd({
 								setSavedPhotoUrl(null);
 								setRecognizedBooks([]);
 								setSelectedIndexes(new Set());
+								setEditDataMap(new Map());
 								setError("");
 								if (fileInputRef.current) {
 									fileInputRef.current.value = "";
