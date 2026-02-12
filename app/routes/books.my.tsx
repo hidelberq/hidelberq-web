@@ -66,6 +66,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		case "oldest":
 			orderBy = asc(personalBooks.createdAt);
 			break;
+		case "author":
+			orderBy = asc(personalBooks.author);
+			break;
+		case "status":
+			orderBy = asc(personalBooks.status);
+			break;
+		case "genre":
+			orderBy = asc(personalBooks.genre);
+			break;
 		case "importance":
 			orderBy = desc(personalBooks.importance);
 			break;
@@ -178,7 +187,7 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 
 				{/* 読書統計 */}
 				{stats && stats.total > 0 && (
-					<div className="w-full max-w-2xl mb-8 grid grid-cols-3 sm:grid-cols-6 gap-2">
+					<div className="w-full max-w-2xl md:max-w-5xl mb-8 grid grid-cols-3 sm:grid-cols-6 gap-2">
 						<StatCard label="合計" value={stats.total} color="text-white" />
 						<StatCard label="読了" value={stats.completed} color="text-green-400" />
 						<StatCard label="読書中" value={stats.reading} color="text-blue-400" />
@@ -194,7 +203,7 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 				)}
 
 				{/* 検索・フィルタ */}
-				<div className="w-full max-w-2xl mb-6 space-y-3">
+				<div className="w-full max-w-2xl md:max-w-5xl mb-6 space-y-3">
 					<div className="flex gap-2">
 						<input
 							type="text"
@@ -253,11 +262,14 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 						<select
 							value={loaderData.sort}
 							onChange={(e) => updateFilter("sort", e.target.value)}
-							className="rounded-lg bg-white/10 border border-white/20 px-3 py-1.5 text-sm text-purple-200 focus:outline-none appearance-none"
+							className="rounded-lg bg-white/10 border border-white/20 px-3 py-1.5 text-sm text-purple-200 focus:outline-none appearance-none md:hidden"
 						>
 							<option value="newest">新しい順</option>
 							<option value="oldest">古い順</option>
 							<option value="title">タイトル順</option>
+							<option value="author">著者順</option>
+							<option value="status">ステータス順</option>
+							<option value="genre">ジャンル順</option>
 							<option value="importance">重要度順</option>
 							<option value="recommendation">おすすめ度順</option>
 						</select>
@@ -265,7 +277,7 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 				</div>
 
 				{/* 追加ボタン */}
-				<div className="w-full max-w-2xl mb-6 flex flex-wrap gap-3">
+				<div className="w-full max-w-2xl md:max-w-5xl mb-6 flex flex-wrap gap-3">
 					<Link
 						to="/tsundoku_2_0/my/add"
 						className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 px-5 py-2.5 font-medium text-white transition-all hover:from-fuchsia-500 hover:to-purple-500 hover:shadow-lg hover:shadow-fuchsia-500/20"
@@ -281,7 +293,7 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 				</div>
 
 				{/* 本のリスト */}
-				<div className="w-full max-w-2xl">
+				<div className="w-full max-w-2xl md:hidden">
 					{bookList.length === 0 ? (
 						<div className="text-center py-16 text-purple-300/40">
 							{stats?.total === 0
@@ -347,11 +359,154 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 					)}
 				</div>
 
+				{/* PC向けスプレッドシートビュー */}
+				<div className="w-full max-w-5xl hidden md:block">
+					{bookList.length === 0 ? (
+						<div className="text-center py-16 text-purple-300/40">
+							{stats?.total === 0
+								? "まだ本が追加されていません"
+								: "条件に一致する本がありません"}
+						</div>
+					) : (
+						<div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm overflow-hidden">
+							<table className="w-full text-left">
+								<thead>
+									<tr className="border-b border-white/10 bg-white/5">
+										<th className="px-4 py-3 text-xs font-medium text-purple-300/60 w-10" />
+										<SortableHeader
+											label="タイトル"
+											sortKey="title"
+											currentSort={loaderData.sort}
+											onSort={(key) => updateFilter("sort", key)}
+										/>
+										<SortableHeader
+											label="著者"
+											sortKey="author"
+											currentSort={loaderData.sort}
+											onSort={(key) => updateFilter("sort", key)}
+										/>
+										<SortableHeader
+											label="ジャンル"
+											sortKey="genre"
+											currentSort={loaderData.sort}
+											onSort={(key) => updateFilter("sort", key)}
+										/>
+										<SortableHeader
+											label="ステータス"
+											sortKey="status"
+											currentSort={loaderData.sort}
+											onSort={(key) => updateFilter("sort", key)}
+										/>
+										<SortableHeader
+											label="重要度"
+											sortKey="importance"
+											currentSort={loaderData.sort}
+											onSort={(key) => updateFilter("sort", key)}
+										/>
+										<SortableHeader
+											label="おすすめ"
+											sortKey="recommendation"
+											currentSort={loaderData.sort}
+											onSort={(key) => updateFilter("sort", key)}
+										/>
+										<th className="px-3 py-3 text-xs font-medium text-purple-300/60">
+											公開
+										</th>
+									</tr>
+								</thead>
+								<tbody className="divide-y divide-white/5">
+									{bookList.map((book) => (
+										<tr
+											key={book.id}
+											className="hover:bg-white/5 transition-colors cursor-pointer group"
+											onClick={() => {
+												window.location.href = `/tsundoku_2_0/my/book/${book.id}`;
+											}}
+										>
+											<td className="px-4 py-3">
+												{book.coverImageUrl ? (
+													<img
+														src={book.coverImageUrl}
+														alt=""
+														className="w-8 h-10 object-cover rounded"
+													/>
+												) : (
+													<div className="w-8 h-10 bg-white/10 rounded flex items-center justify-center text-purple-300/20 text-[8px]">
+														No img
+													</div>
+												)}
+											</td>
+											<td className="px-3 py-3 text-sm text-white font-medium max-w-48 truncate group-hover:text-fuchsia-200 transition-colors">
+												{book.title}
+											</td>
+											<td className="px-3 py-3 text-sm text-purple-300/70 max-w-32 truncate">
+												{book.author}
+											</td>
+											<td className="px-3 py-3 text-xs text-purple-300/50">
+												{book.genre || "-"}
+											</td>
+											<td className="px-3 py-3">
+												<span
+													className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${getStatusColor(book.status as BookStatus)}`}
+												>
+													{BOOK_STATUSES[book.status as BookStatus]}
+												</span>
+											</td>
+											<td className="px-3 py-3 text-xs text-purple-300/50">
+												{book.importance !== null
+													? formatRating(book.importance)
+													: "-"}
+											</td>
+											<td className="px-3 py-3 text-xs text-yellow-400">
+												{book.recommendation !== null
+													? formatRating(book.recommendation)
+													: "-"}
+											</td>
+											<td className="px-3 py-3 text-xs text-purple-300/50">
+												{book.visibility === "private" ? (
+													<span className="text-purple-400">非公開</span>
+												) : (
+													"公開"
+												)}
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
+					)}
+				</div>
+
 				<p className="text-sm text-purple-300/30 mt-8">
 					{bookList.length} 冊
 				</p>
 			</div>
 		</div>
+	);
+}
+
+function SortableHeader({
+	label,
+	sortKey,
+	currentSort,
+	onSort,
+}: {
+	label: string;
+	sortKey: string;
+	currentSort: string;
+	onSort: (key: string) => void;
+}) {
+	const isActive = currentSort === sortKey;
+	return (
+		<th
+			className="px-3 py-3 text-xs font-medium text-purple-300/60 cursor-pointer hover:text-purple-200 transition-colors select-none whitespace-nowrap"
+			onClick={() => onSort(sortKey)}
+		>
+			{label}
+			<span className={`ml-1 ${isActive ? "text-fuchsia-400" : "text-purple-300/20"}`}>
+				{isActive ? "▼" : "▽"}
+			</span>
+		</th>
 	);
 }
 
