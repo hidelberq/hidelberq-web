@@ -178,6 +178,8 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 	const [showMembers, setShowMembers] = useState(false);
 	const [copied, setCopied] = useState(false);
 
+	const [initialized, setInitialized] = useState(false);
+
 	useEffect(() => {
 		const id = localStorage.getItem("bookMemberId") || "";
 		setMemberId(id);
@@ -195,7 +197,31 @@ export default function BooksGroup({ loaderData }: Route.ComponentProps) {
 			groups.push({ code: group.groupCode, name: group.name });
 		}
 		localStorage.setItem("bookGroups", JSON.stringify(groups));
-	}, [group.groupCode, group.name]);
+
+		// パラメータなしで戻ってきた場合、sessionStorage から復元
+		const storageKey = `tsundoku_group_list_params_${group.groupCode}`;
+		const hasFilters = searchParams.get("sort") || searchParams.get("status") || searchParams.get("genre") || searchParams.get("q");
+		if (!hasFilters) {
+			const saved = sessionStorage.getItem(storageKey);
+			if (saved) {
+				const params = new URLSearchParams(saved);
+				setSearchParams(params, { replace: true });
+				setInitialized(true);
+				return;
+			}
+		}
+		setInitialized(true);
+	}, [group.groupCode, group.name, searchParams, setSearchParams]);
+
+	// フィルタ状態を sessionStorage に保存
+	useEffect(() => {
+		if (!initialized) return;
+		const params = new URLSearchParams(searchParams);
+		const filterString = params.toString();
+		if (filterString) {
+			sessionStorage.setItem(`tsundoku_group_list_params_${group.groupCode}`, filterString);
+		}
+	}, [searchParams, initialized, group.groupCode]);
 
 	const updateFilter = (key: string, value: string) => {
 		const params = new URLSearchParams(searchParams);

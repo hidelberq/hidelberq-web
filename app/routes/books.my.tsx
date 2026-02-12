@@ -135,6 +135,19 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 		const id = localStorage.getItem("bookMemberId") || "";
 		setMemberId(id);
 
+		// パラメータなしで戻ってきた場合、sessionStorage から復元
+		const hasFilters = searchParams.get("sort") || searchParams.get("status") || searchParams.get("genre") || searchParams.get("q") || searchParams.get("visibility");
+		if (id && !hasFilters) {
+			const saved = sessionStorage.getItem("tsundoku_my_list_params");
+			if (saved) {
+				const params = new URLSearchParams(saved);
+				params.set("memberId", id);
+				setSearchParams(params, { replace: true });
+				setInitialized(true);
+				return;
+			}
+		}
+
 		// memberId をクエリパラメータに設定
 		if (id && !searchParams.get("memberId")) {
 			const params = new URLSearchParams(searchParams);
@@ -143,6 +156,17 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 		}
 		setInitialized(true);
 	}, [searchParams, setSearchParams]);
+
+	// フィルタ状態を sessionStorage に保存
+	useEffect(() => {
+		if (!initialized) return;
+		const params = new URLSearchParams(searchParams);
+		params.delete("memberId");
+		const filterString = params.toString();
+		if (filterString) {
+			sessionStorage.setItem("tsundoku_my_list_params", filterString);
+		}
+	}, [searchParams, initialized]);
 
 	const updateFilter = (key: string, value: string) => {
 		const params = new URLSearchParams(searchParams);
