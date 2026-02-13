@@ -284,19 +284,29 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 							<option value="private">非公開のみ</option>
 						</select>
 						<select
-							value={loaderData.sort}
+							value={loaderData.sort === "author" ? "newest" : loaderData.sort}
 							onChange={(e) => updateFilter("sort", e.target.value)}
 							className="rounded-lg bg-white/10 border border-white/20 px-3 py-1.5 text-sm text-purple-200 focus:outline-none appearance-none md:hidden"
 						>
 							<option value="newest">新しい順</option>
 							<option value="oldest">古い順</option>
 							<option value="title">タイトル順</option>
-							<option value="author">著者順</option>
 							<option value="status">ステータス順</option>
 							<option value="genre">ジャンル順</option>
 							<option value="importance">重要度順</option>
 							<option value="recommendation">おすすめ度順</option>
 						</select>
+						<button
+							type="button"
+							onClick={() => updateFilter("sort", loaderData.sort === "author" ? "newest" : "author")}
+							className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
+								loaderData.sort === "author"
+									? "bg-fuchsia-500/30 border border-fuchsia-400/50 text-fuchsia-200"
+									: "bg-white/10 border border-white/20 text-purple-200 hover:bg-white/20"
+							}`}
+						>
+							著者順
+						</button>
 					</div>
 				</div>
 
@@ -323,6 +333,70 @@ export default function BooksMyList({ loaderData }: Route.ComponentProps) {
 							{stats?.total === 0
 								? "まだ本が追加されていません"
 								: "条件に一致する本がありません"}
+						</div>
+					) : loaderData.sort === "author" ? (
+						<div className="grid gap-4">
+							{(() => {
+								type Book = (typeof bookList)[number];
+								const grouped = new Map<string, Book[]>();
+								for (const book of bookList) {
+									const key = book.author || "著者不明";
+									const arr = grouped.get(key);
+									if (arr) {
+										arr.push(book);
+									} else {
+										grouped.set(key, [book]);
+									}
+								}
+								return Array.from(grouped.entries()).map(([author, authorBooks]) => (
+									<div key={author}>
+										<h2 className="text-sm font-medium text-fuchsia-300/80 mb-2 px-1">
+											{author}
+											<span className="text-purple-300/40 ml-2 font-normal">{authorBooks.length}冊</span>
+										</h2>
+										<div className="grid gap-2">
+											{authorBooks.map((book) => (
+												<Link
+													key={book.id}
+													to={`/tsundoku_2_0/my/book/${book.id}`}
+													className="flex gap-3 rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm px-4 py-3 transition-all duration-300 hover:border-fuchsia-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-fuchsia-500/10 overflow-hidden"
+												>
+													<div className="flex-1 min-w-0">
+														<h3 className="font-semibold text-white truncate text-sm">
+															{book.title}
+														</h3>
+														<div className="flex items-center gap-2 mt-1 flex-wrap">
+															<span
+																className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(book.status as BookStatus)}`}
+															>
+																{BOOK_STATUSES[book.status as BookStatus]}
+															</span>
+															{book.genre && (
+																<span className="text-xs text-purple-300/40">
+																	{book.genre}
+																</span>
+															)}
+															{book.visibility === "private" && (
+																<span className="text-xs px-2 py-0.5 rounded-full text-purple-400 bg-purple-500/20">
+																	非公開
+																</span>
+															)}
+															{book.recommendation !== null && (
+																<span className="text-xs text-yellow-400">
+																	{formatRating(book.recommendation)}
+																</span>
+															)}
+														</div>
+													</div>
+													<span className="text-purple-300/30 self-center text-sm">
+														&rarr;
+													</span>
+												</Link>
+											))}
+										</div>
+									</div>
+								));
+							})()}
 						</div>
 					) : (
 						<div className="grid gap-3">
