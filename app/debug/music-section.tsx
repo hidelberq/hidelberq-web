@@ -65,16 +65,22 @@ export function MusicSection({
 		}
 	}, [diaryData, diaryTestDate]);
 
-	// 最新のフィードバックを取得
-	const latestFeedback =
-		(customFetcher.data as Record<string, unknown> | undefined) ??
-		(generateFetcher.data as Record<string, unknown> | undefined) ??
-		(diaryFetcher.data as Record<string, unknown> | undefined) ??
-		(uploadFetcher.data as Record<string, unknown> | undefined);
+	// 各フェッチャーのフィードバックを個別に取得（?? チェーンだとuploadの結果が隠れるため）
+	const generateFeedback =
+		generateFetcher.data as Record<string, unknown> | undefined;
+	const uploadFeedback =
+		uploadFetcher.data as Record<string, unknown> | undefined;
+	const diaryFeedback =
+		diaryFetcher.data as Record<string, unknown> | undefined;
+	const customFeedback =
+		customFetcher.data as Record<string, unknown> | undefined;
 
 	return (
 		<section>
-			<ActionFeedback data={latestFeedback} />
+			<ActionFeedback data={generateFeedback} />
+			<ActionFeedback data={uploadFeedback} />
+			<ActionFeedback data={diaryFeedback} />
+			<ActionFeedback data={customFeedback} />
 
 			<div className="flex items-center justify-between mb-4">
 				<h2 className="text-lg font-bold text-pink-400">

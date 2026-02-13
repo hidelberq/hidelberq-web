@@ -398,6 +398,15 @@ export async function action({ request, context }: Route.ActionArgs) {
 		const title = formData.get("title") as string | null;
 		const audioFile = formData.get("audio") as File | null;
 
+		console.log("[upload-rap-track] 開始:", {
+			date,
+			title,
+			hasFile: !!audioFile,
+			fileName: audioFile?.name,
+			fileSize: audioFile?.size,
+			fileType: audioFile?.type,
+		});
+
 		if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
 			return { error: "日付のフォーマットが不正です (YYYY-MM-DD)" };
 		}
@@ -407,6 +416,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 		try {
 			const audioData = await audioFile.arrayBuffer();
+			console.log("[upload-rap-track] arrayBuffer 取得完了:", audioData.byteLength, "bytes");
+
 			const isM4a =
 				audioFile.type === "audio/mp4" ||
 				audioFile.type === "audio/x-m4a" ||
@@ -420,6 +431,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 				? `hiphop/${date}/rap.mp3`
 				: `hiphop/${date}/rap.m4a`;
 			await context.cloudflare.env.MUSIC_BUCKET.delete(oldKey);
+			console.log("[upload-rap-track] 旧ファイル削除完了:", oldKey);
 
 			await context.cloudflare.env.MUSIC_BUCKET.put(rapTrackKey, audioData, {
 				httpMetadata: {
@@ -427,6 +439,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 					cacheControl: "public, max-age=86400",
 				},
 			});
+			console.log("[upload-rap-track] R2 アップロード完了:", rapTrackKey);
 
 			const db = drizzle(context.cloudflare.env.DB);
 			const existing = await db
@@ -443,6 +456,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 						...(title ? { title } : {}),
 					})
 					.where(eq(hiphopTracks.date, date));
+				console.log("[upload-rap-track] DB レコード更新完了:", date);
 			} else {
 				await db.insert(hiphopTracks).values({
 					date,
@@ -450,6 +464,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 					title: title || `${date} Rap`,
 					source: "manual",
 				});
+				console.log("[upload-rap-track] DB レコード新規作成完了:", date);
 			}
 
 			return {
@@ -458,7 +473,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 				message: `${date} のラップトラックをアップロードしました`,
 			};
 		} catch (e) {
-			console.error("Rap track upload error:", e);
+			console.error("[upload-rap-track] エラー:", e);
 			return {
 				error: `アップロードエラー: ${e instanceof Error ? e.message : String(e)}`,
 			};
