@@ -5,7 +5,7 @@ import { newsCache, heroImages, scrapedArticles, tweets, scrapeSites, activityLo
 import { desc, eq, sql } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
 import { generateHeroImage, regenerateHeroImageWithPrompt } from "../../workers/hero-image";
-import { generateHiphopTrack } from "../../workers/hiphop-cron";
+import { generateHiphopTrack, generateHiphopTrackWithPrompt, fetchDiary } from "../../workers/hiphop-cron";
 import { forceGenerateAitterTweets } from "../../workers/aitter-cron";
 import { scrapeAllSites, scrapeUrl } from "../../workers/scraper/run";
 import { parsers } from "../../workers/scraper/parsers";
@@ -322,6 +322,72 @@ export async function action({ request, context }: Route.ActionArgs) {
 			console.error("Hiphop track generation error:", e);
 			return {
 				error: `Hiphopトラック生成エラー: ${e instanceof Error ? e.message : String(e)}`,
+			};
+		}
+	}
+
+	// --- 日記取得テスト ---
+	if (intent === "test-diary-fetch") {
+		const date = formData.get("date") as string;
+		if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+			return { error: "日付のフォーマットが不正です (YYYY-MM-DD)" };
+		}
+		const workflowyApiKey = context.cloudflare.env.WORKFLOWY_API_KEY;
+		if (!workflowyApiKey) {
+			return { error: "WORKFLOWY_API_KEY が設定されていません" };
+		}
+		try {
+			const diary = await fetchDiary(workflowyApiKey, date);
+			if (diary) {
+				return {
+					ok: true,
+					intent: "music",
+					message: `${date} の日記を取得しました`,
+					diaryResult: diary,
+				};
+			}
+			return {
+				ok: true,
+				intent: "music",
+				message: `${date} の日記は見つかりませんでした（天気にフォールバックされます）`,
+				diaryResult: null,
+			};
+		} catch (e) {
+			return {
+				error: `日記取得エラー: ${e instanceof Error ? e.message : String(e)}`,
+			};
+		}
+	}
+
+	// --- カスタムプロンプトでHiphopトラック生成 ---
+	if (intent === "generate-hiphop-with-prompt") {
+		const date = formData.get("date") as string;
+		const style = formData.get("style") as string;
+		const title = formData.get("title") as string;
+		const diaryContent = (formData.get("diaryContent") as string) || null;
+
+		if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+			return { error: "日付のフォーマットが不正です (YYYY-MM-DD)" };
+		}
+		if (!style?.trim()) {
+			return { error: "スタイルは必須です" };
+		}
+		if (!title?.trim()) {
+			return { error: "タイトルは必須です" };
+		}
+		try {
+			const result = await generateHiphopTrackWithPrompt(
+				context.cloudflare.env,
+				style.trim(),
+				title.trim(),
+				date,
+				diaryContent,
+			);
+			return { ok: true, intent: "music", message: result };
+		} catch (e) {
+			console.error("Hiphop track custom generation error:", e);
+			return {
+				error: `カスタム生成エラー: ${e instanceof Error ? e.message : String(e)}`,
 			};
 		}
 	}

@@ -96,7 +96,7 @@ function isHidelberqMention(name: string): boolean {
 	return name.includes('<mention id="3775965"');
 }
 
-async function fetchDiary(
+export async function fetchDiary(
 	apiKey: string,
 	targetDate: string,
 ): Promise<string | null> {
@@ -504,4 +504,87 @@ export async function generateHiphopTrack(
 	console.log(`Hiphop track generation completed for ${todayDate}`);
 	const sourceLabel = source === "diary" ? "日記" : "天気";
 	return `Hiphopトラックを生成 (${sourceLabel}ベース: ${todayDate}) - ${track.title}`;
+}
+
+/**
+ * カスタムスタイル・タイトルでトラックを生成する（デバッグ用）
+ */
+export async function generateHiphopTrackWithPrompt(
+	env: Env,
+	customStyle: string,
+	customTitle: string,
+	targetDate: string,
+	diaryContent?: string | null,
+): Promise<string> {
+	const sunoApiKey = env.SUNO_API_KEY;
+	if (!sunoApiKey) {
+		throw new Error("SUNO_API_KEY is not set");
+	}
+
+	const db = drizzle(env.DB);
+
+	console.log(`Generating hiphop track for ${targetDate} with custom prompt`);
+	console.log(`Style: ${customStyle}, Title: ${customTitle}`);
+
+	// Suno API でトラック生成
+	const taskId = await generateSunoTrack(sunoApiKey, customStyle, customTitle);
+	console.log(`Suno task created: ${taskId}`);
+
+	// ポーリングで完了を待つ
+	const track = await pollSunoTask(sunoApiKey, taskId);
+	console.log(
+		`Track generated: ${track.title} (${track.duration}s) - ${track.audioUrl}`,
+	);
+
+	// 音声ファイルをダウンロードしてR2に保存
+	const audioData = await downloadAudio(track.audioUrl);
+	const instrumentalKey = `hiphop/${targetDate}/instrumental.mp3`;
+
+	await env.MUSIC_BUCKET.put(instrumentalKey, audioData, {
+		httpMetadata: {
+			contentType: "audio/mpeg",
+			cacheControl: "public, max-age=86400",
+		},
+	});
+
+	// DB に記録（既存レコードがあれば上書き）
+	const existing = await db
+		.select()
+		.from(hiphopTracks)
+		.where(eq(hiphopTracks.date, targetDate))
+		.limit(1);
+
+	const prompt = JSON.stringify({ style: customStyle, title: customTitle });
+
+	if (existing.length > 0) {
+		await db
+			.update(hiphopTracks)
+			.set({
+				instrumentalKey,
+				instrumentalUrl: track.audioUrl,
+				title: customTitle,
+				prompt,
+				style: customStyle,
+				duration: Math.round(track.duration),
+				diaryContent: diaryContent ?? existing[0].diaryContent ?? null,
+				source: diaryContent ? "diary" : existing[0].source,
+				sunoTaskId: taskId,
+			})
+			.where(eq(hiphopTracks.date, targetDate));
+	} else {
+		await db.insert(hiphopTracks).values({
+			date: targetDate,
+			instrumentalKey,
+			instrumentalUrl: track.audioUrl,
+			title: customTitle,
+			prompt,
+			style: customStyle,
+			duration: Math.round(track.duration),
+			diaryContent: diaryContent ?? null,
+			source: diaryContent ? "diary" : "manual",
+			sunoTaskId: taskId,
+		});
+	}
+
+	return `${targetDate} のトラックをカスタム生成しました - ${customTitle}`;
 }
