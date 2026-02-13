@@ -181,7 +181,7 @@ function ActivityIcon({ type }: { type: string }) {
 	}
 }
 
-function MiniTrackPlayer({
+function FixedBottomPlayer({
 	track,
 }: {
 	track: {
@@ -198,39 +198,34 @@ function MiniTrackPlayer({
 		: `/daily-track/audio/${track.date}/instrumental`;
 
 	return (
-		<div className="w-full mt-6">
-			<Link
-				to="/daily-track"
-				className="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm transition-all hover:border-fuchsia-500/30 hover:bg-white/10"
-			>
-				<div className="px-5 py-4">
-					<div className="flex items-center justify-between mb-2">
-						<div className="flex items-center gap-2">
-							<span className="text-xs text-fuchsia-400/80 font-medium">
-								Daily Hiphop Track
-							</span>
-							<span className="text-[10px] uppercase tracking-wider text-purple-300/50 bg-purple-500/10 px-2 py-0.5 rounded">
-								{track.source === "diary" ? "from diary" : track.source === "weather" ? "from weather" : "manual"}
-							</span>
+		<div className="fixed bottom-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-xl border-t border-white/10">
+			<div className="max-w-4xl mx-auto px-4 py-2.5 flex items-center gap-3">
+				{/* トラック情報 */}
+				<Link
+					to="/daily-track"
+					className="flex-1 min-w-0 flex items-center gap-3 group"
+				>
+					<div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-fuchsia-500/30 to-cyan-500/30 border border-white/10 flex items-center justify-center">
+						<svg className="w-5 h-5 text-fuchsia-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+							<path d="M9 18V5l12-3v13" />
+							<circle cx="6" cy="18" r="3" />
+							<circle cx="18" cy="15" r="3" />
+						</svg>
+					</div>
+					<div className="min-w-0">
+						<p className="text-sm font-semibold text-white truncate group-hover:text-fuchsia-200 transition-colors">
+							{track.title || "Untitled Track"}
+						</p>
+						<div className="flex items-center gap-1.5">
+							<span className="text-[10px] text-purple-300/50">{track.date}</span>
 							{track.hasRap && (
-								<span className="text-[10px] uppercase tracking-wider text-cyan-300/50 bg-cyan-500/10 px-2 py-0.5 rounded">
-									Rap Ver.
-								</span>
+								<span className="text-[10px] text-cyan-400/60">Rap</span>
 							)}
 						</div>
-						<span className="text-xs text-purple-300/40">{track.date}</span>
 					</div>
-					<p className="text-sm font-semibold text-white truncate">
-						{track.title || "Untitled Track"}
-					</p>
-					{track.style && (
-						<p className="text-[11px] text-purple-200/40 truncate mt-0.5">
-							{track.style}
-						</p>
-					)}
-				</div>
-				{/* ネイティブオーディオプレイヤー */}
-				<div className="px-5 pb-4" onClick={(e) => e.preventDefault()}>
+				</Link>
+				{/* オーディオプレイヤー */}
+				<div className="flex-shrink-0 w-48 sm:w-72">
 					<audio
 						controls
 						preload="none"
@@ -238,7 +233,7 @@ function MiniTrackPlayer({
 						className="w-full h-8"
 					/>
 				</div>
-			</Link>
+			</div>
 		</div>
 	);
 }
@@ -284,7 +279,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 							</div>
 						</div>
 					) : null}
-					{latestTrack && <MiniTrackPlayer track={latestTrack} />}
 				</section>
 
 				{/* Activity Feed */}
@@ -527,10 +521,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 				</section>
 
 				{/* Footer */}
-				<footer className="text-center text-sm text-purple-300/40 mt-8">
+				<footer className={`text-center text-sm text-purple-300/40 mt-8 ${latestTrack ? "pb-16" : ""}`}>
 					&copy; {new Date().getFullYear()} hidelberq
 				</footer>
 			</div>
+
+			{/* 画面下部固定プレイヤー */}
+			{latestTrack && <FixedBottomPlayer track={latestTrack} />}
 		</div>
 	);
 }
