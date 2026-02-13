@@ -396,7 +396,20 @@ export async function action({ request, context }: Route.ActionArgs) {
 	if (intent === "upload-rap-track") {
 		const date = formData.get("date") as string;
 		const title = formData.get("title") as string | null;
-		const audioFile = formData.get("audio") as File | null;
+		const audioRaw = formData.get("audio");
+		const audioFile = audioRaw instanceof File ? audioRaw : null;
+
+		// リクエスト診断ログ
+		const formDataKeys = [...formData.keys()];
+		console.log("[upload-rap-track] リクエスト診断:", {
+			contentType: request.headers.get("content-type"),
+			contentLength: request.headers.get("content-length"),
+			formDataKeys,
+			audioRawType: audioRaw === null ? "null" : typeof audioRaw,
+			audioRawConstructor: audioRaw?.constructor?.name,
+			audioIsFile: audioRaw instanceof File,
+			audioIsBlob: audioRaw instanceof Blob,
+		});
 
 		console.log("[upload-rap-track] 開始:", {
 			date,
