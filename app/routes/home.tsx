@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { desc, sql } from "drizzle-orm";
-import { heroImages, activityLog } from "../db/schema";
+import { heroImages, activityLog, hiphopTracks } from "../db/schema";
 import type { Route } from "./+types/home";
 
 export function meta(_args: Route.MetaArgs) {
@@ -27,6 +27,15 @@ export async function loader({ context }: Route.LoaderArgs) {
 
 	const heroImage = latest.length > 0 ? latest[0] : null;
 
+	// 最新のHiphopトラックを取得
+	const latestTrack = await db
+		.select()
+		.from(hiphopTracks)
+		.orderBy(desc(hiphopTracks.date))
+		.limit(1);
+
+	const track = latestTrack.length > 0 ? latestTrack[0] : null;
+
 	// アクティビティログを取得（直近20件）
 	const activities = await db
 		.select({
@@ -49,6 +58,16 @@ export async function loader({ context }: Route.LoaderArgs) {
 	return {
 		heroImage: heroImage
 			? { date: heroImage.date, source: heroImage.source }
+			: null,
+		latestTrack: track
+			? {
+					date: track.date,
+					title: track.title,
+					style: track.style,
+					duration: track.duration,
+					source: track.source,
+					hasRap: !!track.rapTrackKey,
+				}
 			: null,
 		activities: activities.map((a) => ({
 			id: a.id,
@@ -162,8 +181,70 @@ function ActivityIcon({ type }: { type: string }) {
 	}
 }
 
+function MiniTrackPlayer({
+	track,
+}: {
+	track: {
+		date: string;
+		title: string | null;
+		style: string | null;
+		duration: number | null;
+		source: string;
+		hasRap: boolean;
+	};
+}) {
+	const audioSrc = track.hasRap
+		? `/daily-track/audio/${track.date}/rap`
+		: `/daily-track/audio/${track.date}/instrumental`;
+
+	return (
+		<div className="w-full mt-6">
+			<Link
+				to="/daily-track"
+				className="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm transition-all hover:border-fuchsia-500/30 hover:bg-white/10"
+			>
+				<div className="px-5 py-4">
+					<div className="flex items-center justify-between mb-2">
+						<div className="flex items-center gap-2">
+							<span className="text-xs text-fuchsia-400/80 font-medium">
+								Daily Hiphop Track
+							</span>
+							<span className="text-[10px] uppercase tracking-wider text-purple-300/50 bg-purple-500/10 px-2 py-0.5 rounded">
+								{track.source === "diary" ? "from diary" : track.source === "weather" ? "from weather" : "manual"}
+							</span>
+							{track.hasRap && (
+								<span className="text-[10px] uppercase tracking-wider text-cyan-300/50 bg-cyan-500/10 px-2 py-0.5 rounded">
+									Rap Ver.
+								</span>
+							)}
+						</div>
+						<span className="text-xs text-purple-300/40">{track.date}</span>
+					</div>
+					<p className="text-sm font-semibold text-white truncate">
+						{track.title || "Untitled Track"}
+					</p>
+					{track.style && (
+						<p className="text-[11px] text-purple-200/40 truncate mt-0.5">
+							{track.style}
+						</p>
+					)}
+				</div>
+				{/* ネイティブオーディオプレイヤー */}
+				<div className="px-5 pb-4" onClick={(e) => e.preventDefault()}>
+					<audio
+						controls
+						preload="none"
+						src={audioSrc}
+						className="w-full h-8"
+					/>
+				</div>
+			</Link>
+		</div>
+	);
+}
+
 export default function Home({ loaderData }: Route.ComponentProps) {
-	const { heroImage, activities } = loaderData;
+	const { heroImage, latestTrack, activities } = loaderData;
 
 	return (
 		<div className="min-h-dvh bg-gradient-to-br from-violet-950 via-fuchsia-950 to-indigo-950">
@@ -203,6 +284,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 							</div>
 						</div>
 					) : null}
+					{latestTrack && <MiniTrackPlayer track={latestTrack} />}
 				</section>
 
 				{/* Activity Feed */}
@@ -328,6 +410,18 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 								<span className="text-lg font-semibold">AItter</span>
 								<p className="text-sm text-purple-200/60">
 									AIが最新ニュースを読み、つぶやくタイムライン
+								</p>
+							</div>
+						</Link>
+						<Link
+							to="/daily-track"
+							className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm px-5 py-4 transition-all duration-300 hover:border-cyan-500/40 hover:bg-white/10 hover:shadow-lg hover:shadow-cyan-500/10"
+						>
+							<span className="text-2xl leading-none">🎤</span>
+							<div>
+								<span className="text-lg font-semibold">Daily Hiphop Track</span>
+								<p className="text-sm text-purple-200/60">
+									日記からAIが毎日生成するHiphopビート
 								</p>
 							</div>
 						</Link>

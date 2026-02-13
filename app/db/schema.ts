@@ -259,6 +259,28 @@ export const bookActivities = sqliteTable("book_activities", {
 	),
 });
 
+// 日替わりHiphopトラック
+export const hiphopTracks = sqliteTable("hiphop_tracks", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	date: text("date").notNull().unique(), // YYYY-MM-DD
+	// AI生成インストゥルメンタル
+	instrumentalKey: text("instrumental_key"), // R2キー (hiphop/YYYY-MM-DD/instrumental.mp3)
+	instrumentalUrl: text("instrumental_url"), // Suno APIの元URL（バックアップ）
+	// ユーザーアップロードのラップトラック
+	rapTrackKey: text("rap_track_key"), // R2キー (hiphop/YYYY-MM-DD/rap.mp3)
+	// メタデータ
+	title: text("title"), // トラック名
+	prompt: text("prompt"), // Gemini生成プロンプト
+	style: text("style"), // スタイル情報
+	duration: integer("duration"), // 秒数
+	diaryContent: text("diary_content"), // 参照した日記内容
+	source: text("source").notNull(), // "diary" | "weather" | "manual"
+	sunoTaskId: text("suno_task_id"), // Suno APIタスクID
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const scrapedArticles = sqliteTable("scraped_articles", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	siteId: text("site_id").notNull(),

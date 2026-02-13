@@ -1,10 +1,11 @@
 import type { Route } from "./+types/debug";
 import { useState } from "react";
 import { drizzle } from "drizzle-orm/d1";
-import { newsCache, heroImages, scrapedArticles, tweets, scrapeSites, activityLog, bookGroups, bookGroupMembers, books, bookMemberStatuses, personalBooks, bookPrerequisites } from "../db/schema";
+import { newsCache, heroImages, scrapedArticles, tweets, scrapeSites, activityLog, bookGroups, bookGroupMembers, books, bookMemberStatuses, personalBooks, bookPrerequisites, hiphopTracks } from "../db/schema";
 import { desc, eq, sql } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
 import { generateHeroImage, regenerateHeroImageWithPrompt } from "../../workers/hero-image";
+import { generateHiphopTrack } from "../../workers/hiphop-cron";
 import { forceGenerateAitterTweets } from "../../workers/aitter-cron";
 import { scrapeAllSites, scrapeUrl } from "../../workers/scraper/run";
 import { parsers } from "../../workers/scraper/parsers";
@@ -14,6 +15,7 @@ import { ScrapingSection } from "../debug/scraping-section";
 import { TweetSection } from "../debug/tweet-section";
 import { HeroSection } from "../debug/hero-section";
 import { NewsCacheSection } from "../debug/news-cache-section";
+import { MusicSection } from "../debug/music-section";
 
 // --- タブ定義 ---
 const TABS = [
@@ -22,6 +24,7 @@ const TABS = [
 	{ id: "scraping", label: "スクレイピング", color: "text-cyan-400 border-cyan-400" },
 	{ id: "tweets", label: "ツイート", color: "text-violet-400 border-violet-400" },
 	{ id: "hero", label: "ヒーロー", color: "text-fuchsia-400 border-fuchsia-400" },
+	{ id: "music", label: "Hiphop", color: "text-pink-400 border-pink-400" },
 	{ id: "news", label: "ニュース", color: "text-amber-400 border-amber-400" },
 ] as const;
 
@@ -134,6 +137,17 @@ export async function loader({ context }: Route.LoaderArgs) {
 		.from(bookPrerequisites)
 		.orderBy(desc(bookPrerequisites.createdAt));
 
+	// Hiphopトラック関連
+	const trackEntries = await db
+		.select()
+		.from(hiphopTracks)
+		.orderBy(desc(hiphopTracks.date))
+		.limit(20);
+
+	const [trackCount] = await db
+		.select({ count: sql<number>`count(*)` })
+		.from(hiphopTracks);
+
 	return {
 		entries,
 		heroEntries,
@@ -155,6 +169,22 @@ export async function loader({ context }: Route.LoaderArgs) {
 			personalBooks: allPersonalBooks,
 			personalBookCount: personalBookCount?.count ?? 0,
 			prerequisites: allPrerequisites,
+		},
+		trackData: {
+			entries: trackEntries.map((t) => ({
+				id: t.id,
+				date: t.date,
+				title: t.title,
+				style: t.style,
+				duration: t.duration,
+				source: t.source,
+				prompt: t.prompt,
+				diaryContent: t.diaryContent,
+				hasInstrumental: !!t.instrumentalKey,
+				hasRap: !!t.rapTrackKey,
+				sunoTaskId: t.sunoTaskId,
+			})),
+			count: trackCount?.count ?? 0,
 		},
 	};
 }
@@ -277,6 +307,102 @@ export async function action({ request, context }: Route.ActionArgs) {
 		await db.delete(bookGroupMembers);
 		await db.delete(bookGroups);
 		return { ok: true, intent: "book-manage", message: "積読 2.0 の全データを削除しました" };
+	}
+
+	// --- Hiphopトラック生成 ---
+	if (intent === "generate-hiphop") {
+		try {
+			const result = await generateHiphopTrack(context.cloudflare.env);
+			return {
+				ok: true,
+				intent: "music",
+				message: result ?? "Hiphopトラックの生成をスキップしました（APIキー未設定）",
+			};
+		} catch (e) {
+			console.error("Hiphop track generation error:", e);
+			return {
+				error: `Hiphopトラック生成エラー: ${e instanceof Error ? e.message : String(e)}`,
+			};
+		}
+	}
+
+	// --- ラップトラックアップロード ---
+	if (intent === "upload-rap-track") {
+		const date = formData.get("date") as string;
+		const title = formData.get("title") as string | null;
+		const audioFile = formData.get("audio") as File | null;
+
+		if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+			return { error: "日付のフォーマットが不正です (YYYY-MM-DD)" };
+		}
+		if (!audioFile || audioFile.size === 0) {
+			return { error: "音声ファイルを選択してください" };
+		}
+
+		try {
+			const audioData = await audioFile.arrayBuffer();
+			const rapTrackKey = `hiphop/${date}/rap.mp3`;
+
+			await context.cloudflare.env.MUSIC_BUCKET.put(rapTrackKey, audioData, {
+				httpMetadata: {
+					contentType: "audio/mpeg",
+					cacheControl: "public, max-age=86400",
+				},
+			});
+
+			const db = drizzle(context.cloudflare.env.DB);
+			const existing = await db
+				.select()
+				.from(hiphopTracks)
+				.where(eq(hiphopTracks.date, date))
+				.limit(1);
+
+			if (existing.length > 0) {
+				await db
+					.update(hiphopTracks)
+					.set({
+						rapTrackKey,
+						...(title ? { title } : {}),
+					})
+					.where(eq(hiphopTracks.date, date));
+			} else {
+				await db.insert(hiphopTracks).values({
+					date,
+					rapTrackKey,
+					title: title || `${date} Rap`,
+					source: "manual",
+				});
+			}
+
+			return {
+				ok: true,
+				intent: "music",
+				message: `${date} のラップトラックをアップロードしました`,
+			};
+		} catch (e) {
+			console.error("Rap track upload error:", e);
+			return {
+				error: `アップロードエラー: ${e instanceof Error ? e.message : String(e)}`,
+			};
+		}
+	}
+
+	// --- Hiphopトラック削除 ---
+	if (intent === "delete-hiphop-track") {
+		const id = Number(formData.get("id"));
+		const date = formData.get("date") as string;
+		if (!id) return { error: "IDが不正です" };
+
+		const db = drizzle(context.cloudflare.env.DB);
+		// R2から音声ファイルも削除
+		try {
+			await context.cloudflare.env.MUSIC_BUCKET.delete(`hiphop/${date}/instrumental.mp3`);
+			await context.cloudflare.env.MUSIC_BUCKET.delete(`hiphop/${date}/rap.mp3`);
+		} catch {
+			// R2削除エラーは無視（ファイルが存在しない場合）
+		}
+		await db.delete(hiphopTracks).where(eq(hiphopTracks.id, id));
+		return { ok: true, intent: "music", message: "トラックを削除しました" };
 	}
 
 	if (intent === "regenerate-hero") {
@@ -566,6 +692,13 @@ export default function Debug({ loaderData }: Route.ComponentProps) {
 
 				{activeTab === "hero" && (
 					<HeroSection heroEntries={loaderData.heroEntries} />
+				)}
+
+				{activeTab === "music" && (
+					<MusicSection
+						trackEntries={loaderData.trackData.entries}
+						trackCount={loaderData.trackData.count}
+					/>
 				)}
 
 				{activeTab === "news" && (

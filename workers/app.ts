@@ -1,6 +1,7 @@
 import { createRequestHandler } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { generateHeroImage } from "./hero-image";
+import { generateHiphopTrack } from "./hiphop-cron";
 import { generateAitterTweets } from "./aitter-cron";
 import { scrapeNews } from "./news-scrape-cron";
 import { activityLog } from "../app/db/schema";
@@ -43,10 +44,13 @@ export default {
   },
   async scheduled(event, env, ctx) {
     switch (event.cron) {
-      // UTC 21:00 (JST 06:00) - ヒーロー画像生成（1日1回）
+      // UTC 21:00 (JST 06:00) - ヒーロー画像生成 + Hiphopトラック生成（1日1回）
       case "0 21 * * *":
         ctx.waitUntil(
           runWithActivityLog(env, "cron_hero_image", () => generateHeroImage(env)),
+        );
+        ctx.waitUntil(
+          runWithActivityLog(env, "cron_hiphop_track", () => generateHiphopTrack(env)),
         );
         break;
       // JST 8,14,20,2時 - ニューススクレイピング + AIツイート生成（1日4回）

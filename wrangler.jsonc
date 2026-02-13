@@ -37,6 +37,10 @@
 		{
 			"binding": "BOOK_BUCKET",
 			"bucket_name": "hidelberq-book-photos"
+		},
+		{
+			"binding": "MUSIC_BUCKET",
+			"bucket_name": "hidelberq-music"
 		}
 	],
 	"triggers": {

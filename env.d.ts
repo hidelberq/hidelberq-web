@@ -6,5 +6,6 @@ declare namespace Cloudflare {
 		WORKFLOWY_API_KEY: string;
 		ACTIVITY_API_KEY: string;
 		GOOGLE_BOOKS_API_KEY: string;
+		SUNO_API_KEY: string;
 	}
 }
