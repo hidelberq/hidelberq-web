@@ -407,11 +407,23 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 		try {
 			const audioData = await audioFile.arrayBuffer();
-			const rapTrackKey = `hiphop/${date}/rap.mp3`;
+			const isM4a =
+				audioFile.type === "audio/mp4" ||
+				audioFile.type === "audio/x-m4a" ||
+				audioFile.name.endsWith(".m4a");
+			const ext = isM4a ? "m4a" : "mp3";
+			const audioContentType = isM4a ? "audio/mp4" : "audio/mpeg";
+			const rapTrackKey = `hiphop/${date}/rap.${ext}`;
+
+			// 既存の別形式ファイルがあれば削除
+			const oldKey = isM4a
+				? `hiphop/${date}/rap.mp3`
+				: `hiphop/${date}/rap.m4a`;
+			await context.cloudflare.env.MUSIC_BUCKET.delete(oldKey);
 
 			await context.cloudflare.env.MUSIC_BUCKET.put(rapTrackKey, audioData, {
 				httpMetadata: {
-					contentType: "audio/mpeg",
+					contentType: audioContentType,
 					cacheControl: "public, max-age=86400",
 				},
 			});
@@ -463,7 +475,9 @@ export async function action({ request, context }: Route.ActionArgs) {
 		// R2から音声ファイルも削除
 		try {
 			await context.cloudflare.env.MUSIC_BUCKET.delete(`hiphop/${date}/instrumental.mp3`);
+			await context.cloudflare.env.MUSIC_BUCKET.delete(`hiphop/${date}/instrumental.m4a`);
 			await context.cloudflare.env.MUSIC_BUCKET.delete(`hiphop/${date}/rap.mp3`);
+			await context.cloudflare.env.MUSIC_BUCKET.delete(`hiphop/${date}/rap.m4a`);
 		} catch {
 			// R2削除エラーは無視（ファイルが存在しない場合）
 		}

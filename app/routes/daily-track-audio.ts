@@ -17,9 +17,19 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
 		});
 	}
 
-	const filename = type === "instrumental" ? "instrumental.mp3" : "rap.mp3";
-	const key = `hiphop/${date}/${filename}`;
-	const object = await context.cloudflare.env.MUSIC_BUCKET.get(key);
+	// mp3を優先し、なければm4aを探す
+	const mp3Key = `hiphop/${date}/${type}.mp3`;
+	const m4aKey = `hiphop/${date}/${type}.m4a`;
+
+	let object = await context.cloudflare.env.MUSIC_BUCKET.get(mp3Key);
+	let ext = "mp3";
+	let contentType = "audio/mpeg";
+
+	if (!object) {
+		object = await context.cloudflare.env.MUSIC_BUCKET.get(m4aKey);
+		ext = "m4a";
+		contentType = "audio/mp4";
+	}
 
 	if (!object) {
 		return new Response("Track not found", { status: 404 });
@@ -29,13 +39,13 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
 	const isDownload = url.searchParams.get("download") === "1";
 
 	const headers: Record<string, string> = {
-		"Content-Type": "audio/mpeg",
+		"Content-Type": contentType,
 		"Cache-Control": "public, max-age=86400",
 		ETag: object.httpEtag,
 	};
 
 	if (isDownload) {
-		const downloadFilename = `${date}-${type}.mp3`;
+		const downloadFilename = `${date}-${type}.${ext}`;
 		headers["Content-Disposition"] =
 			`attachment; filename="${downloadFilename}"`;
 	}

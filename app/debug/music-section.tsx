@@ -284,12 +284,12 @@ export function MusicSection({
 						</div>
 						<div>
 							<label className="block text-xs text-gray-400 mb-1">
-								音声ファイル (MP3)
+								音声ファイル (MP3 / M4A)
 							</label>
 							<input
 								type="file"
 								name="audio"
-								accept="audio/mpeg,audio/mp3"
+								accept="audio/mpeg,audio/mp3,audio/mp4,audio/x-m4a,.m4a"
 								required
 								className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-cyan-500/20 file:text-cyan-400 hover:file:bg-cyan-500/30"
 							/>
