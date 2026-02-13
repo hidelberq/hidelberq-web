@@ -284,12 +284,12 @@ export function MusicSection({
 						</div>
 						<div>
 							<label className="block text-xs text-gray-400 mb-1">
-								音声ファイル (MP3)
+								音声ファイル (MP3 / M4A)
 							</label>
 							<input
 								type="file"
 								name="audio"
-								accept="audio/mpeg,audio/mp3"
+								accept="audio/mpeg,audio/mp3,audio/mp4,audio/x-m4a,.m4a"
 								required
 								className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-cyan-500/20 file:text-cyan-400 hover:file:bg-cyan-500/30"
 							/>
@@ -417,6 +417,15 @@ function MusicTrackCard({
 								src={`/daily-track/audio/${entry.date}/instrumental`}
 								className="h-8 w-full [&::-webkit-media-controls-panel]:bg-gray-800"
 							/>
+							<a
+								href={`/daily-track/audio/${entry.date}/instrumental?download=1`}
+								className="shrink-0 text-gray-500 hover:text-pink-400 transition-colors"
+								title="Instrumentalをダウンロード"
+							>
+								<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+								</svg>
+							</a>
 						</div>
 					)}
 					{entry.hasRap && (
@@ -428,6 +437,15 @@ function MusicTrackCard({
 								src={`/daily-track/audio/${entry.date}/rap`}
 								className="h-8 w-full [&::-webkit-media-controls-panel]:bg-gray-800"
 							/>
+							<a
+								href={`/daily-track/audio/${entry.date}/rap?download=1`}
+								className="shrink-0 text-gray-500 hover:text-cyan-400 transition-colors"
+								title="Rap Ver.をダウンロード"
+							>
+								<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+								</svg>
+							</a>
 						</div>
 					)}
 				</div>
