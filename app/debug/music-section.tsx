@@ -417,6 +417,15 @@ function MusicTrackCard({
 								src={`/daily-track/audio/${entry.date}/instrumental`}
 								className="h-8 w-full [&::-webkit-media-controls-panel]:bg-gray-800"
 							/>
+							<a
+								href={`/daily-track/audio/${entry.date}/instrumental?download=1`}
+								className="shrink-0 text-gray-500 hover:text-pink-400 transition-colors"
+								title="Instrumentalをダウンロード"
+							>
+								<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+								</svg>
+							</a>
 						</div>
 					)}
 					{entry.hasRap && (
@@ -428,6 +437,15 @@ function MusicTrackCard({
 								src={`/daily-track/audio/${entry.date}/rap`}
 								className="h-8 w-full [&::-webkit-media-controls-panel]:bg-gray-800"
 							/>
+							<a
+								href={`/daily-track/audio/${entry.date}/rap?download=1`}
+								className="shrink-0 text-gray-500 hover:text-cyan-400 transition-colors"
+								title="Rap Ver.をダウンロード"
+							>
+								<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+								</svg>
+							</a>
 						</div>
 					)}
 				</div>

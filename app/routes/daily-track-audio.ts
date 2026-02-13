@@ -4,7 +4,7 @@ import type { Route } from "./+types/daily-track-audio";
  * 日替わりHiphopトラックの音声ファイルを配信するloader
  * /daily-track/audio/:date/:type (type: "instrumental" | "rap")
  */
-export async function loader({ params, context }: Route.LoaderArgs) {
+export async function loader({ params, request, context }: Route.LoaderArgs) {
 	const { date, type } = params;
 
 	if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -25,11 +25,20 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 		return new Response("Track not found", { status: 404 });
 	}
 
-	return new Response(object.body, {
-		headers: {
-			"Content-Type": "audio/mpeg",
-			"Cache-Control": "public, max-age=86400",
-			ETag: object.httpEtag,
-		},
-	});
+	const url = new URL(request.url);
+	const isDownload = url.searchParams.get("download") === "1";
+
+	const headers: Record<string, string> = {
+		"Content-Type": "audio/mpeg",
+		"Cache-Control": "public, max-age=86400",
+		ETag: object.httpEtag,
+	};
+
+	if (isDownload) {
+		const downloadFilename = `${date}-${type}.mp3`;
+		headers["Content-Disposition"] =
+			`attachment; filename="${downloadFilename}"`;
+	}
+
+	return new Response(object.body, { headers });
 }
