@@ -7,6 +7,7 @@ export default [
 	route("hero-image/:date", "routes/hero-image.ts"),
 	route("daily-track", "routes/daily-track.tsx"),
 	route("daily-track/audio/:date/:type", "routes/daily-track-audio.ts"),
+	route("api/suno-callback", "routes/api.suno-callback.ts"),
 	route("book-photo/*", "routes/book-photo.ts"),
 	route("whitespace-remover", "routes/whitespace-remover.tsx"),
 	route("shogi", "routes/shogi.tsx"),

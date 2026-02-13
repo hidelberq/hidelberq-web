@@ -230,6 +230,7 @@ async function generateSunoTrack(
 				style,
 				title,
 				model: "V4",
+				callBackUrl: "https://hidelberq.com/api/suno-callback",
 			}),
 		},
 	);
