@@ -127,6 +127,13 @@
       "when": 1770707289627,
       "tag": "0017_furry_punisher",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1770983618001,
+      "tag": "0018_lyrical_kabuki",
+      "breakpoints": true
     }
   ]
 }
