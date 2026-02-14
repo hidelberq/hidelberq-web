@@ -16,7 +16,7 @@ body {
 
 @keyframes marquee {
     0% { transform: translateX(0); }
-    10% { transform: translateX(0); }
-    90% { transform: translateX(var(--marquee-distance)); }
+    25% { transform: translateX(0); }
+    75% { transform: translateX(var(--marquee-distance)); }
     100% { transform: translateX(var(--marquee-distance)); }
 }

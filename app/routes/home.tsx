@@ -207,7 +207,7 @@ function MarqueeTitle({ text, trackKey, className }: { text: string; trackKey: s
 				ref={textRef}
 				className={`inline-block ${className ?? ""}`}
 				style={scrollDistance > 0 ? {
-					animation: `marquee ${Math.max(4, scrollDistance / 30)}s linear infinite`,
+					animation: `marquee ${Math.max(6, scrollDistance / 20 + 4)}s linear infinite`,
 					"--marquee-distance": `-${scrollDistance}px`,
 				} as React.CSSProperties : undefined}
 			>
