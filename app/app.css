@@ -13,3 +13,10 @@ body {
     color-scheme: dark;
     overflow-x: hidden;
 }
+
+@keyframes marquee {
+    0% { transform: translateX(0); }
+    10% { transform: translateX(0); }
+    90% { transform: translateX(var(--marquee-distance)); }
+    100% { transform: translateX(var(--marquee-distance)); }
+}

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
 import { Link } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { desc, sql } from "drizzle-orm";
@@ -187,6 +187,36 @@ type TrackInfo = {
 	source: string;
 };
 
+function MarqueeTitle({ text, trackKey, className }: { text: string; trackKey: string; className?: string }) {
+	const containerRef = useRef<HTMLDivElement>(null);
+	const textRef = useRef<HTMLSpanElement>(null);
+	const [scrollDistance, setScrollDistance] = useState(0);
+
+	useLayoutEffect(() => {
+		const container = containerRef.current;
+		const textEl = textRef.current;
+		if (container && textEl) {
+			const overflow = textEl.scrollWidth - container.clientWidth;
+			setScrollDistance(overflow > 2 ? overflow + 16 : 0);
+		}
+	}, [text, trackKey]);
+
+	return (
+		<div ref={containerRef} className="overflow-hidden whitespace-nowrap">
+			<span
+				ref={textRef}
+				className={`inline-block ${className ?? ""}`}
+				style={scrollDistance > 0 ? {
+					animation: `marquee ${Math.max(4, scrollDistance / 30)}s linear infinite`,
+					"--marquee-distance": `-${scrollDistance}px`,
+				} as React.CSSProperties : undefined}
+			>
+				{text}
+			</span>
+		</div>
+	);
+}
+
 function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 	const [currentIndex, setCurrentIndex] = useState(0);
 	const [isPlaying, setIsPlaying] = useState(false);
@@ -194,6 +224,8 @@ function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 	const [currentTime, setCurrentTime] = useState(0);
 	const [duration, setDuration] = useState(0);
 	const audioRef = useRef<HTMLAudioElement>(null);
+	// 自動再生の継続を追跡するref（onPause による isPlaying=false の影響を回避）
+	const autoAdvancingRef = useRef(false);
 
 	const track = tracks[currentIndex];
 
@@ -228,7 +260,10 @@ function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 		const audio = audioRef.current;
 		if (!audio) return;
 		audio.load();
-		if (isPlaying) {
+		// autoAdvancingRef が true なら自動再生を継続
+		if (isPlaying || autoAdvancingRef.current) {
+			autoAdvancingRef.current = false;
+			setIsPlaying(true);
 			audio.play();
 		}
 		setProgress(0);
@@ -276,9 +311,11 @@ function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 						</svg>
 					</div>
 					<div className="min-w-0">
-						<p className="text-sm font-semibold text-white truncate group-hover:text-fuchsia-200 transition-colors">
-							{track.title || "Untitled Track"}
-						</p>
+						<MarqueeTitle
+							text={track.title || "Untitled Track"}
+							trackKey={`${track.date}-${track.type}`}
+							className="text-sm font-semibold text-white group-hover:text-fuchsia-200 transition-colors"
+						/>
 						<div className="flex items-center gap-1.5">
 							<span className="text-[10px] text-purple-300/50">{track.date}</span>
 							<span className={`text-[10px] ${track.type === "rap" ? "text-cyan-400/60" : "text-fuchsia-400/60"}`}>
@@ -361,8 +398,9 @@ function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 					if (audio) setDuration(audio.duration);
 				}}
 				onEnded={() => {
-					// 自動で前の曲（古い方）へ
+					// 新→古の順に自動再生
 					if (currentIndex < tracks.length - 1) {
+						autoAdvancingRef.current = true;
 						setCurrentIndex((i) => i + 1);
 					} else {
 						setIsPlaying(false);
