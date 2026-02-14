@@ -60,11 +60,11 @@ export async function loader({ context }: Route.LoaderArgs) {
 			: null,
 		tracks: trackResults.map((t) => ({
 			date: t.date,
+			type: t.type,
 			title: t.title,
 			style: t.style,
 			duration: t.duration,
 			source: t.source,
-			hasRap: !!t.rapTrackKey,
 		})),
 		activities: activities.map((a) => ({
 			id: a.id,
@@ -180,11 +180,11 @@ function ActivityIcon({ type }: { type: string }) {
 
 type TrackInfo = {
 	date: string;
+	type: string;
 	title: string | null;
 	style: string | null;
 	duration: number | null;
 	source: string;
-	hasRap: boolean;
 };
 
 function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
@@ -197,9 +197,7 @@ function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 
 	const track = tracks[currentIndex];
 
-	const audioSrc = track.hasRap
-		? `/daily-track/audio/${track.date}/rap`
-		: `/daily-track/audio/${track.date}/instrumental`;
+	const audioSrc = `/daily-track/audio/${track.date}/${track.type}`;
 
 	const handlePrev = useCallback(() => {
 		if (currentIndex < tracks.length - 1) {
@@ -283,9 +281,9 @@ function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 						</p>
 						<div className="flex items-center gap-1.5">
 							<span className="text-[10px] text-purple-300/50">{track.date}</span>
-							{track.hasRap && (
-								<span className="text-[10px] text-cyan-400/60">Rap</span>
-							)}
+							<span className={`text-[10px] ${track.type === "rap" ? "text-cyan-400/60" : "text-fuchsia-400/60"}`}>
+								{track.type === "rap" ? "Rap" : "Inst."}
+							</span>
 							{duration > 0 && (
 								<span className="text-[10px] text-purple-300/40">
 									{formatTime(currentTime)} / {formatTime(duration)}

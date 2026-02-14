@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { drizzle } from "drizzle-orm/d1";
 import { hiphopTracks } from "../app/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 /**
  * 日本時間で「昨日」の日付を YYYY-MM-DD で返す
@@ -454,29 +454,29 @@ export async function generateHiphopTrack(
 
 	// 6. 音声ファイルをダウンロードしてR2に保存
 	const audioData = await downloadAudio(track.audioUrl);
-	const instrumentalKey = `hiphop/${todayDate}/instrumental.mp3`;
+	const r2Key = `hiphop/${todayDate}/instrumental.mp3`;
 
-	await env.MUSIC_BUCKET.put(instrumentalKey, audioData, {
+	await env.MUSIC_BUCKET.put(r2Key, audioData, {
 		httpMetadata: {
 			contentType: "audio/mpeg",
 			cacheControl: "public, max-age=86400",
 		},
 	});
-	console.log(`Saved to R2: ${instrumentalKey}`);
+	console.log(`Saved to R2: ${r2Key}`);
 
 	// 7. DB に記録（既存レコードがあれば上書き）
 	const existing = await db
 		.select()
 		.from(hiphopTracks)
-		.where(eq(hiphopTracks.date, todayDate))
+		.where(and(eq(hiphopTracks.date, todayDate), eq(hiphopTracks.type, "instrumental")))
 		.limit(1);
 
 	if (existing.length > 0) {
 		await db
 			.update(hiphopTracks)
 			.set({
-				instrumentalKey,
-				instrumentalUrl: track.audioUrl,
+				r2Key,
+				backupUrl: track.audioUrl,
 				title: track.title,
 				prompt,
 				style,
@@ -485,12 +485,13 @@ export async function generateHiphopTrack(
 				source,
 				sunoTaskId: taskId,
 			})
-			.where(eq(hiphopTracks.date, todayDate));
+			.where(and(eq(hiphopTracks.date, todayDate), eq(hiphopTracks.type, "instrumental")));
 	} else {
 		await db.insert(hiphopTracks).values({
 			date: todayDate,
-			instrumentalKey,
-			instrumentalUrl: track.audioUrl,
+			type: "instrumental",
+			r2Key,
+			backupUrl: track.audioUrl,
 			title: track.title,
 			prompt,
 			style,
@@ -538,9 +539,9 @@ export async function generateHiphopTrackWithPrompt(
 
 	// 音声ファイルをダウンロードしてR2に保存
 	const audioData = await downloadAudio(track.audioUrl);
-	const instrumentalKey = `hiphop/${targetDate}/instrumental.mp3`;
+	const r2Key = `hiphop/${targetDate}/instrumental.mp3`;
 
-	await env.MUSIC_BUCKET.put(instrumentalKey, audioData, {
+	await env.MUSIC_BUCKET.put(r2Key, audioData, {
 		httpMetadata: {
 			contentType: "audio/mpeg",
 			cacheControl: "public, max-age=86400",
@@ -551,7 +552,7 @@ export async function generateHiphopTrackWithPrompt(
 	const existing = await db
 		.select()
 		.from(hiphopTracks)
-		.where(eq(hiphopTracks.date, targetDate))
+		.where(and(eq(hiphopTracks.date, targetDate), eq(hiphopTracks.type, "instrumental")))
 		.limit(1);
 
 	const prompt = JSON.stringify({ style: customStyle, title: customTitle });
@@ -560,8 +561,8 @@ export async function generateHiphopTrackWithPrompt(
 		await db
 			.update(hiphopTracks)
 			.set({
-				instrumentalKey,
-				instrumentalUrl: track.audioUrl,
+				r2Key,
+				backupUrl: track.audioUrl,
 				title: customTitle,
 				prompt,
 				style: customStyle,
@@ -570,12 +571,13 @@ export async function generateHiphopTrackWithPrompt(
 				source: diaryContent ? "diary" : existing[0].source,
 				sunoTaskId: taskId,
 			})
-			.where(eq(hiphopTracks.date, targetDate));
+			.where(and(eq(hiphopTracks.date, targetDate), eq(hiphopTracks.type, "instrumental")));
 	} else {
 		await db.insert(hiphopTracks).values({
 			date: targetDate,
-			instrumentalKey,
-			instrumentalUrl: track.audioUrl,
+			type: "instrumental",
+			r2Key,
+			backupUrl: track.audioUrl,
 			title: customTitle,
 			prompt,
 			style: customStyle,

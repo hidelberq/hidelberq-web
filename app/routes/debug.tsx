@@ -2,7 +2,7 @@ import type { Route } from "./+types/debug";
 import { useState } from "react";
 import { drizzle } from "drizzle-orm/d1";
 import { newsCache, heroImages, scrapedArticles, tweets, scrapeSites, activityLog, bookGroups, bookGroupMembers, books, bookMemberStatuses, personalBooks, bookPrerequisites, hiphopTracks } from "../db/schema";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
 import { generateHeroImage, regenerateHeroImageWithPrompt } from "../../workers/hero-image";
 import { generateHiphopTrack, generateHiphopTrackWithPrompt, fetchDiary } from "../../workers/hiphop-cron";
@@ -174,14 +174,13 @@ export async function loader({ context }: Route.LoaderArgs) {
 			entries: trackEntries.map((t) => ({
 				id: t.id,
 				date: t.date,
+				type: t.type,
 				title: t.title,
 				style: t.style,
 				duration: t.duration,
 				source: t.source,
 				prompt: t.prompt,
 				diaryContent: t.diaryContent,
-				hasInstrumental: !!t.instrumentalKey,
-				hasRap: !!t.rapTrackKey,
 				sunoTaskId: t.sunoTaskId,
 			})),
 			count: trackCount?.count ?? 0,
@@ -399,18 +398,6 @@ export async function action({ request, context }: Route.ActionArgs) {
 		const audioRaw = formData.get("audio");
 		const audioFile = audioRaw instanceof File ? audioRaw : null;
 
-		// リクエスト診断ログ
-		const formDataKeys = [...formData.keys()];
-		console.log("[upload-rap-track] リクエスト診断:", {
-			contentType: request.headers.get("content-type"),
-			contentLength: request.headers.get("content-length"),
-			formDataKeys,
-			audioRawType: audioRaw === null ? "null" : typeof audioRaw,
-			audioRawConstructor: audioRaw?.constructor?.name,
-			audioIsFile: audioRaw instanceof File,
-			audioIsBlob: audioRaw instanceof Blob,
-		});
-
 		console.log("[upload-rap-track] 開始:", {
 			date,
 			title,
@@ -429,7 +416,6 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 		try {
 			const audioData = await audioFile.arrayBuffer();
-			console.log("[upload-rap-track] arrayBuffer 取得完了:", audioData.byteLength, "bytes");
 
 			const isM4a =
 				audioFile.type === "audio/mp4" ||
@@ -437,47 +423,44 @@ export async function action({ request, context }: Route.ActionArgs) {
 				audioFile.name.endsWith(".m4a");
 			const ext = isM4a ? "m4a" : "mp3";
 			const audioContentType = isM4a ? "audio/mp4" : "audio/mpeg";
-			const rapTrackKey = `hiphop/${date}/rap.${ext}`;
+			const r2Key = `hiphop/${date}/rap.${ext}`;
 
 			// 既存の別形式ファイルがあれば削除
 			const oldKey = isM4a
 				? `hiphop/${date}/rap.mp3`
 				: `hiphop/${date}/rap.m4a`;
 			await context.cloudflare.env.MUSIC_BUCKET.delete(oldKey);
-			console.log("[upload-rap-track] 旧ファイル削除完了:", oldKey);
 
-			await context.cloudflare.env.MUSIC_BUCKET.put(rapTrackKey, audioData, {
+			await context.cloudflare.env.MUSIC_BUCKET.put(r2Key, audioData, {
 				httpMetadata: {
 					contentType: audioContentType,
 					cacheControl: "public, max-age=86400",
 				},
 			});
-			console.log("[upload-rap-track] R2 アップロード完了:", rapTrackKey);
 
 			const db = drizzle(context.cloudflare.env.DB);
 			const existing = await db
 				.select()
 				.from(hiphopTracks)
-				.where(eq(hiphopTracks.date, date))
+				.where(and(eq(hiphopTracks.date, date), eq(hiphopTracks.type, "rap")))
 				.limit(1);
 
 			if (existing.length > 0) {
 				await db
 					.update(hiphopTracks)
 					.set({
-						rapTrackKey,
+						r2Key,
 						...(title ? { title } : {}),
 					})
-					.where(eq(hiphopTracks.date, date));
-				console.log("[upload-rap-track] DB レコード更新完了:", date);
+					.where(and(eq(hiphopTracks.date, date), eq(hiphopTracks.type, "rap")));
 			} else {
 				await db.insert(hiphopTracks).values({
 					date,
-					rapTrackKey,
+					type: "rap",
+					r2Key,
 					title: title || `${date} Rap`,
 					source: "manual",
 				});
-				console.log("[upload-rap-track] DB レコード新規作成完了:", date);
 			}
 
 			return {
@@ -493,21 +476,34 @@ export async function action({ request, context }: Route.ActionArgs) {
 		}
 	}
 
+	// --- Hiphopトラック タイトル編集 ---
+	if (intent === "update-track-title") {
+		const id = Number(formData.get("id"));
+		const title = (formData.get("title") as string)?.trim();
+		if (!id) return { error: "IDが不正です" };
+		if (!title) return { error: "タイトルを入力してください" };
+
+		const db = drizzle(context.cloudflare.env.DB);
+		await db.update(hiphopTracks).set({ title }).where(eq(hiphopTracks.id, id));
+		return { ok: true, intent: "music", message: "タイトルを更新しました" };
+	}
+
 	// --- Hiphopトラック削除 ---
 	if (intent === "delete-hiphop-track") {
 		const id = Number(formData.get("id"));
 		const date = formData.get("date") as string;
+		const type = formData.get("type") as string;
 		if (!id) return { error: "IDが不正です" };
 
 		const db = drizzle(context.cloudflare.env.DB);
-		// R2から音声ファイルも削除
-		try {
-			await context.cloudflare.env.MUSIC_BUCKET.delete(`hiphop/${date}/instrumental.mp3`);
-			await context.cloudflare.env.MUSIC_BUCKET.delete(`hiphop/${date}/instrumental.m4a`);
-			await context.cloudflare.env.MUSIC_BUCKET.delete(`hiphop/${date}/rap.mp3`);
-			await context.cloudflare.env.MUSIC_BUCKET.delete(`hiphop/${date}/rap.m4a`);
-		} catch {
-			// R2削除エラーは無視（ファイルが存在しない場合）
+		// R2から音声ファイルを削除
+		if (date && type) {
+			try {
+				await context.cloudflare.env.MUSIC_BUCKET.delete(`hiphop/${date}/${type}.mp3`);
+				await context.cloudflare.env.MUSIC_BUCKET.delete(`hiphop/${date}/${type}.m4a`);
+			} catch {
+				// R2削除エラーは無視
+			}
 		}
 		await db.delete(hiphopTracks).where(eq(hiphopTracks.id, id));
 		return { ok: true, intent: "music", message: "トラックを削除しました" };

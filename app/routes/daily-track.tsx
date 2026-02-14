@@ -22,18 +22,17 @@ export async function loader({ context }: Route.LoaderArgs) {
 		.select()
 		.from(hiphopTracks)
 		.orderBy(desc(hiphopTracks.date))
-		.limit(30);
+		.limit(60);
 
 	return {
 		tracks: tracks.map((t) => ({
 			id: t.id,
 			date: t.date,
+			type: t.type,
 			title: t.title,
 			style: t.style,
 			duration: t.duration,
 			source: t.source,
-			hasInstrumental: !!t.instrumentalKey,
-			hasRap: !!t.rapTrackKey,
 			diaryContent: t.diaryContent,
 		})),
 	};
@@ -52,26 +51,23 @@ function TrackPlayer({
 	track: {
 		id: number;
 		date: string;
+		type: string;
 		title: string | null;
 		style: string | null;
 		duration: number | null;
 		source: string;
-		hasInstrumental: boolean;
-		hasRap: boolean;
 		diaryContent: string | null;
 	};
 }) {
 	const [isPlaying, setIsPlaying] = useState(false);
-	const [currentType, setCurrentType] = useState<"instrumental" | "rap">(
-		track.hasRap ? "rap" : "instrumental",
-	);
 	const [progress, setProgress] = useState(0);
 	const [currentTime, setCurrentTime] = useState(0);
 	const [audioDuration, setAudioDuration] = useState(track.duration || 0);
 	const [showDiary, setShowDiary] = useState(false);
 	const audioRef = useRef<HTMLAudioElement>(null);
 
-	const audioSrc = `/daily-track/audio/${track.date}/${currentType}`;
+	const audioSrc = `/daily-track/audio/${track.date}/${track.type}`;
+	const isRap = track.type === "rap";
 
 	const togglePlay = () => {
 		const audio = audioRef.current;
@@ -115,26 +111,23 @@ function TrackPlayer({
 		audio.currentTime = pct * audio.duration;
 	};
 
-	const switchType = (type: "instrumental" | "rap") => {
-		if (type === currentType) return;
-		const audio = audioRef.current;
-		if (audio) {
-			audio.pause();
-			setIsPlaying(false);
-			setProgress(0);
-			setCurrentTime(0);
-		}
-		setCurrentType(type);
-	};
-
 	return (
 		<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 overflow-hidden transition-all hover:border-white/20">
 			{/* ヘッダー */}
 			<div className="px-5 pt-4 pb-2">
 				<div className="flex items-center justify-between mb-1">
-					<span className="text-xs text-fuchsia-400/80 font-medium">
-						{track.date}
-					</span>
+					<div className="flex items-center gap-2">
+						<span className="text-xs text-fuchsia-400/80 font-medium">
+							{track.date}
+						</span>
+						<span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+							isRap
+								? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+								: "bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30"
+						}`}>
+							{isRap ? "Rap" : "Instrumental"}
+						</span>
+					</div>
 					<span className="text-[10px] uppercase tracking-wider text-purple-300/50 bg-purple-500/10 px-2 py-0.5 rounded">
 						{track.source === "diary" ? "from diary" : track.source === "weather" ? "from weather" : "manual"}
 					</span>
@@ -148,34 +141,6 @@ function TrackPlayer({
 					</p>
 				)}
 			</div>
-
-			{/* トラックタイプ切り替え */}
-			{track.hasInstrumental && track.hasRap && (
-				<div className="px-5 py-2 flex gap-2">
-					<button
-						type="button"
-						onClick={() => switchType("instrumental")}
-						className={`text-xs px-3 py-1 rounded-full transition-colors ${
-							currentType === "instrumental"
-								? "bg-fuchsia-500/30 text-fuchsia-300 border border-fuchsia-500/50"
-								: "bg-white/5 text-purple-300/60 border border-white/10 hover:border-white/20"
-						}`}
-					>
-						Instrumental
-					</button>
-					<button
-						type="button"
-						onClick={() => switchType("rap")}
-						className={`text-xs px-3 py-1 rounded-full transition-colors ${
-							currentType === "rap"
-								? "bg-cyan-500/30 text-cyan-300 border border-cyan-500/50"
-								: "bg-white/5 text-purple-300/60 border border-white/10 hover:border-white/20"
-						}`}
-					>
-						Rap Ver.
-					</button>
-				</div>
-			)}
 
 			{/* プレイヤー */}
 			<div className="px-5 py-3">
@@ -195,7 +160,11 @@ function TrackPlayer({
 					<button
 						type="button"
 						onClick={togglePlay}
-						className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-fuchsia-500 to-cyan-500 flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+						className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95 ${
+							isRap
+								? "bg-gradient-to-br from-cyan-500 to-blue-500"
+								: "bg-gradient-to-br from-fuchsia-500 to-cyan-500"
+						}`}
 					>
 						{isPlaying ? (
 							<svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor">
