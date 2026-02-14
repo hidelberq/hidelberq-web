@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Link } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { desc, sql } from "drizzle-orm";
@@ -190,15 +190,33 @@ type TrackInfo = {
 function MarqueeTitle({ text, trackKey, className }: { text: string; trackKey: string; className?: string }) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const textRef = useRef<HTMLSpanElement>(null);
-	const [scrollDistance, setScrollDistance] = useState(0);
 
-	useLayoutEffect(() => {
+	useEffect(() => {
 		const container = containerRef.current;
 		const textEl = textRef.current;
-		if (container && textEl) {
-			const overflow = textEl.scrollWidth - container.clientWidth;
-			setScrollDistance(overflow > 2 ? overflow + 16 : 0);
-		}
+		if (!container || !textEl) return;
+
+		const overflow = textEl.scrollWidth - container.clientWidth;
+		if (overflow <= 2) return;
+
+		const distance = overflow + 16;
+		const pauseSec = 3;
+		const scrollSec = distance / 30;
+		const totalMs = (pauseSec + scrollSec + pauseSec) * 1000;
+		const pauseOffset = pauseSec / (pauseSec + scrollSec + pauseSec);
+		const scrollEndOffset = 1 - pauseOffset;
+
+		const anim = textEl.animate(
+			[
+				{ offset: 0, transform: "translateX(0)" },
+				{ offset: pauseOffset, transform: "translateX(0)" },
+				{ offset: scrollEndOffset, transform: `translateX(-${distance}px)` },
+				{ offset: 1, transform: `translateX(-${distance}px)` },
+			],
+			{ duration: totalMs, iterations: Infinity },
+		);
+
+		return () => anim.cancel();
 	}, [text, trackKey]);
 
 	return (
@@ -206,10 +224,6 @@ function MarqueeTitle({ text, trackKey, className }: { text: string; trackKey: s
 			<span
 				ref={textRef}
 				className={`inline-block ${className ?? ""}`}
-				style={scrollDistance > 0 ? {
-					animation: `marquee ${Math.max(6, scrollDistance / 20 + 4)}s linear infinite`,
-					"--marquee-distance": `-${scrollDistance}px`,
-				} as React.CSSProperties : undefined}
 			>
 				{text}
 			</span>
