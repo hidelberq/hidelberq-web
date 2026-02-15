@@ -32,7 +32,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 	const trackResults = await db
 		.select()
 		.from(hiphopTracks)
-		.orderBy(desc(hiphopTracks.date), hiphopTracks.type)
+		.orderBy(desc(hiphopTracks.date), desc(hiphopTracks.type))
 		.limit(30);
 
 	// アクティビティログを取得（直近20件）
