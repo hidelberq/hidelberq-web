@@ -187,50 +187,6 @@ type TrackInfo = {
 	source: string;
 };
 
-function MarqueeTitle({ text, trackKey, className }: { text: string; trackKey: string; className?: string }) {
-	const containerRef = useRef<HTMLDivElement>(null);
-	const textRef = useRef<HTMLSpanElement>(null);
-
-	useEffect(() => {
-		const container = containerRef.current;
-		const textEl = textRef.current;
-		if (!container || !textEl) return;
-
-		const overflow = textEl.scrollWidth - container.clientWidth;
-		if (overflow <= 2) return;
-
-		const distance = overflow + 16;
-		const pauseSec = 3;
-		const scrollSec = distance / 30;
-		const totalMs = (pauseSec + scrollSec + pauseSec) * 1000;
-		const pauseOffset = pauseSec / (pauseSec + scrollSec + pauseSec);
-		const scrollEndOffset = 1 - pauseOffset;
-
-		const anim = textEl.animate(
-			[
-				{ offset: 0, transform: "translateX(0)" },
-				{ offset: pauseOffset, transform: "translateX(0)" },
-				{ offset: scrollEndOffset, transform: `translateX(-${distance}px)` },
-				{ offset: 1, transform: `translateX(-${distance}px)` },
-			],
-			{ duration: totalMs, iterations: Infinity },
-		);
-
-		return () => anim.cancel();
-	}, [text, trackKey]);
-
-	return (
-		<div ref={containerRef} className="overflow-hidden whitespace-nowrap">
-			<span
-				ref={textRef}
-				className={`inline-block ${className ?? ""}`}
-			>
-				{text}
-			</span>
-		</div>
-	);
-}
-
 function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 	const [currentIndex, setCurrentIndex] = useState(0);
 	const [isPlaying, setIsPlaying] = useState(false);
@@ -325,11 +281,9 @@ function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 						</svg>
 					</div>
 					<div className="min-w-0">
-						<MarqueeTitle
-							text={track.title || "Untitled Track"}
-							trackKey={`${track.date}-${track.type}`}
-							className="text-sm font-semibold text-white group-hover:text-fuchsia-200 transition-colors"
-						/>
+						<p className="text-sm font-semibold text-white group-hover:text-fuchsia-200 transition-colors truncate">
+							{track.title || "Untitled Track"}
+						</p>
 						<div className="flex items-center gap-1.5">
 							<span className="text-[10px] text-purple-300/50">{track.date}</span>
 							<span className={`text-[10px] ${track.type === "rap" ? "text-cyan-400/60" : "text-fuchsia-400/60"}`}>
