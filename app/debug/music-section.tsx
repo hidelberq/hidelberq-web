@@ -294,7 +294,7 @@ export function MusicSection({
 							<input
 								type="file"
 								name="audio"
-								accept="audio/mpeg,audio/mp3,audio/mp4,audio/x-m4a,.m4a"
+								accept="audio/*,.mp3,.m4a,.mp4,.aac,.wav,.ogg"
 								required
 								className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-cyan-500/20 file:text-cyan-400 hover:file:bg-cyan-500/30"
 							/>
