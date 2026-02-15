@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 export const tweets = sqliteTable("tweets", {
@@ -259,16 +259,13 @@ export const bookActivities = sqliteTable("book_activities", {
 	),
 });
 
-// 日替わりHiphopトラック
+// 日替わりHiphopトラック（instrumental / rap を別レコードで管理）
 export const hiphopTracks = sqliteTable("hiphop_tracks", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
-	date: text("date").notNull().unique(), // YYYY-MM-DD
-	// AI生成インストゥルメンタル
-	instrumentalKey: text("instrumental_key"), // R2キー (hiphop/YYYY-MM-DD/instrumental.mp3)
-	instrumentalUrl: text("instrumental_url"), // Suno APIの元URL（バックアップ）
-	// ユーザーアップロードのラップトラック
-	rapTrackKey: text("rap_track_key"), // R2キー (hiphop/YYYY-MM-DD/rap.mp3)
-	// メタデータ
+	date: text("date").notNull(), // YYYY-MM-DD
+	type: text("type").notNull(), // "instrumental" | "rap"
+	r2Key: text("r2_key"), // R2キー (hiphop/YYYY-MM-DD/{type}.mp3)
+	backupUrl: text("backup_url"), // Suno APIの元URL等（バックアップ）
 	title: text("title"), // トラック名
 	prompt: text("prompt"), // Gemini生成プロンプト
 	style: text("style"), // スタイル情報
@@ -279,7 +276,9 @@ export const hiphopTracks = sqliteTable("hiphop_tracks", {
 	createdAt: integer("created_at", { mode: "timestamp" }).default(
 		sql`(strftime('%s', 'now'))`,
 	),
-});
+}, (table) => [
+	unique("hiphop_tracks_date_type_unique").on(table.date, table.type),
+]);
 
 export const scrapedArticles = sqliteTable("scraped_articles", {
 	id: integer("id").primaryKey({ autoIncrement: true }),

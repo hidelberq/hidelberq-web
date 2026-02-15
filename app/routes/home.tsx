@@ -28,11 +28,11 @@ export async function loader({ context }: Route.LoaderArgs) {
 
 	const heroImage = latest.length > 0 ? latest[0] : null;
 
-	// Hiphopトラックを取得（最新30件）
+	// Hiphopトラックを取得（最新30件、日付降順 = 今日→昨日→一昨日...）
 	const trackResults = await db
 		.select()
 		.from(hiphopTracks)
-		.orderBy(desc(hiphopTracks.date))
+		.orderBy(desc(hiphopTracks.date), desc(hiphopTracks.type))
 		.limit(30);
 
 	// アクティビティログを取得（直近20件）
@@ -60,11 +60,11 @@ export async function loader({ context }: Route.LoaderArgs) {
 			: null,
 		tracks: trackResults.map((t) => ({
 			date: t.date,
+			type: t.type,
 			title: t.title,
 			style: t.style,
 			duration: t.duration,
 			source: t.source,
-			hasRap: !!t.rapTrackKey,
 		})),
 		activities: activities.map((a) => ({
 			id: a.id,
@@ -180,11 +180,11 @@ function ActivityIcon({ type }: { type: string }) {
 
 type TrackInfo = {
 	date: string;
+	type: string;
 	title: string | null;
 	style: string | null;
 	duration: number | null;
 	source: string;
-	hasRap: boolean;
 };
 
 function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
@@ -194,12 +194,12 @@ function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 	const [currentTime, setCurrentTime] = useState(0);
 	const [duration, setDuration] = useState(0);
 	const audioRef = useRef<HTMLAudioElement>(null);
+	// 自動再生の継続を追跡するref（onPause による isPlaying=false の影響を回避）
+	const autoAdvancingRef = useRef(false);
 
 	const track = tracks[currentIndex];
 
-	const audioSrc = track.hasRap
-		? `/daily-track/audio/${track.date}/rap`
-		: `/daily-track/audio/${track.date}/instrumental`;
+	const audioSrc = `/daily-track/audio/${track.date}/${track.type}`;
 
 	const handlePrev = useCallback(() => {
 		if (currentIndex < tracks.length - 1) {
@@ -230,7 +230,10 @@ function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 		const audio = audioRef.current;
 		if (!audio) return;
 		audio.load();
-		if (isPlaying) {
+		// autoAdvancingRef が true なら自動再生を継続
+		if (isPlaying || autoAdvancingRef.current) {
+			autoAdvancingRef.current = false;
+			setIsPlaying(true);
 			audio.play();
 		}
 		setProgress(0);
@@ -278,14 +281,14 @@ function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 						</svg>
 					</div>
 					<div className="min-w-0">
-						<p className="text-sm font-semibold text-white truncate group-hover:text-fuchsia-200 transition-colors">
+						<p className="text-sm font-semibold text-white group-hover:text-fuchsia-200 transition-colors truncate">
 							{track.title || "Untitled Track"}
 						</p>
 						<div className="flex items-center gap-1.5">
 							<span className="text-[10px] text-purple-300/50">{track.date}</span>
-							{track.hasRap && (
-								<span className="text-[10px] text-cyan-400/60">Rap</span>
-							)}
+							<span className={`text-[10px] ${track.type === "rap" ? "text-cyan-400/60" : "text-fuchsia-400/60"}`}>
+								{track.type === "rap" ? "Rap" : "Inst."}
+							</span>
 							{duration > 0 && (
 								<span className="text-[10px] text-purple-300/40">
 									{formatTime(currentTime)} / {formatTime(duration)}
@@ -363,8 +366,9 @@ function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 					if (audio) setDuration(audio.duration);
 				}}
 				onEnded={() => {
-					// 自動で前の曲（古い方）へ
+					// 新→古の順に自動再生
 					if (currentIndex < tracks.length - 1) {
+						autoAdvancingRef.current = true;
 						setCurrentIndex((i) => i + 1);
 					} else {
 						setIsPlaying(false);

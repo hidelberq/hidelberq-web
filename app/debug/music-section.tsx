@@ -1,24 +1,25 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useFetcher } from "react-router";
 import { ActionFeedback } from "./feedback";
+
+type TrackEntry = {
+	id: number;
+	date: string;
+	type: string;
+	title: string | null;
+	style: string | null;
+	duration: number | null;
+	source: string;
+	prompt: string | null;
+	diaryContent: string | null;
+	sunoTaskId: string | null;
+};
 
 export function MusicSection({
 	trackEntries,
 	trackCount,
 }: {
-	trackEntries: Array<{
-		id: number;
-		date: string;
-		title: string | null;
-		style: string | null;
-		duration: number | null;
-		source: string;
-		prompt: string | null;
-		diaryContent: string | null;
-		hasInstrumental: boolean;
-		hasRap: boolean;
-		sunoTaskId: string | null;
-	}>;
+	trackEntries: TrackEntry[];
 	trackCount: number;
 }) {
 	const generateFetcher = useFetcher();
@@ -54,27 +55,31 @@ export function MusicSection({
 
 	// 日記取得結果をstateに反映
 	const diaryData = diaryFetcher.data as Record<string, unknown> | undefined;
-	useEffect(() => {
-		if (diaryData?.ok && "diaryResult" in diaryData) {
-			const result = diaryData.diaryResult as string | null;
+	if (diaryData?.ok && "diaryResult" in diaryData) {
+		const result = diaryData.diaryResult as string | null;
+		if (result && diaryResult !== result) {
 			setDiaryResult(result);
-			if (result) {
-				setCustomDiary(result);
-				setCustomDate(diaryTestDate);
-			}
+			setCustomDiary(result);
+			setCustomDate(diaryTestDate);
 		}
-	}, [diaryData, diaryTestDate]);
+	}
 
-	// 最新のフィードバックを取得
-	const latestFeedback =
-		(customFetcher.data as Record<string, unknown> | undefined) ??
-		(generateFetcher.data as Record<string, unknown> | undefined) ??
-		(diaryFetcher.data as Record<string, unknown> | undefined) ??
-		(uploadFetcher.data as Record<string, unknown> | undefined);
+	// 各フェッチャーのフィードバックを個別に取得
+	const generateFeedback =
+		generateFetcher.data as Record<string, unknown> | undefined;
+	const uploadFeedback =
+		uploadFetcher.data as Record<string, unknown> | undefined;
+	const diaryFeedback =
+		diaryFetcher.data as Record<string, unknown> | undefined;
+	const customFeedback =
+		customFetcher.data as Record<string, unknown> | undefined;
 
 	return (
 		<section>
-			<ActionFeedback data={latestFeedback} />
+			<ActionFeedback data={generateFeedback} />
+			<ActionFeedback data={uploadFeedback} />
+			<ActionFeedback data={diaryFeedback} />
+			<ActionFeedback data={customFeedback} />
 
 			<div className="flex items-center justify-between mb-4">
 				<h2 className="text-lg font-bold text-pink-400">
@@ -332,37 +337,99 @@ function MusicTrackCard({
 	entry,
 	isLatest,
 }: {
-	entry: {
-		id: number;
-		date: string;
-		title: string | null;
-		style: string | null;
-		duration: number | null;
-		source: string;
-		prompt: string | null;
-		diaryContent: string | null;
-		hasInstrumental: boolean;
-		hasRap: boolean;
-		sunoTaskId: string | null;
-	};
+	entry: TrackEntry;
 	isLatest: boolean;
 }) {
 	const deleteFetcher = useFetcher();
+	const titleFetcher = useFetcher();
 	const isDeleting =
 		deleteFetcher.state === "submitting" ||
 		deleteFetcher.state === "loading";
+	const isSavingTitle =
+		titleFetcher.state === "submitting" ||
+		titleFetcher.state === "loading";
+
+	const [isEditingTitle, setIsEditingTitle] = useState(false);
+	const [editTitle, setEditTitle] = useState(entry.title || "");
+
+	const titleFeedback =
+		titleFetcher.data as Record<string, unknown> | undefined;
+
+	const isInstrumental = entry.type === "instrumental";
+	const typeColor = isInstrumental ? "pink" : "cyan";
 
 	return (
 		<article className="border border-gray-800 rounded-lg overflow-hidden">
+			<ActionFeedback data={titleFeedback} />
 			<div className="flex items-center justify-between px-4 py-2.5 bg-gray-900/50 border-b border-gray-800">
-				<div className="flex items-center gap-3 text-sm">
-					<span className="text-pink-400 font-medium">{entry.date}</span>
-					<span className="text-gray-600">|</span>
-					<span className="text-gray-300 font-medium truncate max-w-48">
-						{entry.title || "Untitled"}
+				<div className="flex items-center gap-3 text-sm min-w-0">
+					<span className={`text-${typeColor}-400 font-medium shrink-0`}>{entry.date}</span>
+					<span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
+						isInstrumental
+							? "bg-pink-500/20 text-pink-400"
+							: "bg-cyan-500/20 text-cyan-400"
+					}`}>
+						{isInstrumental ? "Instrumental" : "Rap"}
 					</span>
+					{isEditingTitle ? (
+						<titleFetcher.Form
+							method="post"
+							className="flex items-center gap-1 min-w-0 flex-1"
+							onSubmit={() => setIsEditingTitle(false)}
+						>
+							<input type="hidden" name="intent" value="update-track-title" />
+							<input type="hidden" name="id" value={entry.id} />
+							<input
+								type="text"
+								name="title"
+								value={editTitle}
+								onChange={(e) => setEditTitle(e.target.value)}
+								className="flex-1 min-w-0 bg-gray-900 border border-gray-600 rounded px-2 py-0.5 text-sm text-gray-300 focus:border-gray-400 focus:outline-none"
+								autoFocus
+								onKeyDown={(e) => {
+									if (e.key === "Escape") {
+										setIsEditingTitle(false);
+										setEditTitle(entry.title || "");
+									}
+								}}
+							/>
+							<button
+								type="submit"
+								disabled={isSavingTitle || !editTitle.trim()}
+								className="text-xs text-green-400 hover:text-green-300 px-1.5 disabled:opacity-50"
+							>
+								保存
+							</button>
+							<button
+								type="button"
+								onClick={() => {
+									setIsEditingTitle(false);
+									setEditTitle(entry.title || "");
+								}}
+								className="text-xs text-gray-500 hover:text-gray-400 px-1"
+							>
+								取消
+							</button>
+						</titleFetcher.Form>
+					) : (
+						<>
+							<span className="text-gray-300 font-medium truncate">
+								{entry.title || "Untitled"}
+							</span>
+							<button
+								type="button"
+								onClick={() => setIsEditingTitle(true)}
+								className="shrink-0 text-gray-600 hover:text-gray-400 transition-colors"
+								title="タイトルを編集"
+							>
+								<svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+								</svg>
+							</button>
+						</>
+					)}
 					<span
-						className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+						className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
 							entry.source === "diary"
 								? "bg-blue-500/20 text-blue-400"
 								: entry.source === "weather"
@@ -373,7 +440,7 @@ function MusicTrackCard({
 						{entry.source === "diary" ? "日記" : entry.source === "weather" ? "天気" : "手動"}
 					</span>
 					{isLatest && (
-						<span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-green-500/20 text-green-400">
+						<span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-green-500/20 text-green-400 shrink-0">
 							最新
 						</span>
 					)}
@@ -382,6 +449,7 @@ function MusicTrackCard({
 					<input type="hidden" name="intent" value="delete-hiphop-track" />
 					<input type="hidden" name="id" value={entry.id} />
 					<input type="hidden" name="date" value={entry.date} />
+					<input type="hidden" name="type" value={entry.type} />
 					<button
 						type="submit"
 						disabled={isDeleting}
@@ -398,56 +466,25 @@ function MusicTrackCard({
 							{Math.floor(entry.duration / 60)}:{(entry.duration % 60).toString().padStart(2, "0")}
 						</span>
 					)}
-					{entry.hasInstrumental && (
-						<span className="text-pink-400/60">Instrumental</span>
-					)}
-					{entry.hasRap && (
-						<span className="text-cyan-400/60">Rap Ver.</span>
-					)}
 				</div>
 
 				{/* 試聴プレイヤー */}
-				<div className="space-y-1">
-					{entry.hasInstrumental && (
-						<div className="flex items-center gap-2">
-							<span className="text-[10px] text-gray-500 w-20">Instrumental:</span>
-							<audio
-								controls
-								preload="none"
-								src={`/daily-track/audio/${entry.date}/instrumental`}
-								className="h-8 w-full [&::-webkit-media-controls-panel]:bg-gray-800"
-							/>
-							<a
-								href={`/daily-track/audio/${entry.date}/instrumental?download=1`}
-								className="shrink-0 text-gray-500 hover:text-pink-400 transition-colors"
-								title="Instrumentalをダウンロード"
-							>
-								<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-								</svg>
-							</a>
-						</div>
-					)}
-					{entry.hasRap && (
-						<div className="flex items-center gap-2">
-							<span className="text-[10px] text-gray-500 w-20">Rap Ver.:</span>
-							<audio
-								controls
-								preload="none"
-								src={`/daily-track/audio/${entry.date}/rap`}
-								className="h-8 w-full [&::-webkit-media-controls-panel]:bg-gray-800"
-							/>
-							<a
-								href={`/daily-track/audio/${entry.date}/rap?download=1`}
-								className="shrink-0 text-gray-500 hover:text-cyan-400 transition-colors"
-								title="Rap Ver.をダウンロード"
-							>
-								<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-								</svg>
-							</a>
-						</div>
-					)}
+				<div className="flex items-center gap-2">
+					<audio
+						controls
+						preload="none"
+						src={`/daily-track/audio/${entry.date}/${entry.type}`}
+						className="h-8 w-full [&::-webkit-media-controls-panel]:bg-gray-800"
+					/>
+					<a
+						href={`/daily-track/audio/${entry.date}/${entry.type}?download=1`}
+						className={`shrink-0 text-gray-500 hover:text-${typeColor}-400 transition-colors`}
+						title="ダウンロード"
+					>
+						<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+						</svg>
+					</a>
 				</div>
 
 				{entry.style && (
