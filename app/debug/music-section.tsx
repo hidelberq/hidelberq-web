@@ -255,9 +255,15 @@ export function MusicSection({
 				<h3 className="text-sm font-semibold text-cyan-400 mb-3">
 					ラップトラックをアップロード
 				</h3>
-				<uploadFetcher.Form
-					method="post"
-					encType="multipart/form-data"
+				<form
+					onSubmit={(e) => {
+						e.preventDefault();
+						const formData = new FormData(e.currentTarget);
+						uploadFetcher.submit(formData, {
+							method: "post",
+							encType: "multipart/form-data",
+						});
+					}}
 				>
 					<input type="hidden" name="intent" value="upload-rap-track" />
 					<div className="space-y-3">
@@ -310,7 +316,7 @@ export function MusicSection({
 							{isUploading ? "アップロード中..." : "アップロード"}
 						</button>
 					</div>
-				</uploadFetcher.Form>
+				</form>
 			</div>
 
 			{/* トラック一覧 */}
