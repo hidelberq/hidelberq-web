@@ -28,11 +28,11 @@ export async function loader({ context }: Route.LoaderArgs) {
 
 	const heroImage = latest.length > 0 ? latest[0] : null;
 
-	// Hiphopトラックを取得（最新30件）
+	// Hiphopトラックを取得（最新30件、日付降順 = 今日→昨日→一昨日...）
 	const trackResults = await db
 		.select()
 		.from(hiphopTracks)
-		.orderBy(desc(hiphopTracks.date))
+		.orderBy(desc(hiphopTracks.date), hiphopTracks.type)
 		.limit(30);
 
 	// アクティビティログを取得（直近20件）
