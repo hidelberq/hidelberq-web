@@ -1,5 +1,8 @@
+DROP TABLE IF EXISTS `rhythm_entries`;
+
 CREATE TABLE `rhythm_entries` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`member_id` text NOT NULL,
 	`date` text NOT NULL,
 	`time` text NOT NULL,
 	`activity` text NOT NULL,

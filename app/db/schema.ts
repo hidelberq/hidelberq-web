@@ -283,6 +283,7 @@ export const hiphopTracks = sqliteTable("hiphop_tracks", {
 // 社会リズム療法 行動記録票
 export const rhythmEntries = sqliteTable("rhythm_entries", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
+	memberId: text("member_id").notNull(), // localStorage の UUID
 	date: text("date").notNull(), // YYYY-MM-DD
 	time: text("time").notNull(), // HH:MM
 	activity: text("activity").notNull(),

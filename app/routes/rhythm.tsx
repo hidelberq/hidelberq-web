@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Link, useFetcher } from "react-router";
+import { useState, useMemo, useEffect } from "react";
+import { Link, useFetcher, useSearchParams } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { desc, eq, and, gte, lte } from "drizzle-orm";
 import { rhythmEntries } from "../db/schema";
@@ -58,9 +58,19 @@ function formatDate(dateStr: string): string {
 	return `${month}/${day} (${weekday})`;
 }
 
+function formatDateShort(dateStr: string): string {
+	const d = new Date(dateStr + "T00:00:00");
+	return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
 function formatMonth(dateStr: string): string {
 	const d = new Date(dateStr + "T00:00:00");
 	return `${d.getFullYear()}年${d.getMonth() + 1}月`;
+}
+
+function getWeekdayShort(dateStr: string): string {
+	const d = new Date(dateStr + "T00:00:00");
+	return ["日", "月", "火", "水", "木", "金", "土"][d.getDay()];
 }
 
 const INTERPERSONAL_LABELS = [
@@ -69,6 +79,8 @@ const INTERPERSONAL_LABELS = [
 	"他人が積極的に関わった",
 	"他人から影響を受けた",
 ] as const;
+
+const INTERPERSONAL_SHORT = ["一人", "そこに", "関わり", "影響"] as const;
 
 type Entry = {
 	id: number;
@@ -80,6 +92,22 @@ type Entry = {
 	note: string | null;
 };
 
+function moodColor(mood: number): string {
+	if (mood > 3) return "text-emerald-400";
+	if (mood > 0) return "text-emerald-300/70";
+	if (mood === 0) return "text-violet-300";
+	if (mood >= -3) return "text-amber-400/70";
+	return "text-red-400";
+}
+
+function moodBgClass(mood: number): string {
+	if (mood > 3) return "bg-emerald-500/15";
+	if (mood > 0) return "bg-emerald-500/8";
+	if (mood === 0) return "";
+	if (mood >= -3) return "bg-amber-500/8";
+	return "bg-red-500/15";
+}
+
 // --- Loader ---
 
 export async function loader({ context, request }: Route.LoaderArgs) {
@@ -87,6 +115,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 	const url = new URL(request.url);
 	const view = url.searchParams.get("view") || "today";
 	const dateParam = url.searchParams.get("date") || todayJST();
+	const memberId = url.searchParams.get("memberId") || "";
 
 	let startDate: string;
 	let endDate: string;
@@ -102,11 +131,22 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 		endDate = dateParam;
 	}
 
+	if (!memberId) {
+		return {
+			entries: [] as Entry[],
+			view,
+			currentDate: dateParam,
+			startDate,
+			endDate,
+		};
+	}
+
 	const entries = await db
 		.select()
 		.from(rhythmEntries)
 		.where(
 			and(
+				eq(rhythmEntries.memberId, memberId),
 				gte(rhythmEntries.date, startDate),
 				lte(rhythmEntries.date, endDate),
 			),
@@ -138,6 +178,7 @@ export async function action({ context, request }: Route.ActionArgs) {
 	const intent = formData.get("intent") as string;
 
 	if (intent === "create") {
+		const memberId = formData.get("memberId") as string;
 		const date = formData.get("date") as string;
 		const time = formData.get("time") as string;
 		const activity = formData.get("activity") as string;
@@ -145,7 +186,7 @@ export async function action({ context, request }: Route.ActionArgs) {
 		const interpersonal = Number(formData.get("interpersonal"));
 		const note = (formData.get("note") as string) || null;
 
-		if (!date || !time || !activity) {
+		if (!memberId || !date || !time || !activity) {
 			return { error: "必須項目を入力してください" };
 		}
 		if (mood < -10 || mood > 10) {
@@ -156,6 +197,7 @@ export async function action({ context, request }: Route.ActionArgs) {
 		}
 
 		await db.insert(rhythmEntries).values({
+			memberId,
 			date,
 			time,
 			activity,
@@ -169,8 +211,16 @@ export async function action({ context, request }: Route.ActionArgs) {
 
 	if (intent === "delete") {
 		const id = Number(formData.get("id"));
-		if (id) {
-			await db.delete(rhythmEntries).where(eq(rhythmEntries.id, id));
+		const memberId = formData.get("memberId") as string;
+		if (id && memberId) {
+			await db
+				.delete(rhythmEntries)
+				.where(
+					and(
+						eq(rhythmEntries.id, id),
+						eq(rhythmEntries.memberId, memberId),
+					),
+				);
 		}
 		return { success: true };
 	}
@@ -182,10 +232,28 @@ export async function action({ context, request }: Route.ActionArgs) {
 
 export default function RhythmTracker({ loaderData }: Route.ComponentProps) {
 	const { entries, view, currentDate, startDate, endDate } = loaderData;
+	const [searchParams, setSearchParams] = useSearchParams();
+	const [memberId, setMemberId] = useState("");
+
+	useEffect(() => {
+		let id = localStorage.getItem("rhythmMemberId");
+		if (!id) {
+			id = crypto.randomUUID();
+			localStorage.setItem("rhythmMemberId", id);
+		}
+		setMemberId(id);
+
+		// memberId が URL に含まれていなければ追加
+		if (searchParams.get("memberId") !== id) {
+			const params = new URLSearchParams(searchParams);
+			params.set("memberId", id);
+			setSearchParams(params, { replace: true });
+		}
+	}, [searchParams, setSearchParams]);
 
 	return (
 		<div className="min-h-screen bg-violet-950 text-white">
-			<div className="mx-auto max-w-4xl px-4 py-6">
+			<div className="mx-auto max-w-5xl px-4 py-6">
 				{/* ヘッダー */}
 				<div className="mb-6">
 					<Link
@@ -203,7 +271,11 @@ export default function RhythmTracker({ loaderData }: Route.ComponentProps) {
 				</div>
 
 				{/* ビュー切り替えタブ */}
-				<ViewTabs view={view} currentDate={currentDate} />
+				<ViewTabs
+					view={view}
+					currentDate={currentDate}
+					memberId={memberId}
+				/>
 
 				{/* ナビゲーション */}
 				<DateNavigation
@@ -211,20 +283,26 @@ export default function RhythmTracker({ loaderData }: Route.ComponentProps) {
 					currentDate={currentDate}
 					startDate={startDate}
 					endDate={endDate}
+					memberId={memberId}
 				/>
 
 				{/* 入力フォーム */}
-				<EntryForm currentDate={currentDate} />
+				<EntryForm currentDate={currentDate} memberId={memberId} />
 
 				{/* ビュー別表示 */}
 				{view === "today" && (
-					<TodayView entries={entries} currentDate={currentDate} />
+					<TodayView
+						entries={entries}
+						currentDate={currentDate}
+						memberId={memberId}
+					/>
 				)}
 				{view === "week" && (
 					<WeekView
 						entries={entries}
 						startDate={startDate}
 						endDate={endDate}
+						memberId={memberId}
 					/>
 				)}
 				{view === "month" && (
@@ -237,9 +315,7 @@ export default function RhythmTracker({ loaderData }: Route.ComponentProps) {
 				)}
 
 				{/* グラフ */}
-				{entries.length > 0 && (
-					<ChartSection entries={entries} view={view} />
-				)}
+				{entries.length > 0 && <ChartSection entries={entries} />}
 			</div>
 		</div>
 	);
@@ -250,7 +326,8 @@ export default function RhythmTracker({ loaderData }: Route.ComponentProps) {
 function ViewTabs({
 	view,
 	currentDate,
-}: { view: string; currentDate: string }) {
+	memberId,
+}: { view: string; currentDate: string; memberId: string }) {
 	const tabs = [
 		{ key: "today", label: "今日" },
 		{ key: "week", label: "週間" },
@@ -262,7 +339,7 @@ function ViewTabs({
 			{tabs.map((tab) => (
 				<Link
 					key={tab.key}
-					to={`/rhythm?view=${tab.key}&date=${currentDate}`}
+					to={`/rhythm?view=${tab.key}&date=${currentDate}&memberId=${memberId}`}
 					className={`flex-1 rounded-md px-4 py-2 text-center text-sm font-medium transition-colors ${
 						view === tab.key
 							? "bg-violet-600 text-white shadow-sm"
@@ -283,11 +360,13 @@ function DateNavigation({
 	currentDate,
 	startDate,
 	endDate,
+	memberId,
 }: {
 	view: string;
 	currentDate: string;
 	startDate: string;
 	endDate: string;
+	memberId: string;
 }) {
 	let prevDate: string;
 	let nextDate: string;
@@ -313,14 +392,14 @@ function DateNavigation({
 	return (
 		<div className="mb-6 flex items-center justify-between">
 			<Link
-				to={`/rhythm?view=${view}&date=${prevDate}`}
+				to={`/rhythm?view=${view}&date=${prevDate}&memberId=${memberId}`}
 				className="rounded-lg bg-violet-900/50 px-3 py-2 text-sm text-violet-300 transition-colors hover:bg-violet-800 hover:text-white"
 			>
 				←
 			</Link>
 			<span className="text-lg font-semibold">{label}</span>
 			<Link
-				to={`/rhythm?view=${view}&date=${nextDate}`}
+				to={`/rhythm?view=${view}&date=${nextDate}&memberId=${memberId}`}
 				className="rounded-lg bg-violet-900/50 px-3 py-2 text-sm text-violet-300 transition-colors hover:bg-violet-800 hover:text-white"
 			>
 				→
@@ -331,7 +410,10 @@ function DateNavigation({
 
 // --- 入力フォーム ---
 
-function EntryForm({ currentDate }: { currentDate: string }) {
+function EntryForm({
+	currentDate,
+	memberId,
+}: { currentDate: string; memberId: string }) {
 	const fetcher = useFetcher();
 	const [mood, setMood] = useState(0);
 	const [isOpen, setIsOpen] = useState(false);
@@ -362,6 +444,7 @@ function EntryForm({ currentDate }: { currentDate: string }) {
 					}}
 				>
 					<input type="hidden" name="intent" value="create" />
+					<input type="hidden" name="memberId" value={memberId} />
 
 					<div className="grid grid-cols-2 gap-4">
 						<div>
@@ -473,42 +556,77 @@ function EntryForm({ currentDate }: { currentDate: string }) {
 	);
 }
 
-// --- エントリーカード ---
+// --- エントリー削除ボタン ---
 
-function EntryCard({ entry }: { entry: Entry }) {
+function DeleteButton({
+	entryId,
+	memberId,
+}: { entryId: number; memberId: string }) {
 	const fetcher = useFetcher();
 	const [showConfirm, setShowConfirm] = useState(false);
 
-	const moodColor =
-		entry.mood > 3
-			? "text-emerald-400"
-			: entry.mood > 0
-				? "text-emerald-300/70"
-				: entry.mood === 0
-					? "text-violet-300"
-					: entry.mood >= -3
-						? "text-amber-400/70"
-						: "text-red-400";
-
-	const moodBg =
-		entry.mood > 3
-			? "bg-emerald-500/10"
-			: entry.mood > 0
-				? "bg-emerald-500/5"
-				: entry.mood === 0
-					? "bg-violet-500/5"
-					: entry.mood >= -3
-						? "bg-amber-500/5"
-						: "bg-red-500/10";
+	if (showConfirm) {
+		return (
+			<div className="flex gap-1">
+				<fetcher.Form method="post">
+					<input type="hidden" name="intent" value="delete" />
+					<input type="hidden" name="id" value={entryId} />
+					<input type="hidden" name="memberId" value={memberId} />
+					<button
+						type="submit"
+						className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-500/20"
+					>
+						削除
+					</button>
+				</fetcher.Form>
+				<button
+					type="button"
+					onClick={() => setShowConfirm(false)}
+					className="rounded px-2 py-1 text-xs text-violet-400 hover:bg-violet-500/20"
+				>
+					戻す
+				</button>
+			</div>
+		);
+	}
 
 	return (
+		<button
+			type="button"
+			onClick={() => setShowConfirm(true)}
+			className="rounded p-1 text-violet-600 transition-colors hover:text-violet-400"
+		>
+			<svg
+				className="h-4 w-4"
+				fill="none"
+				viewBox="0 0 24 24"
+				stroke="currentColor"
+				strokeWidth={2}
+			>
+				<path
+					strokeLinecap="round"
+					strokeLinejoin="round"
+					d="M6 18L18 6M6 6l12 12"
+				/>
+			</svg>
+		</button>
+	);
+}
+
+// --- エントリーカード (今日ビュー用) ---
+
+function EntryCard({
+	entry,
+	memberId,
+}: { entry: Entry; memberId: string }) {
+	return (
 		<div
-			className={`rounded-lg border border-violet-800/50 ${moodBg} p-3 transition-colors hover:border-violet-700`}
+			className={`rounded-lg border border-violet-800/50 ${moodBgClass(entry.mood)} p-3 transition-colors hover:border-violet-700`}
 		>
 			<div className="flex items-start justify-between">
 				<div className="flex-1">
 					<div className="flex items-center gap-3">
-						<span className="text-sm font-mono text-violet-400">
+						<span className="font-mono text-sm text-violet-400">
 							{entry.time}
 						</span>
 						<span className="font-medium text-white">
@@ -516,11 +634,13 @@ function EntryCard({ entry }: { entry: Entry }) {
 						</span>
 					</div>
 					<div className="mt-1.5 flex flex-wrap gap-3 text-xs">
-						<span className={moodColor}>
-							気分: {entry.mood > 0 ? `+${entry.mood}` : entry.mood}
+						<span className={moodColor(entry.mood)}>
+							気分:{" "}
+							{entry.mood > 0 ? `+${entry.mood}` : entry.mood}
 						</span>
 						<span className="text-violet-400">
-							対人: {entry.interpersonal} ({INTERPERSONAL_LABELS[entry.interpersonal]})
+							対人: {entry.interpersonal} (
+							{INTERPERSONAL_LABELS[entry.interpersonal]})
 						</span>
 					</div>
 					{entry.note && (
@@ -530,47 +650,7 @@ function EntryCard({ entry }: { entry: Entry }) {
 					)}
 				</div>
 				<div className="ml-2">
-					{showConfirm ? (
-						<div className="flex gap-1">
-							<fetcher.Form method="post">
-								<input type="hidden" name="intent" value="delete" />
-								<input type="hidden" name="id" value={entry.id} />
-								<button
-									type="submit"
-									className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-500/20"
-								>
-									削除
-								</button>
-							</fetcher.Form>
-							<button
-								type="button"
-								onClick={() => setShowConfirm(false)}
-								className="rounded px-2 py-1 text-xs text-violet-400 hover:bg-violet-500/20"
-							>
-								戻す
-							</button>
-						</div>
-					) : (
-						<button
-							type="button"
-							onClick={() => setShowConfirm(true)}
-							className="rounded p-1 text-violet-600 transition-colors hover:text-violet-400"
-						>
-							<svg
-								className="h-4 w-4"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke="currentColor"
-								strokeWidth={2}
-							>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									d="M6 18L18 6M6 6l12 12"
-								/>
-							</svg>
-						</button>
-					)}
+					<DeleteButton entryId={entry.id} memberId={memberId} />
 				</div>
 			</div>
 		</div>
@@ -582,7 +662,8 @@ function EntryCard({ entry }: { entry: Entry }) {
 function TodayView({
 	entries,
 	currentDate,
-}: { entries: Entry[]; currentDate: string }) {
+	memberId,
+}: { entries: Entry[]; currentDate: string; memberId: string }) {
 	if (entries.length === 0) {
 		return (
 			<div className="rounded-lg border border-dashed border-violet-800 py-12 text-center text-violet-500">
@@ -594,7 +675,7 @@ function TodayView({
 	return (
 		<div className="space-y-2">
 			{entries.map((entry) => (
-				<EntryCard key={entry.id} entry={entry} />
+				<EntryCard key={entry.id} entry={entry} memberId={memberId} />
 			))}
 			<DaySummary entries={entries} />
 		</div>
@@ -614,7 +695,8 @@ function DaySummary({ entries }: { entries: Entry[] }) {
 		<div className="mt-3 rounded-lg bg-violet-900/30 p-3 text-sm">
 			<div className="flex gap-6 text-violet-300">
 				<span>
-					記録数: <strong className="text-white">{entries.length}</strong>
+					記録数:{" "}
+					<strong className="text-white">{entries.length}</strong>
 				</span>
 				<span>
 					平均気分:{" "}
@@ -634,13 +716,19 @@ function DaySummary({ entries }: { entries: Entry[] }) {
 	);
 }
 
-// --- 週間ビュー ---
+// --- 週間ビュー (横並びテーブル) ---
 
 function WeekView({
 	entries,
 	startDate,
 	endDate,
-}: { entries: Entry[]; startDate: string; endDate: string }) {
+	memberId,
+}: {
+	entries: Entry[];
+	startDate: string;
+	endDate: string;
+	memberId: string;
+}) {
 	const days = useMemo(() => {
 		const result: { date: string; entries: Entry[] }[] = [];
 		for (let i = 0; i < 7; i++) {
@@ -653,37 +741,181 @@ function WeekView({
 		return result;
 	}, [entries, startDate]);
 
+	const today = todayJST();
+
+	// 全日のエントリーから最大件数を算出（縦幅の目安）
+	const maxEntries = Math.max(...days.map((d) => d.entries.length), 0);
+
 	return (
-		<div className="space-y-3">
-			{days.map((day) => (
-				<div
-					key={day.date}
-					className="rounded-lg border border-violet-800/50 bg-violet-900/20 p-3"
-				>
-					<div className="mb-2 flex items-center justify-between">
-						<h3 className="text-sm font-semibold text-violet-200">
-							{formatDate(day.date)}
-						</h3>
-						{day.entries.length > 0 && (
-							<span className="text-xs text-violet-500">
-								{day.entries.length}件
-							</span>
+		<div className="space-y-4">
+			{/* 横並びテーブル */}
+			<div className="overflow-x-auto">
+				<table className="w-full min-w-[640px] border-collapse text-xs">
+					<thead>
+						<tr>
+							{days.map((day) => {
+								const isToday = day.date === today;
+								const avgMood =
+									day.entries.length > 0
+										? day.entries.reduce(
+												(s, e) => s + e.mood,
+												0,
+											) / day.entries.length
+										: null;
+								return (
+									<th
+										key={day.date}
+										className={`border border-violet-800/30 p-2 text-center ${
+											isToday
+												? "bg-violet-700/30"
+												: "bg-violet-900/30"
+										}`}
+									>
+										<div className="text-violet-400">
+											{getWeekdayShort(day.date)}
+										</div>
+										<div
+											className={`text-sm font-semibold ${isToday ? "text-violet-200" : "text-violet-300"}`}
+										>
+											{formatDateShort(day.date)}
+										</div>
+										{avgMood !== null && (
+											<div
+												className={`mt-0.5 text-[10px] ${moodColor(avgMood)}`}
+											>
+												avg{" "}
+												{avgMood > 0 ? "+" : ""}
+												{avgMood.toFixed(1)}
+											</div>
+										)}
+									</th>
+								);
+							})}
+						</tr>
+					</thead>
+					<tbody>
+						{maxEntries === 0 ? (
+							<tr>
+								<td
+									colSpan={7}
+									className="border border-violet-800/30 p-6 text-center text-violet-600"
+								>
+									この週は記録がありません
+								</td>
+							</tr>
+						) : (
+							/* エントリー行: 各日の n番目のエントリーを横に並べる */
+							Array.from({ length: maxEntries }).map((_, ri) => (
+								<tr key={ri}>
+									{days.map((day) => {
+										const entry = day.entries[ri];
+										if (!entry) {
+											return (
+												<td
+													key={day.date}
+													className="border border-violet-800/30 p-1 align-top"
+												/>
+											);
+										}
+										return (
+											<td
+												key={day.date}
+												className={`border border-violet-800/30 p-1.5 align-top ${moodBgClass(entry.mood)}`}
+											>
+												<WeekEntryCell
+													entry={entry}
+													memberId={memberId}
+												/>
+											</td>
+										);
+									})}
+								</tr>
+							))
 						)}
+						{/* サマリー行 */}
+						<tr>
+							{days.map((day) => {
+								if (day.entries.length === 0) {
+									return (
+										<td
+											key={day.date}
+											className="border border-violet-800/30 bg-violet-900/20 p-1.5 text-center text-violet-700"
+										>
+											-
+										</td>
+									);
+								}
+								const avg =
+									day.entries.reduce(
+										(s, e) => s + e.mood,
+										0,
+									) / day.entries.length;
+								const avgIp =
+									day.entries.reduce(
+										(s, e) => s + e.interpersonal,
+										0,
+									) / day.entries.length;
+								return (
+									<td
+										key={day.date}
+										className="border border-violet-800/30 bg-violet-900/30 p-1.5 text-center"
+									>
+										<div className="text-violet-400">
+											{day.entries.length}件
+										</div>
+										<div className={moodColor(avg)}>
+											{avg > 0 ? "+" : ""}
+											{avg.toFixed(1)}
+										</div>
+										<div className="text-violet-500">
+											対人 {avgIp.toFixed(1)}
+										</div>
+									</td>
+								);
+							})}
+						</tr>
+					</tbody>
+				</table>
+			</div>
+
+			{/* 週間サマリー */}
+			{entries.length > 0 && <DaySummary entries={entries} />}
+		</div>
+	);
+}
+
+// --- 週間ビューのセル内エントリー ---
+
+function WeekEntryCell({
+	entry,
+	memberId,
+}: { entry: Entry; memberId: string }) {
+	return (
+		<div className="space-y-0.5">
+			<div className="flex items-start justify-between gap-1">
+				<div className="min-w-0 flex-1">
+					<span className="font-mono text-[10px] text-violet-500">
+						{entry.time}
+					</span>
+					<div className="truncate text-[11px] font-medium text-white">
+						{entry.activity}
 					</div>
-					{day.entries.length > 0 ? (
-						<div className="space-y-1.5">
-							{day.entries.map((entry) => (
-								<EntryCard key={entry.id} entry={entry} />
-							))}
-							<DaySummary entries={day.entries} />
-						</div>
-					) : (
-						<p className="py-2 text-center text-xs text-violet-700">
-							記録なし
-						</p>
-					)}
 				</div>
-			))}
+				<DeleteButton entryId={entry.id} memberId={memberId} />
+			</div>
+			<div className="flex gap-2 text-[10px]">
+				<span className={moodColor(entry.mood)}>
+					{entry.mood > 0 ? `+${entry.mood}` : entry.mood}
+				</span>
+				<span className="text-violet-500">
+					{INTERPERSONAL_SHORT[entry.interpersonal]}
+				</span>
+			</div>
+			{entry.note && (
+				<p className="truncate text-[10px] text-violet-500/70">
+					{entry.note}
+				</p>
+			)}
 		</div>
 	);
 }
@@ -707,24 +939,33 @@ function MonthView({
 		const startDow = firstDay.getDay();
 		const offset = startDow === 0 ? -6 : 1 - startDow;
 
-		const weeks: { date: string; inMonth: boolean; entries: Entry[] }[][] =
-			[];
-		let current = new Date(firstDay);
+		const weeks: {
+			date: string;
+			inMonth: boolean;
+			entries: Entry[];
+		}[][] = [];
+		const current = new Date(firstDay);
 		current.setDate(current.getDate() + offset);
 
-		while (current <= lastDay || weeks.length === 0 || current.getDay() !== 1) {
+		while (
+			current <= lastDay ||
+			weeks.length === 0 ||
+			current.getDay() !== 1
+		) {
 			if (current.getDay() === 1 || weeks.length === 0) {
 				weeks.push([]);
 			}
 			const dateStr = current.toISOString().slice(0, 10);
 			weeks[weeks.length - 1].push({
 				date: dateStr,
-				inMonth:
-					dateStr >= startDate && dateStr <= endDate,
+				inMonth: dateStr >= startDate && dateStr <= endDate,
 				entries: entries.filter((e) => e.date === dateStr),
 			});
 			current.setDate(current.getDate() + 1);
-			if (weeks[weeks.length - 1].length === 7 && current > lastDay) {
+			if (
+				weeks[weeks.length - 1].length === 7 &&
+				current > lastDay
+			) {
 				break;
 			}
 		}
@@ -733,6 +974,7 @@ function MonthView({
 	}, [entries, startDate, endDate]);
 
 	const weekdayHeaders = ["月", "火", "水", "木", "金", "土", "日"];
+	const today = todayJST();
 
 	return (
 		<div className="overflow-x-auto">
@@ -755,22 +997,16 @@ function MonthView({
 							{week.map((day) => {
 								const avgMood =
 									day.entries.length > 0
-										? day.entries.reduce((s, e) => s + e.mood, 0) /
-											day.entries.length
+										? day.entries.reduce(
+												(s, e) => s + e.mood,
+												0,
+											) / day.entries.length
 										: null;
 
 								const cellBg =
 									avgMood === null
 										? ""
-										: avgMood > 3
-											? "bg-emerald-500/15"
-											: avgMood > 0
-												? "bg-emerald-500/8"
-												: avgMood === 0
-													? ""
-													: avgMood >= -3
-														? "bg-amber-500/8"
-														: "bg-red-500/15";
+										: moodBgClass(avgMood);
 
 								const dayNum = new Date(
 									day.date + "T00:00:00",
@@ -781,7 +1017,7 @@ function MonthView({
 										key={day.date}
 										className={`border border-violet-800/30 p-1 align-top ${cellBg} ${
 											!day.inMonth ? "opacity-30" : ""
-										} ${day.date === todayJST() ? "ring-1 ring-inset ring-violet-500" : ""}`}
+										} ${day.date === today ? "ring-1 ring-inset ring-violet-500" : ""}`}
 										style={{ minWidth: 80, height: 64 }}
 									>
 										<div className="mb-0.5 text-right text-violet-400">
@@ -800,7 +1036,9 @@ function MonthView({
 																: "text-amber-400"
 														}
 													>
-														{avgMood > 0 ? "+" : ""}
+														{avgMood > 0
+															? "+"
+															: ""}
 														{avgMood.toFixed(1)}
 													</div>
 												)}
@@ -814,7 +1052,6 @@ function MonthView({
 				</tbody>
 			</table>
 
-			{/* 月間サマリー */}
 			{entries.length > 0 && <DaySummary entries={entries} />}
 		</div>
 	);
@@ -822,10 +1059,7 @@ function MonthView({
 
 // --- グラフセクション ---
 
-function ChartSection({
-	entries,
-	view,
-}: { entries: Entry[]; view: string }) {
+function ChartSection({ entries }: { entries: Entry[] }) {
 	return (
 		<div className="mt-6 space-y-6">
 			<h2 className="text-lg font-semibold text-violet-200">グラフ</h2>
@@ -860,8 +1094,7 @@ function MoodChart({ entries }: { entries: Entry[] }) {
 
 	const points = entries.map((e, i) => {
 		const x = padding.left + (i / (entries.length - 1)) * chartW;
-		const y =
-			padding.top + ((10 - e.mood) / 20) * chartH;
+		const y = padding.top + ((10 - e.mood) / 20) * chartH;
 		return { x, y, entry: e };
 	});
 
@@ -879,7 +1112,6 @@ function MoodChart({ entries }: { entries: Entry[] }) {
 				className="w-full"
 				preserveAspectRatio="xMidYMid meet"
 			>
-				{/* 横軸のグリッド線 */}
 				{[-10, -5, 0, 5, 10].map((v) => {
 					const y = padding.top + ((10 - v) / 20) * chartH;
 					return (
@@ -889,7 +1121,9 @@ function MoodChart({ entries }: { entries: Entry[] }) {
 								x2={width - padding.right}
 								y1={y}
 								y2={y}
-								stroke={v === 0 ? "#7c3aed40" : "#7c3aed20"}
+								stroke={
+									v === 0 ? "#7c3aed40" : "#7c3aed20"
+								}
 								strokeWidth={v === 0 ? 1.5 : 1}
 								strokeDasharray={v === 0 ? "" : "4,4"}
 							/>
@@ -905,7 +1139,6 @@ function MoodChart({ entries }: { entries: Entry[] }) {
 					);
 				})}
 
-				{/* 折れ線 */}
 				<path
 					d={pathD}
 					fill="none"
@@ -914,32 +1147,32 @@ function MoodChart({ entries }: { entries: Entry[] }) {
 					strokeLinejoin="round"
 				/>
 
-				{/* 塗りつぶし (0ラインまで) */}
 				<path
 					d={`${pathD} L ${points[points.length - 1].x} ${padding.top + (10 / 20) * chartH} L ${points[0].x} ${padding.top + (10 / 20) * chartH} Z`}
 					fill="#a78bfa10"
 				/>
 
-				{/* データポイント */}
 				{points.map((p, i) => (
 					<g key={i}>
 						<circle
 							cx={p.x}
 							cy={p.y}
 							r={3}
-							fill={p.entry.mood >= 0 ? "#34d399" : "#f59e0b"}
+							fill={
+								p.entry.mood >= 0 ? "#34d399" : "#f59e0b"
+							}
 							stroke="#1e1b4b"
 							strokeWidth={1.5}
 						/>
 						<title>
-							{p.entry.date} {p.entry.time} - {p.entry.activity}: 気分{" "}
+							{p.entry.date} {p.entry.time} -{" "}
+							{p.entry.activity}: 気分{" "}
 							{p.entry.mood > 0 ? "+" : ""}
 							{p.entry.mood}
 						</title>
 					</g>
 				))}
 
-				{/* 下のラベル (先頭と末尾のみ) */}
 				<text
 					x={points[0].x}
 					y={height - 5}
@@ -991,7 +1224,9 @@ function InterpersonalChart({ entries }: { entries: Entry[] }) {
 				{counts.map((count, i) => {
 					const barH = (count / maxCount) * chartH;
 					const x =
-						padding.left + (i / 4) * chartW + (chartW / 4 - barWidth) / 2;
+						padding.left +
+						(i / 4) * chartW +
+						(chartW / 4 - barWidth) / 2;
 					const y = padding.top + chartH - barH;
 					const colors = [
 						"#8b5cf6",
@@ -1099,7 +1334,7 @@ function MoodDistributionChart({ entries }: { entries: Entry[] }) {
 								fill={color}
 								opacity={count > 0 ? 0.7 : 0.15}
 							/>
-							{(mood % 5 === 0) && (
+							{mood % 5 === 0 && (
 								<text
 									x={x + barW / 2}
 									y={height - 5}
