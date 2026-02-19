@@ -141,33 +141,44 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 		};
 	}
 
-	const entries = await db
-		.select()
-		.from(rhythmEntries)
-		.where(
-			and(
-				eq(rhythmEntries.memberId, memberId),
-				gte(rhythmEntries.date, startDate),
-				lte(rhythmEntries.date, endDate),
-			),
-		)
-		.orderBy(rhythmEntries.date, rhythmEntries.time);
+	try {
+		const entries = await db
+			.select()
+			.from(rhythmEntries)
+			.where(
+				and(
+					eq(rhythmEntries.memberId, memberId),
+					gte(rhythmEntries.date, startDate),
+					lte(rhythmEntries.date, endDate),
+				),
+			)
+			.orderBy(rhythmEntries.date, rhythmEntries.time);
 
-	return {
-		entries: entries.map((e) => ({
-			id: e.id,
-			date: e.date,
-			time: e.time,
-			activity: e.activity,
-			mood: e.mood,
-			interpersonal: e.interpersonal,
-			note: e.note,
-		})),
-		view,
-		currentDate: dateParam,
-		startDate,
-		endDate,
-	};
+		return {
+			entries: entries.map((e) => ({
+				id: e.id,
+				date: e.date,
+				time: e.time,
+				activity: e.activity,
+				mood: e.mood,
+				interpersonal: e.interpersonal,
+				note: e.note,
+			})),
+			view,
+			currentDate: dateParam,
+			startDate,
+			endDate,
+		};
+	} catch {
+		// テーブルが未作成の場合（マイグレーション未適用）
+		return {
+			entries: [] as Entry[],
+			view,
+			currentDate: dateParam,
+			startDate,
+			endDate,
+		};
+	}
 }
 
 // --- Action ---
@@ -177,52 +188,56 @@ export async function action({ context, request }: Route.ActionArgs) {
 	const formData = await request.formData();
 	const intent = formData.get("intent") as string;
 
-	if (intent === "create") {
-		const memberId = formData.get("memberId") as string;
-		const date = formData.get("date") as string;
-		const time = formData.get("time") as string;
-		const activity = formData.get("activity") as string;
-		const mood = Number(formData.get("mood"));
-		const interpersonal = Number(formData.get("interpersonal"));
-		const note = (formData.get("note") as string) || null;
+	try {
+		if (intent === "create") {
+			const memberId = formData.get("memberId") as string;
+			const date = formData.get("date") as string;
+			const time = formData.get("time") as string;
+			const activity = formData.get("activity") as string;
+			const mood = Number(formData.get("mood"));
+			const interpersonal = Number(formData.get("interpersonal"));
+			const note = (formData.get("note") as string) || null;
 
-		if (!memberId || !date || !time || !activity) {
-			return { error: "必須項目を入力してください" };
-		}
-		if (mood < -10 || mood > 10) {
-			return { error: "気分は -10 ~ +10 の範囲で入力してください" };
-		}
-		if (interpersonal < 0 || interpersonal > 3) {
-			return { error: "対人は 0 ~ 3 の範囲で入力してください" };
+			if (!memberId || !date || !time || !activity) {
+				return { error: "必須項目を入力してください" };
+			}
+			if (mood < -10 || mood > 10) {
+				return { error: "気分は -10 ~ +10 の範囲で入力してください" };
+			}
+			if (interpersonal < 0 || interpersonal > 3) {
+				return { error: "対人は 0 ~ 3 の範囲で入力してください" };
+			}
+
+			await db.insert(rhythmEntries).values({
+				memberId,
+				date,
+				time,
+				activity,
+				mood,
+				interpersonal,
+				note,
+			});
+
+			return { success: true };
 		}
 
-		await db.insert(rhythmEntries).values({
-			memberId,
-			date,
-			time,
-			activity,
-			mood,
-			interpersonal,
-			note,
-		});
-
-		return { success: true };
-	}
-
-	if (intent === "delete") {
-		const id = Number(formData.get("id"));
-		const memberId = formData.get("memberId") as string;
-		if (id && memberId) {
-			await db
-				.delete(rhythmEntries)
-				.where(
-					and(
-						eq(rhythmEntries.id, id),
-						eq(rhythmEntries.memberId, memberId),
-					),
-				);
+		if (intent === "delete") {
+			const id = Number(formData.get("id"));
+			const memberId = formData.get("memberId") as string;
+			if (id && memberId) {
+				await db
+					.delete(rhythmEntries)
+					.where(
+						and(
+							eq(rhythmEntries.id, id),
+							eq(rhythmEntries.memberId, memberId),
+						),
+					);
+			}
+			return { success: true };
 		}
-		return { success: true };
+	} catch {
+		return { error: "データベースエラー: マイグレーションが未適用の可能性があります" };
 	}
 
 	return { error: "不明な操作です" };
