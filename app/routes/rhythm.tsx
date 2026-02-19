@@ -85,6 +85,84 @@ function getWeekdayShort(dateStr: string): string {
 	return ["日", "月", "火", "水", "木", "金", "土"][d.getDay()];
 }
 
+// --- 睡眠関連ユーティリティ ---
+
+const BEDTIME_PATTERN = /就寝|寝る|寝た|ベッド|おやすみ/i;
+const WAKEUP_PATTERN = /起床|起き|目覚|おはよう/i;
+
+function timeToMinutes(time: string): number {
+	const [h, m] = time.split(":").map(Number);
+	return h * 60 + m;
+}
+
+function formatDuration(minutes: number): string {
+	const h = Math.floor(minutes / 60);
+	const m = minutes % 60;
+	return m > 0 ? `${h}h${m}m` : `${h}h`;
+}
+
+type SleepData = {
+	bedTime: string | null;
+	wakeTime: string | null;
+	durationMinutes: number | null;
+};
+
+// 日ごとの就寝・起床・睡眠時間を計算
+function computeSleepData(entries: Entry[]): Map<string, SleepData> {
+	const byDate = new Map<string, Entry[]>();
+	for (const e of entries) {
+		if (!byDate.has(e.date)) byDate.set(e.date, []);
+		byDate.get(e.date)!.push(e);
+	}
+
+	const dates = [...byDate.keys()].sort();
+	const result = new Map<string, SleepData>();
+
+	for (const date of dates) {
+		const dayEntries = byDate.get(date)!;
+		// 就寝: その日の最後の就寝系エントリー
+		const bedEntry = [...dayEntries]
+			.reverse()
+			.find((e) => BEDTIME_PATTERN.test(e.activity));
+		// 起床: その日の最初の起床系エントリー
+		const wakeEntry = dayEntries.find((e) =>
+			WAKEUP_PATTERN.test(e.activity),
+		);
+
+		result.set(date, {
+			bedTime: bedEntry?.time ?? null,
+			wakeTime: wakeEntry?.time ?? null,
+			durationMinutes: null,
+		});
+	}
+
+	// 睡眠時間 = 前日の就寝 → 当日の起床
+	for (let i = 1; i < dates.length; i++) {
+		const prevData = result.get(dates[i - 1])!;
+		const todayData = result.get(dates[i])!;
+
+		if (prevData.bedTime && todayData.wakeTime) {
+			const bedMin = timeToMinutes(prevData.bedTime);
+			const wakeMin = timeToMinutes(todayData.wakeTime);
+
+			let duration: number;
+			if (bedMin >= 24 * 60) {
+				// 拡張時刻: 25:00 = 翌1:00 なので、起床時刻との差
+				duration = wakeMin - (bedMin - 24 * 60);
+			} else {
+				// 通常: 23:00就寝 → 翌7:00起床 = 8時間
+				duration = 24 * 60 - bedMin + wakeMin;
+			}
+
+			if (duration > 0 && duration < 24 * 60) {
+				todayData.durationMinutes = duration;
+			}
+		}
+	}
+
+	return result;
+}
+
 const INTERPERSONAL_LABELS = [
 	"一人だった",
 	"他人がただそこにいた",
@@ -897,12 +975,55 @@ function TodayView({
 		);
 	}
 
+	const sleepData = useMemo(() => computeSleepData(entries), [entries]);
+	const todaySleep = sleepData.get(currentDate);
+
 	return (
 		<div className="space-y-2">
+			{/* 睡眠情報 */}
+			{todaySleep &&
+				(todaySleep.wakeTime || todaySleep.bedTime) && (
+					<SleepCard sleep={todaySleep} />
+				)}
 			{entries.map((entry) => (
 				<EntryCard key={entry.id} entry={entry} memberId={memberId} />
 			))}
 			<DaySummary entries={entries} />
+		</div>
+	);
+}
+
+// --- 睡眠情報カード ---
+
+function SleepCard({ sleep }: { sleep: SleepData }) {
+	return (
+		<div className="rounded-lg border border-indigo-700/40 bg-indigo-900/20 p-3">
+			<div className="flex items-center gap-2 text-sm">
+				<span className="text-lg leading-none">🌙</span>
+				<span className="font-medium text-indigo-300">睡眠</span>
+			</div>
+			<div className="mt-2 flex flex-wrap gap-4 text-xs text-indigo-300">
+				{sleep.wakeTime && (
+					<span>
+						起床:{" "}
+						<strong className="text-white">{sleep.wakeTime}</strong>
+					</span>
+				)}
+				{sleep.bedTime && (
+					<span>
+						就寝:{" "}
+						<strong className="text-white">{sleep.bedTime}</strong>
+					</span>
+				)}
+				{sleep.durationMinutes != null && (
+					<span>
+						睡眠時間:{" "}
+						<strong className="text-white">
+							{formatDuration(sleep.durationMinutes)}
+						</strong>
+					</span>
+				)}
+			</div>
 		</div>
 	);
 }
@@ -967,9 +1088,14 @@ function WeekView({
 	}, [entries, startDate]);
 
 	const today = todayJST();
+	const sleepData = useMemo(() => computeSleepData(entries), [entries]);
 
 	// 全日のエントリーから最大件数を算出（縦幅の目安）
 	const maxEntries = Math.max(...days.map((d) => d.entries.length), 0);
+	const hasSleepData = days.some((day) => {
+		const sd = sleepData.get(day.date);
+		return sd && (sd.wakeTime || sd.bedTime);
+	});
 
 	return (
 		<div className="space-y-4">
@@ -1099,6 +1225,92 @@ function WeekView({
 								);
 							})}
 						</tr>
+						{/* 睡眠行 */}
+						{hasSleepData && (
+							<>
+								<tr>
+									{days.map((day) => {
+										const sd = sleepData.get(day.date);
+										return (
+											<td
+												key={day.date}
+												className="border border-indigo-800/30 bg-indigo-900/15 p-1.5 text-center"
+											>
+												{sd?.wakeTime ? (
+													<div className="text-indigo-300">
+														<div className="text-[9px] text-indigo-400/70">
+															起床
+														</div>
+														<div className="font-mono text-[11px]">
+															{sd.wakeTime}
+														</div>
+													</div>
+												) : (
+													<span className="text-indigo-800">
+														-
+													</span>
+												)}
+											</td>
+										);
+									})}
+								</tr>
+								<tr>
+									{days.map((day) => {
+										const sd = sleepData.get(day.date);
+										return (
+											<td
+												key={day.date}
+												className="border border-indigo-800/30 bg-indigo-900/15 p-1.5 text-center"
+											>
+												{sd?.bedTime ? (
+													<div className="text-indigo-300">
+														<div className="text-[9px] text-indigo-400/70">
+															就寝
+														</div>
+														<div className="font-mono text-[11px]">
+															{sd.bedTime}
+														</div>
+													</div>
+												) : (
+													<span className="text-indigo-800">
+														-
+													</span>
+												)}
+											</td>
+										);
+									})}
+								</tr>
+								<tr>
+									{days.map((day) => {
+										const sd = sleepData.get(day.date);
+										return (
+											<td
+												key={day.date}
+												className="border border-indigo-800/30 bg-indigo-900/20 p-1.5 text-center"
+											>
+												{sd?.durationMinutes !=
+												null ? (
+													<div className="text-indigo-300">
+														<div className="text-[9px] text-indigo-400/70">
+															睡眠
+														</div>
+														<div className="font-mono text-[11px] font-medium">
+															{formatDuration(
+																sd.durationMinutes,
+															)}
+														</div>
+													</div>
+												) : (
+													<span className="text-indigo-800">
+														-
+													</span>
+												)}
+											</td>
+										);
+									})}
+								</tr>
+							</>
+						)}
 					</tbody>
 				</table>
 			</div>
@@ -1291,6 +1503,7 @@ function ChartSection({ entries }: { entries: Entry[] }) {
 			<MoodChart entries={entries} />
 			<InterpersonalChart entries={entries} />
 			<MoodDistributionChart entries={entries} />
+			<MoodInterpersonalChart entries={entries} />
 		</div>
 	);
 }
@@ -1500,6 +1713,233 @@ function InterpersonalChart({ entries }: { entries: Entry[] }) {
 						</g>
 					);
 				})}
+			</svg>
+		</div>
+	);
+}
+
+// --- 気分×対人レベル相関 (散布図) ---
+
+function MoodInterpersonalChart({ entries }: { entries: Entry[] }) {
+	if (entries.length < 2) {
+		return (
+			<div className="rounded-lg border border-violet-800/50 bg-violet-900/20 p-4">
+				<h3 className="mb-2 text-sm font-medium text-violet-300">
+					気分 × 対人レベル
+				</h3>
+				<p className="text-xs text-violet-500">
+					2件以上の記録でグラフが表示されます
+				</p>
+			</div>
+		);
+	}
+
+	const width = 600;
+	const height = 280;
+	const padding = { top: 20, right: 30, bottom: 40, left: 45 };
+	const chartW = width - padding.left - padding.right;
+	const chartH = height - padding.top - padding.bottom;
+
+	const levelX = (level: number) =>
+		padding.left + ((level + 0.5) / 4) * chartW;
+
+	const moodY = (mood: number) =>
+		padding.top + ((10 - mood) / 20) * chartH;
+
+	// 対人レベルごとの平均気分
+	const avgByLevel = [0, 1, 2, 3].map((level) => {
+		const levelEntries = entries.filter(
+			(e) => e.interpersonal === level,
+		);
+		if (levelEntries.length === 0) return null;
+		return (
+			levelEntries.reduce((s, e) => s + e.mood, 0) /
+			levelEntries.length
+		);
+	});
+
+	// 決定的なジッター（同じ対人レベルのドットが重ならないように）
+	const jitterX = (index: number, total: number) => {
+		if (total <= 1) return 0;
+		const spread = Math.min(chartW / 4 - 20, 60);
+		return ((index / (total - 1)) * spread - spread / 2) * 0.7;
+	};
+
+	// 対人レベルごとにインデックスを付与
+	const levelCounts = [0, 0, 0, 0];
+	const levelTotals = [0, 0, 0, 0];
+	for (const e of entries) levelTotals[e.interpersonal]++;
+
+	return (
+		<div className="rounded-lg border border-violet-800/50 bg-violet-900/20 p-4">
+			<h3 className="mb-2 text-sm font-medium text-violet-300">
+				気分 × 対人レベル
+			</h3>
+			<svg
+				viewBox={`0 0 ${width} ${height}`}
+				className="w-full"
+				preserveAspectRatio="xMidYMid meet"
+			>
+				{/* グリッド線 (横: 気分) */}
+				{[-10, -5, 0, 5, 10].map((v) => {
+					const y = moodY(v);
+					return (
+						<g key={v}>
+							<line
+								x1={padding.left}
+								x2={width - padding.right}
+								y1={y}
+								y2={y}
+								stroke={
+									v === 0 ? "#7c3aed40" : "#7c3aed18"
+								}
+								strokeWidth={v === 0 ? 1.5 : 1}
+								strokeDasharray={v === 0 ? "" : "4,4"}
+							/>
+							<text
+								x={padding.left - 6}
+								y={y + 3}
+								textAnchor="end"
+								className="fill-violet-500 text-[10px]"
+							>
+								{v > 0 ? `+${v}` : v}
+							</text>
+						</g>
+					);
+				})}
+
+				{/* グリッド線 (縦: 対人レベル) */}
+				{[0, 1, 2, 3].map((level) => {
+					const x = levelX(level);
+					return (
+						<g key={level}>
+							<line
+								x1={x}
+								x2={x}
+								y1={padding.top}
+								y2={padding.top + chartH}
+								stroke="#7c3aed18"
+								strokeWidth={1}
+								strokeDasharray="4,4"
+							/>
+							<text
+								x={x}
+								y={height - padding.bottom + 16}
+								textAnchor="middle"
+								className="fill-violet-400 text-[10px]"
+							>
+								{level}
+							</text>
+							<text
+								x={x}
+								y={height - padding.bottom + 28}
+								textAnchor="middle"
+								className="fill-violet-500 text-[8px]"
+							>
+								{INTERPERSONAL_SHORT[level]}
+							</text>
+						</g>
+					);
+				})}
+
+				{/* 平均線 */}
+				{avgByLevel.map((avg, level) => {
+					if (avg === null) return null;
+					const x = levelX(level);
+					const y = moodY(avg);
+					const spread = Math.min(chartW / 4 - 20, 60) * 0.4;
+					return (
+						<g key={`avg-${level}`}>
+							<line
+								x1={x - spread}
+								x2={x + spread}
+								y1={y}
+								y2={y}
+								stroke="#f59e0b"
+								strokeWidth={2}
+								opacity={0.7}
+							/>
+							<text
+								x={x + spread + 4}
+								y={y + 3}
+								className="fill-amber-400 text-[9px]"
+							>
+								{avg > 0 ? "+" : ""}
+								{avg.toFixed(1)}
+							</text>
+						</g>
+					);
+				})}
+
+				{/* データ点 */}
+				{entries.map((e, i) => {
+					const idx = levelCounts[e.interpersonal]++;
+					const total = levelTotals[e.interpersonal];
+					const cx =
+						levelX(e.interpersonal) +
+						jitterX(idx, total);
+					const cy = moodY(e.mood);
+					const color =
+						e.mood >= 0 ? "#34d399" : "#f87171";
+
+					return (
+						<g key={i}>
+							<circle
+								cx={cx}
+								cy={cy}
+								r={4}
+								fill={color}
+								opacity={0.6}
+								stroke="#1e1b4b"
+								strokeWidth={1}
+							/>
+							<title>
+								{e.date} {e.time} - {e.activity}: 気分{" "}
+								{e.mood > 0 ? "+" : ""}
+								{e.mood}, 対人 {e.interpersonal}
+							</title>
+						</g>
+					);
+				})}
+
+				{/* Y軸ラベル */}
+				<text
+					x={8}
+					y={padding.top + chartH / 2}
+					textAnchor="middle"
+					className="fill-violet-500 text-[9px]"
+					transform={`rotate(-90, 8, ${padding.top + chartH / 2})`}
+				>
+					気分
+				</text>
+
+				{/* X軸ラベル */}
+				<text
+					x={padding.left + chartW / 2}
+					y={height - 2}
+					textAnchor="middle"
+					className="fill-violet-500 text-[9px]"
+				>
+					対人レベル
+				</text>
+
+				{/* 凡例 */}
+				<line
+					x1={width - padding.right - 60}
+					x2={width - padding.right - 40}
+					y1={padding.top + 2}
+					y2={padding.top + 2}
+					stroke="#f59e0b"
+					strokeWidth={2}
+					opacity={0.7}
+				/>
+				<text
+					x={width - padding.right - 36}
+					y={padding.top + 5}
+					className="fill-amber-400 text-[9px]"
+				>
+					平均
+				</text>
 			</svg>
 		</div>
 	);
