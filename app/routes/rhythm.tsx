@@ -748,17 +748,9 @@ function EntryForm({
 	const now = new Date();
 	const currentHour = now.getHours();
 	const currentMinute = now.getMinutes();
-	const today = todayJST();
-	const isToday = currentDate === today;
-	// 深夜補正は「今日」を表示している場合のみ適用
-	const isLateNight = isToday && currentHour < 5;
-	const [hour, setHour] = useState(
-		isToday ? (isLateNight ? currentHour + 24 : currentHour) : 12,
-	);
-	const [minute, setMinute] = useState(isToday ? currentMinute : 0);
-	const [date, setDate] = useState(
-		isLateNight ? addDays(currentDate, -1) : currentDate,
-	);
+	const [hour, setHour] = useState(currentHour);
+	const [minute, setMinute] = useState(currentMinute);
+	const [date, setDate] = useState(currentDate);
 
 	// 拡張時刻（24:00+）の場合、記録日は入力日の翌日にあたる実際の暦日
 	const isExtended = hour >= 24;
@@ -776,17 +768,6 @@ function EntryForm({
 			setMood(0);
 		}
 	}, [fetcher.state, fetcher.data]);
-
-	const setNow = () => {
-		const n = new Date();
-		const h = n.getHours();
-		const m = n.getMinutes();
-		const t = todayJST();
-		const late = h < 5;
-		setHour(late ? h + 24 : h);
-		setMinute(m);
-		setDate(late ? addDays(t, -1) : t);
-	};
 
 	return (
 		<div className="mb-6">
@@ -822,18 +803,9 @@ function EntryForm({
 							/>
 						</div>
 						<div>
-							<div className="mb-1 flex items-center justify-between">
-								<label className="block text-xs text-violet-400">
-									時刻
-								</label>
-								<button
-									type="button"
-									onClick={setNow}
-									className="rounded px-1.5 py-0.5 text-[10px] text-violet-400 transition-colors hover:bg-violet-800 hover:text-violet-200"
-								>
-									現在時刻
-								</button>
-							</div>
+							<label className="mb-1 block text-xs text-violet-400">
+								時刻
+							</label>
 							<div className="flex items-center gap-1">
 								<select
 									value={hour}
