@@ -598,7 +598,21 @@ function EntryForm({
 	const isSubmitting = fetcher.state !== "idle";
 
 	const now = new Date();
-	const defaultTime = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+	const currentHour = now.getHours();
+	const currentMinute = now.getMinutes();
+	// 深夜 0:00〜4:59 は拡張時刻（前日の 24:00+）をデフォルトにする
+	const isLateNight = currentHour < 5;
+	const [hour, setHour] = useState(
+		isLateNight ? currentHour + 24 : currentHour,
+	);
+	const [minute, setMinute] = useState(currentMinute);
+	const [date, setDate] = useState(
+		isLateNight ? addDays(currentDate, -1) : currentDate,
+	);
+
+	// 拡張時刻（24:00+）の場合、記録日は入力日の翌日にあたる実際の暦日
+	const isExtended = hour >= 24;
+	const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
 
 	return (
 		<div className="mb-6">
@@ -623,6 +637,8 @@ function EntryForm({
 				>
 					<input type="hidden" name="intent" value="create" />
 					<input type="hidden" name="memberId" value={memberId} />
+					<input type="hidden" name="date" value={date} />
+					<input type="hidden" name="time" value={timeStr} />
 
 					<div className="grid grid-cols-2 gap-4">
 						<div>
@@ -631,8 +647,8 @@ function EntryForm({
 							</label>
 							<input
 								type="date"
-								name="date"
-								defaultValue={currentDate}
+								value={date}
+								onChange={(e) => setDate(e.target.value)}
 								className="w-full rounded-md border border-violet-700 bg-violet-950 px-3 py-2 text-sm text-white"
 								required
 							/>
@@ -641,13 +657,44 @@ function EntryForm({
 							<label className="mb-1 block text-xs text-violet-400">
 								時刻
 							</label>
-							<input
-								type="time"
-								name="time"
-								defaultValue={defaultTime}
-								className="w-full rounded-md border border-violet-700 bg-violet-950 px-3 py-2 text-sm text-white"
-								required
-							/>
+							<div className="flex items-center gap-1">
+								<select
+									value={hour}
+									onChange={(e) =>
+										setHour(Number(e.target.value))
+									}
+									className="w-full rounded-md border border-violet-700 bg-violet-950 px-2 py-2 text-sm text-white"
+								>
+									{Array.from({ length: 29 }, (_, i) => (
+										<option key={i} value={i}>
+											{i < 24
+												? `${i.toString().padStart(2, "0")}`
+												: `${i} (翌${i - 24}時)`}
+										</option>
+									))}
+								</select>
+								<span className="text-violet-400">:</span>
+								<select
+									value={minute}
+									onChange={(e) =>
+										setMinute(Number(e.target.value))
+									}
+									className="w-full rounded-md border border-violet-700 bg-violet-950 px-2 py-2 text-sm text-white"
+								>
+									{Array.from({ length: 12 }, (_, i) => (
+										<option key={i * 5} value={i * 5}>
+											{(i * 5)
+												.toString()
+												.padStart(2, "0")}
+										</option>
+									))}
+								</select>
+							</div>
+							{isExtended && (
+								<p className="mt-1 text-[10px] text-amber-400">
+									{date} の深夜 {timeStr} として記録
+								</p>
+							)}
 						</div>
 					</div>
 
