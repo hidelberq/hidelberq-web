@@ -273,14 +273,16 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 			startDate,
 			endDate,
 		};
-	} catch {
-		// テーブルが未作成の場合（マイグレーション未適用）
+	} catch (e) {
+		const message = e instanceof Error ? e.message : String(e);
+		console.error("[rhythm loader]", message);
 		return {
 			entries: [] as Entry[],
 			view,
 			currentDate: dateParam,
 			startDate,
 			endDate,
+			loaderError: `データ取得エラー: ${message}`,
 		};
 	}
 }
@@ -426,8 +428,10 @@ export async function action({ context, request }: Route.ActionArgs) {
 			}
 			return { success: true };
 		}
-	} catch {
-		return { error: "データベースエラー: マイグレーションが未適用の可能性があります" };
+	} catch (e) {
+		const message = e instanceof Error ? e.message : String(e);
+		console.error("[rhythm action]", intent, message);
+		return { error: `データベースエラー: ${message}` };
 	}
 
 	return { error: "不明な操作です" };
@@ -440,6 +444,10 @@ export default function RhythmTracker({
 	actionData,
 }: Route.ComponentProps) {
 	const { entries, view, currentDate, startDate, endDate } = loaderData;
+	const loaderError =
+		"loaderError" in loaderData
+			? (loaderData.loaderError as string)
+			: null;
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [memberId, setMemberId] = useState("");
 	const [displayName, setDisplayName] = useState("");
@@ -509,6 +517,18 @@ export default function RhythmTracker({
 						活動・気分・対人関係を記録して、生活リズムを可視化
 					</p>
 				</div>
+
+				{/* エラー表示 */}
+				{loaderError && (
+					<div className="mb-4 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+						{loaderError}
+					</div>
+				)}
+				{actionData && "error" in actionData && (
+					<div className="mb-4 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+						{actionData.error as string}
+					</div>
+				)}
 
 				{/* 名前未設定の場合はログイン画面を表示 */}
 				{needsName ? (
@@ -742,6 +762,19 @@ function EntryForm({
 	const isExtended = hour >= 24;
 	const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
 
+	const fetcherError =
+		fetcher.data && "error" in fetcher.data
+			? (fetcher.data.error as string)
+			: null;
+
+	// 成功時のみフォームを閉じる
+	useEffect(() => {
+		if (fetcher.state === "idle" && fetcher.data && "success" in fetcher.data) {
+			setIsOpen(false);
+			setMood(0);
+		}
+	}, [fetcher.state, fetcher.data]);
+
 	return (
 		<div className="mb-6">
 			<button
@@ -756,12 +789,6 @@ function EntryForm({
 				<fetcher.Form
 					method="post"
 					className="mt-2 space-y-4 rounded-lg border border-violet-800 bg-violet-900/30 p-4"
-					onSubmit={() => {
-						setTimeout(() => {
-							setIsOpen(false);
-							setMood(0);
-						}, 100);
-					}}
 				>
 					<input type="hidden" name="intent" value="create" />
 					<input type="hidden" name="memberId" value={memberId} />
@@ -913,6 +940,12 @@ function EntryForm({
 						</span>
 					</label>
 
+					{fetcherError && (
+						<div className="rounded-md border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+							{fetcherError}
+						</div>
+					)}
+
 					<button
 						type="submit"
 						disabled={isSubmitting}
@@ -1027,6 +1060,11 @@ function EditEntryForm({
 
 	const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
 	const isExtended = hour >= 24;
+
+	const fetcherError =
+		fetcher.data && "error" in fetcher.data
+			? (fetcher.data.error as string)
+			: null;
 
 	// 送信成功したら編集モードを閉じる
 	useEffect(() => {
@@ -1178,6 +1216,12 @@ function EditEntryForm({
 					内容をぼかす（タップで表示）
 				</span>
 			</label>
+
+			{fetcherError && (
+				<div className="rounded-md border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+					{fetcherError}
+				</div>
+			)}
 
 			<div className="flex gap-2">
 				<button
