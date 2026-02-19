@@ -373,6 +373,39 @@ export async function action({ context, request }: Route.ActionArgs) {
 			return { success: true };
 		}
 
+		if (intent === "edit") {
+			const id = Number(formData.get("id"));
+			const memberId = formData.get("memberId") as string;
+			const date = formData.get("date") as string;
+			const time = formData.get("time") as string;
+			const activity = formData.get("activity") as string;
+			const mood = Number(formData.get("mood"));
+			const interpersonal = Number(formData.get("interpersonal"));
+			const note = (formData.get("note") as string) || null;
+
+			if (!id || !memberId || !date || !time || !activity) {
+				return { error: "必須項目を入力してください" };
+			}
+			if (mood < -10 || mood > 10) {
+				return { error: "気分は -10 ~ +10 の範囲で入力してください" };
+			}
+			if (interpersonal < 0 || interpersonal > 3) {
+				return { error: "対人は 0 ~ 3 の範囲で入力してください" };
+			}
+
+			await db
+				.update(rhythmEntries)
+				.set({ date, time, activity, mood, interpersonal, note })
+				.where(
+					and(
+						eq(rhythmEntries.id, id),
+						eq(rhythmEntries.memberId, memberId),
+					),
+				);
+
+			return { success: true };
+		}
+
 		if (intent === "delete") {
 			const id = Number(formData.get("id"));
 			const memberId = formData.get("memberId") as string;
@@ -876,12 +909,13 @@ function EntryForm({
 	);
 }
 
-// --- エントリー削除ボタン ---
+// --- エントリー操作ボタン (編集・削除) ---
 
-function DeleteButton({
-	entryId,
+function EntryActions({
+	entry,
 	memberId,
-}: { entryId: number; memberId: string }) {
+	onEdit,
+}: { entry: Entry; memberId: string; onEdit: () => void }) {
 	const fetcher = useFetcher();
 	const [showConfirm, setShowConfirm] = useState(false);
 
@@ -890,7 +924,7 @@ function DeleteButton({
 			<div className="flex gap-1">
 				<fetcher.Form method="post">
 					<input type="hidden" name="intent" value="delete" />
-					<input type="hidden" name="id" value={entryId} />
+					<input type="hidden" name="id" value={entry.id} />
 					<input type="hidden" name="memberId" value={memberId} />
 					<button
 						type="submit"
@@ -911,25 +945,227 @@ function DeleteButton({
 	}
 
 	return (
-		<button
-			type="button"
-			onClick={() => setShowConfirm(true)}
-			className="rounded p-1 text-violet-600 transition-colors hover:text-violet-400"
-		>
-			<svg
-				className="h-4 w-4"
-				fill="none"
-				viewBox="0 0 24 24"
-				stroke="currentColor"
-				strokeWidth={2}
+		<div className="flex gap-0.5">
+			<button
+				type="button"
+				onClick={onEdit}
+				className="rounded p-1 text-violet-600 transition-colors hover:text-violet-400"
+				title="編集"
 			>
-				<path
-					strokeLinecap="round"
-					strokeLinejoin="round"
-					d="M6 18L18 6M6 6l12 12"
+				<svg
+					className="h-4 w-4"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+					strokeWidth={2}
+				>
+					<path
+						strokeLinecap="round"
+						strokeLinejoin="round"
+						d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"
+					/>
+				</svg>
+			</button>
+			<button
+				type="button"
+				onClick={() => setShowConfirm(true)}
+				className="rounded p-1 text-violet-600 transition-colors hover:text-violet-400"
+				title="削除"
+			>
+				<svg
+					className="h-4 w-4"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+					strokeWidth={2}
+				>
+					<path
+						strokeLinecap="round"
+						strokeLinejoin="round"
+						d="M6 18L18 6M6 6l12 12"
+					/>
+				</svg>
+			</button>
+		</div>
+	);
+}
+
+// --- インライン編集フォーム ---
+
+function EditEntryForm({
+	entry,
+	memberId,
+	onCancel,
+}: { entry: Entry; memberId: string; onCancel: () => void }) {
+	const fetcher = useFetcher();
+	const isSubmitting = fetcher.state !== "idle";
+	const [mood, setMood] = useState(entry.mood);
+
+	const timeMinutes = timeToMinutes(entry.time);
+	const initialHour = Math.floor(timeMinutes / 60);
+	const initialMinute = Math.round((timeMinutes % 60) / 5) * 5;
+	const [hour, setHour] = useState(initialHour);
+	const [minute, setMinute] = useState(initialMinute);
+	const [date, setDate] = useState(entry.date);
+
+	const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+	const isExtended = hour >= 24;
+
+	// 送信成功したら編集モードを閉じる
+	useEffect(() => {
+		if (fetcher.state === "idle" && fetcher.data && "success" in fetcher.data) {
+			onCancel();
+		}
+	}, [fetcher.state, fetcher.data, onCancel]);
+
+	return (
+		<fetcher.Form
+			method="post"
+			className="space-y-3 rounded-lg border border-violet-600/50 bg-violet-900/40 p-3"
+		>
+			<input type="hidden" name="intent" value="edit" />
+			<input type="hidden" name="id" value={entry.id} />
+			<input type="hidden" name="memberId" value={memberId} />
+			<input type="hidden" name="date" value={date} />
+			<input type="hidden" name="time" value={timeStr} />
+
+			<div className="grid grid-cols-2 gap-3">
+				<div>
+					<label className="mb-1 block text-xs text-violet-400">
+						日付
+					</label>
+					<input
+						type="date"
+						value={date}
+						onChange={(e) => setDate(e.target.value)}
+						className="w-full rounded-md border border-violet-700 bg-violet-950 px-3 py-1.5 text-sm text-white"
+						required
+					/>
+				</div>
+				<div>
+					<label className="mb-1 block text-xs text-violet-400">
+						時刻
+					</label>
+					<div className="flex items-center gap-1">
+						<select
+							value={hour}
+							onChange={(e) => setHour(Number(e.target.value))}
+							className="w-full rounded-md border border-violet-700 bg-violet-950 px-1 py-1.5 text-sm text-white"
+						>
+							{Array.from({ length: 29 }, (_, i) => (
+								<option key={i} value={i}>
+									{i < 24
+										? `${i.toString().padStart(2, "0")}`
+										: `${i} (翌${i - 24}時)`}
+								</option>
+							))}
+						</select>
+						<span className="text-violet-400">:</span>
+						<select
+							value={minute}
+							onChange={(e) => setMinute(Number(e.target.value))}
+							className="w-full rounded-md border border-violet-700 bg-violet-950 px-1 py-1.5 text-sm text-white"
+						>
+							{Array.from({ length: 12 }, (_, i) => (
+								<option key={i * 5} value={i * 5}>
+									{(i * 5).toString().padStart(2, "0")}
+								</option>
+							))}
+						</select>
+					</div>
+					{isExtended && (
+						<p className="mt-0.5 text-[10px] text-amber-400">
+							{date} の深夜 {timeStr} として記録
+						</p>
+					)}
+				</div>
+			</div>
+
+			<div>
+				<label className="mb-1 block text-xs text-violet-400">
+					活動
+				</label>
+				<input
+					type="text"
+					name="activity"
+					defaultValue={entry.activity}
+					className="w-full rounded-md border border-violet-700 bg-violet-950 px-3 py-1.5 text-sm text-white"
+					required
 				/>
-			</svg>
-		</button>
+			</div>
+
+			<div>
+				<label className="mb-1 block text-xs text-violet-400">
+					気分: {mood > 0 ? `+${mood}` : mood}{" "}
+					<span className={moodColor(mood)}>
+						({moodLabel(mood)})
+					</span>
+				</label>
+				<input
+					type="range"
+					name="mood"
+					min="-10"
+					max="10"
+					value={mood}
+					onChange={(e) => setMood(Number(e.target.value))}
+					className="w-full accent-violet-500"
+				/>
+			</div>
+
+			<div>
+				<label className="mb-1 block text-xs text-violet-400">
+					対人
+				</label>
+				<div className="flex flex-wrap gap-2">
+					{INTERPERSONAL_LABELS.map((label, i) => (
+						<label
+							key={i}
+							className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs hover:bg-violet-800/30"
+						>
+							<input
+								type="radio"
+								name="interpersonal"
+								value={i}
+								defaultChecked={i === entry.interpersonal}
+								className="accent-violet-500"
+							/>
+							<span className="text-violet-200">
+								{i}: {label}
+							</span>
+						</label>
+					))}
+				</div>
+			</div>
+
+			<div>
+				<label className="mb-1 block text-xs text-violet-400">
+					メモ
+				</label>
+				<textarea
+					name="note"
+					rows={2}
+					defaultValue={entry.note ?? ""}
+					className="w-full rounded-md border border-violet-700 bg-violet-950 px-3 py-1.5 text-sm text-white"
+				/>
+			</div>
+
+			<div className="flex gap-2">
+				<button
+					type="submit"
+					disabled={isSubmitting}
+					className="flex-1 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+				>
+					{isSubmitting ? "保存中..." : "保存"}
+				</button>
+				<button
+					type="button"
+					onClick={onCancel}
+					className="rounded-lg border border-violet-700 px-4 py-2 text-sm text-violet-300 transition-colors hover:bg-violet-800"
+				>
+					キャンセル
+				</button>
+			</div>
+		</fetcher.Form>
 	);
 }
 
@@ -939,6 +1175,18 @@ function EntryCard({
 	entry,
 	memberId,
 }: { entry: Entry; memberId: string }) {
+	const [editing, setEditing] = useState(false);
+
+	if (editing) {
+		return (
+			<EditEntryForm
+				entry={entry}
+				memberId={memberId}
+				onCancel={() => setEditing(false)}
+			/>
+		);
+	}
+
 	return (
 		<div
 			className={`rounded-lg border border-violet-800/50 ${moodBgClass(entry.mood)} p-3 transition-colors hover:border-violet-700`}
@@ -956,7 +1204,8 @@ function EntryCard({
 					<div className="mt-1.5 flex flex-wrap gap-3 text-xs">
 						<span className={moodColor(entry.mood)}>
 							気分:{" "}
-							{entry.mood > 0 ? `+${entry.mood}` : entry.mood}
+							{entry.mood > 0 ? `+${entry.mood}` : entry.mood}{" "}
+							({moodLabel(entry.mood)})
 						</span>
 						<span className="text-violet-400">
 							対人: {entry.interpersonal} (
@@ -970,7 +1219,11 @@ function EntryCard({
 					)}
 				</div>
 				<div className="ml-2">
-					<DeleteButton entryId={entry.id} memberId={memberId} />
+					<EntryActions
+						entry={entry}
+						memberId={memberId}
+						onEdit={() => setEditing(true)}
+					/>
 				</div>
 			</div>
 		</div>
@@ -1344,6 +1597,18 @@ function WeekEntryCell({
 	entry,
 	memberId,
 }: { entry: Entry; memberId: string }) {
+	const [editing, setEditing] = useState(false);
+
+	if (editing) {
+		return (
+			<EditEntryForm
+				entry={entry}
+				memberId={memberId}
+				onCancel={() => setEditing(false)}
+			/>
+		);
+	}
+
 	return (
 		<div className="space-y-0.5">
 			<div className="flex items-start justify-between gap-1">
@@ -1355,7 +1620,11 @@ function WeekEntryCell({
 						{entry.activity}
 					</div>
 				</div>
-				<DeleteButton entryId={entry.id} memberId={memberId} />
+				<EntryActions
+					entry={entry}
+					memberId={memberId}
+					onEdit={() => setEditing(true)}
+				/>
 			</div>
 			<div className="flex gap-2 text-[10px]">
 				<span className={moodColor(entry.mood)}>
