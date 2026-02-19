@@ -290,6 +290,7 @@ export const rhythmEntries = sqliteTable("rhythm_entries", {
 	mood: integer("mood").notNull(), // -10 ~ +10
 	interpersonal: integer("interpersonal").notNull(), // 0 ~ 3
 	note: text("note"),
+	isPrivate: integer("is_private", { mode: "boolean" }).notNull().default(false),
 	createdAt: integer("created_at", { mode: "timestamp" }).default(
 		sql`(strftime('%s', 'now'))`,
 	),

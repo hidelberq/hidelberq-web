@@ -180,6 +180,7 @@ type Entry = {
 	mood: number;
 	interpersonal: number;
 	note: string | null;
+	isPrivate: boolean;
 };
 
 function moodColor(mood: number): string {
@@ -265,6 +266,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 				mood: e.mood,
 				interpersonal: e.interpersonal,
 				note: e.note,
+				isPrivate: e.isPrivate,
 			})),
 			view,
 			currentDate: dateParam,
@@ -349,6 +351,7 @@ export async function action({ context, request }: Route.ActionArgs) {
 			const mood = Number(formData.get("mood"));
 			const interpersonal = Number(formData.get("interpersonal"));
 			const note = (formData.get("note") as string) || null;
+			const isPrivate = formData.get("isPrivate") === "1";
 
 			if (!memberId || !date || !time || !activity) {
 				return { error: "必須項目を入力してください" };
@@ -368,6 +371,7 @@ export async function action({ context, request }: Route.ActionArgs) {
 				mood,
 				interpersonal,
 				note,
+				isPrivate,
 			});
 
 			return { success: true };
@@ -382,6 +386,7 @@ export async function action({ context, request }: Route.ActionArgs) {
 			const mood = Number(formData.get("mood"));
 			const interpersonal = Number(formData.get("interpersonal"));
 			const note = (formData.get("note") as string) || null;
+			const isPrivate = formData.get("isPrivate") === "1";
 
 			if (!id || !memberId || !date || !time || !activity) {
 				return { error: "必須項目を入力してください" };
@@ -395,7 +400,7 @@ export async function action({ context, request }: Route.ActionArgs) {
 
 			await db
 				.update(rhythmEntries)
-				.set({ date, time, activity, mood, interpersonal, note })
+				.set({ date, time, activity, mood, interpersonal, note, isPrivate })
 				.where(
 					and(
 						eq(rhythmEntries.id, id),
@@ -896,6 +901,18 @@ function EntryForm({
 						/>
 					</div>
 
+					<label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-violet-800/30">
+						<input
+							type="checkbox"
+							name="isPrivate"
+							value="1"
+							className="accent-violet-500"
+						/>
+						<span className="text-violet-300">
+							内容をぼかす（タップで表示）
+						</span>
+					</label>
+
 					<button
 						type="submit"
 						disabled={isSubmitting}
@@ -1149,6 +1166,19 @@ function EditEntryForm({
 				/>
 			</div>
 
+			<label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-violet-800/30">
+				<input
+					type="checkbox"
+					name="isPrivate"
+					value="1"
+					defaultChecked={entry.isPrivate}
+					className="accent-violet-500"
+				/>
+				<span className="text-violet-300">
+					内容をぼかす（タップで表示）
+				</span>
+			</label>
+
 			<div className="flex gap-2">
 				<button
 					type="submit"
@@ -1176,6 +1206,8 @@ function EntryCard({
 	memberId,
 }: { entry: Entry; memberId: string }) {
 	const [editing, setEditing] = useState(false);
+	const [revealed, setRevealed] = useState(false);
+	const blurred = entry.isPrivate && !revealed;
 
 	if (editing) {
 		return (
@@ -1190,6 +1222,7 @@ function EntryCard({
 	return (
 		<div
 			className={`rounded-lg border border-violet-800/50 ${moodBgClass(entry.mood)} p-3 transition-colors hover:border-violet-700`}
+			onClick={blurred ? () => setRevealed(true) : undefined}
 		>
 			<div className="flex items-start justify-between">
 				<div className="flex-1">
@@ -1197,11 +1230,27 @@ function EntryCard({
 						<span className="font-mono text-sm text-violet-400">
 							{entry.time}
 						</span>
-						<span className="font-medium text-white">
+						<span
+							className={`font-medium text-white ${blurred ? "select-none blur-sm" : ""}`}
+						>
 							{entry.activity}
 						</span>
+						{entry.isPrivate && (
+							<span
+								className="cursor-pointer text-xs text-violet-600"
+								onClick={(e) => {
+									e.stopPropagation();
+									setRevealed((v) => !v);
+								}}
+								title={revealed ? "ぼかす" : "表示する"}
+							>
+								{revealed ? "🔓" : "🔒"}
+							</span>
+						)}
 					</div>
-					<div className="mt-1.5 flex flex-wrap gap-3 text-xs">
+					<div
+						className={`mt-1.5 flex flex-wrap gap-3 text-xs ${blurred ? "select-none blur-sm" : ""}`}
+					>
 						<span className={moodColor(entry.mood)}>
 							気分:{" "}
 							{entry.mood > 0 ? `+${entry.mood}` : entry.mood}{" "}
@@ -1213,7 +1262,9 @@ function EntryCard({
 						</span>
 					</div>
 					{entry.note && (
-						<p className="mt-1.5 text-xs text-violet-400/80">
+						<p
+							className={`mt-1.5 text-xs text-violet-400/80 ${blurred ? "select-none blur-sm" : ""}`}
+						>
 							{entry.note}
 						</p>
 					)}
@@ -1598,6 +1649,8 @@ function WeekEntryCell({
 	memberId,
 }: { entry: Entry; memberId: string }) {
 	const [editing, setEditing] = useState(false);
+	const [revealed, setRevealed] = useState(false);
+	const blurred = entry.isPrivate && !revealed;
 
 	if (editing) {
 		return (
@@ -1610,13 +1663,29 @@ function WeekEntryCell({
 	}
 
 	return (
-		<div className="space-y-0.5">
+		<div
+			className="space-y-0.5"
+			onClick={blurred ? () => setRevealed(true) : undefined}
+		>
 			<div className="flex items-start justify-between gap-1">
 				<div className="min-w-0 flex-1">
 					<span className="font-mono text-[10px] text-violet-500">
 						{entry.time}
+						{entry.isPrivate && (
+							<span
+								className="ml-0.5 cursor-pointer"
+								onClick={(e) => {
+									e.stopPropagation();
+									setRevealed((v) => !v);
+								}}
+							>
+								{revealed ? "🔓" : "🔒"}
+							</span>
+						)}
 					</span>
-					<div className="truncate text-[11px] font-medium text-white">
+					<div
+						className={`truncate text-[11px] font-medium text-white ${blurred ? "select-none blur-sm" : ""}`}
+					>
 						{entry.activity}
 					</div>
 				</div>
@@ -1626,7 +1695,9 @@ function WeekEntryCell({
 					onEdit={() => setEditing(true)}
 				/>
 			</div>
-			<div className="flex gap-2 text-[10px]">
+			<div
+				className={`flex gap-2 text-[10px] ${blurred ? "select-none blur-sm" : ""}`}
+			>
 				<span className={moodColor(entry.mood)}>
 					{entry.mood > 0 ? `+${entry.mood}` : entry.mood}
 				</span>
@@ -1635,7 +1706,9 @@ function WeekEntryCell({
 				</span>
 			</div>
 			{entry.note && (
-				<p className="truncate text-[10px] text-violet-500/70">
+				<p
+					className={`truncate text-[10px] text-violet-500/70 ${blurred ? "select-none blur-sm" : ""}`}
+				>
 					{entry.note}
 				</p>
 			)}
