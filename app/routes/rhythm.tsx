@@ -1,8 +1,12 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link, useFetcher, useSearchParams } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
-import { desc, eq, and, gte, lte } from "drizzle-orm";
-import { rhythmEntries } from "../db/schema";
+import { eq, and, gte, lte } from "drizzle-orm";
+import {
+	rhythmEntries,
+	bookGroupMembers,
+	personalBooks,
+} from "../db/schema";
 import type { Route } from "./+types/rhythm";
 
 export function meta(_args: Route.MetaArgs) {
@@ -189,6 +193,56 @@ export async function action({ context, request }: Route.ActionArgs) {
 	const intent = formData.get("intent") as string;
 
 	try {
+		if (intent === "setName") {
+			const displayName = (
+				formData.get("displayName") as string
+			)?.trim();
+			const memberId = formData.get("memberId") as string;
+
+			if (!displayName || !memberId) {
+				return { error: "表示名を入力してください" };
+			}
+
+			// 同じ表示名の既存ユーザーを検索（デバイス間同期）
+			const [existingMember] = await db
+				.select({ memberId: bookGroupMembers.memberId })
+				.from(bookGroupMembers)
+				.where(eq(bookGroupMembers.displayName, displayName))
+				.limit(1);
+
+			if (existingMember) {
+				return {
+					success: true,
+					intent: "setName",
+					displayName,
+					memberId: existingMember.memberId,
+				};
+			}
+
+			// 個人積読リストからも検索
+			const [existingPersonal] = await db
+				.select({ memberId: personalBooks.memberId })
+				.from(personalBooks)
+				.where(eq(personalBooks.memberName, displayName))
+				.limit(1);
+
+			if (existingPersonal) {
+				return {
+					success: true,
+					intent: "setName",
+					displayName,
+					memberId: existingPersonal.memberId,
+				};
+			}
+
+			return {
+				success: true,
+				intent: "setName",
+				displayName,
+				memberId,
+			};
+		}
+
 		if (intent === "create") {
 			const memberId = formData.get("memberId") as string;
 			const date = formData.get("date") as string;
@@ -245,26 +299,61 @@ export async function action({ context, request }: Route.ActionArgs) {
 
 // --- コンポーネント ---
 
-export default function RhythmTracker({ loaderData }: Route.ComponentProps) {
+export default function RhythmTracker({
+	loaderData,
+	actionData,
+}: Route.ComponentProps) {
 	const { entries, view, currentDate, startDate, endDate } = loaderData;
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [memberId, setMemberId] = useState("");
+	const [displayName, setDisplayName] = useState("");
 
 	useEffect(() => {
-		let id = localStorage.getItem("rhythmMemberId");
+		// 積読2.0 と同じ localStorage キーを使用
+		let id = localStorage.getItem("bookMemberId");
 		if (!id) {
 			id = crypto.randomUUID();
-			localStorage.setItem("rhythmMemberId", id);
+			localStorage.setItem("bookMemberId", id);
 		}
 		setMemberId(id);
 
+		const name = localStorage.getItem("bookDisplayName") || "";
+		setDisplayName(name);
+
 		// memberId が URL に含まれていなければ追加
-		if (searchParams.get("memberId") !== id) {
+		if (name && searchParams.get("memberId") !== id) {
 			const params = new URLSearchParams(searchParams);
 			params.set("memberId", id);
 			setSearchParams(params, { replace: true });
 		}
 	}, [searchParams, setSearchParams]);
+
+	// setName action の成功時
+	useEffect(() => {
+		if (
+			actionData &&
+			"success" in actionData &&
+			actionData.success &&
+			"intent" in actionData &&
+			actionData.intent === "setName" &&
+			"displayName" in actionData
+		) {
+			const newName = actionData.displayName as string;
+			localStorage.setItem("bookDisplayName", newName);
+			setDisplayName(newName);
+			if ("memberId" in actionData && actionData.memberId) {
+				const newId = actionData.memberId as string;
+				localStorage.setItem("bookMemberId", newId);
+				setMemberId(newId);
+				// URL に memberId を反映
+				const params = new URLSearchParams(searchParams);
+				params.set("memberId", newId);
+				setSearchParams(params, { replace: true });
+			}
+		}
+	}, [actionData, searchParams, setSearchParams]);
+
+	const needsName = !displayName;
 
 	return (
 		<div className="min-h-screen bg-violet-950 text-white">
@@ -285,52 +374,118 @@ export default function RhythmTracker({ loaderData }: Route.ComponentProps) {
 					</p>
 				</div>
 
-				{/* ビュー切り替えタブ */}
-				<ViewTabs
-					view={view}
-					currentDate={currentDate}
-					memberId={memberId}
-				/>
+				{/* 名前未設定の場合はログイン画面を表示 */}
+				{needsName ? (
+					<NameSetupForm memberId={memberId} />
+				) : (
+					<>
+						{/* ログイン中ユーザー表示 */}
+						<div className="mb-4 flex items-center justify-between text-sm">
+							<span className="text-violet-400">
+								ログイン中:{" "}
+								<strong className="text-violet-200">
+									{displayName}
+								</strong>
+							</span>
+							<button
+								type="button"
+								onClick={() => {
+									localStorage.removeItem("bookDisplayName");
+									setDisplayName("");
+								}}
+								className="text-violet-500 hover:text-violet-300 transition-colors"
+							>
+								ログアウト
+							</button>
+						</div>
 
-				{/* ナビゲーション */}
-				<DateNavigation
-					view={view}
-					currentDate={currentDate}
-					startDate={startDate}
-					endDate={endDate}
-					memberId={memberId}
-				/>
+						{/* ビュー切り替えタブ */}
+						<ViewTabs
+							view={view}
+							currentDate={currentDate}
+							memberId={memberId}
+						/>
 
-				{/* 入力フォーム */}
-				<EntryForm currentDate={currentDate} memberId={memberId} />
+						{/* ナビゲーション */}
+						<DateNavigation
+							view={view}
+							currentDate={currentDate}
+							startDate={startDate}
+							endDate={endDate}
+							memberId={memberId}
+						/>
 
-				{/* ビュー別表示 */}
-				{view === "today" && (
-					<TodayView
-						entries={entries}
-						currentDate={currentDate}
-						memberId={memberId}
-					/>
+						{/* 入力フォーム */}
+						<EntryForm
+							currentDate={currentDate}
+							memberId={memberId}
+						/>
+
+						{/* ビュー別表示 */}
+						{view === "today" && (
+							<TodayView
+								entries={entries}
+								currentDate={currentDate}
+								memberId={memberId}
+							/>
+						)}
+						{view === "week" && (
+							<WeekView
+								entries={entries}
+								startDate={startDate}
+								endDate={endDate}
+								memberId={memberId}
+							/>
+						)}
+						{view === "month" && (
+							<MonthView
+								entries={entries}
+								currentDate={currentDate}
+								startDate={startDate}
+								endDate={endDate}
+							/>
+						)}
+
+						{/* グラフ */}
+						{entries.length > 0 && (
+							<ChartSection entries={entries} />
+						)}
+					</>
 				)}
-				{view === "week" && (
-					<WeekView
-						entries={entries}
-						startDate={startDate}
-						endDate={endDate}
-						memberId={memberId}
-					/>
-				)}
-				{view === "month" && (
-					<MonthView
-						entries={entries}
-						currentDate={currentDate}
-						startDate={startDate}
-						endDate={endDate}
-					/>
-				)}
+			</div>
+		</div>
+	);
+}
 
-				{/* グラフ */}
-				{entries.length > 0 && <ChartSection entries={entries} />}
+// --- 名前設定フォーム ---
+
+function NameSetupForm({ memberId }: { memberId: string }) {
+	return (
+		<div className="mx-auto max-w-md">
+			<div className="rounded-2xl border border-violet-700/50 bg-violet-900/30 p-6">
+				<h2 className="mb-3 text-lg font-semibold text-white">
+					はじめに表示名を設定
+				</h2>
+				<p className="mb-4 text-sm text-violet-300">
+					積読 2.0 と共通のアカウントです。既に設定済みの方は同じ名前を入力してください。
+				</p>
+				<form method="post" className="space-y-4">
+					<input type="hidden" name="intent" value="setName" />
+					<input type="hidden" name="memberId" value={memberId} />
+					<input
+						type="text"
+						name="displayName"
+						required
+						placeholder="例: hidelberq"
+						className="w-full rounded-lg border border-violet-700 bg-violet-950 px-4 py-3 text-white placeholder:text-violet-600 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+					/>
+					<button
+						type="submit"
+						className="w-full rounded-lg bg-violet-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-violet-500"
+					>
+						設定してはじめる
+					</button>
+				</form>
 			</div>
 		</div>
 	);
