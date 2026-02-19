@@ -745,11 +745,8 @@ function EntryForm({
 	const [isOpen, setIsOpen] = useState(false);
 	const isSubmitting = fetcher.state !== "idle";
 
-	const now = new Date();
-	const currentHour = now.getHours();
-	const currentMinute = now.getMinutes();
-	const [hour, setHour] = useState(currentHour);
-	const [minute, setMinute] = useState(currentMinute);
+	const [hour, setHour] = useState(0);
+	const [minute, setMinute] = useState(0);
 	const [date, setDate] = useState(currentDate);
 
 	// 拡張時刻（24:00+）の場合、記録日は入力日の翌日にあたる実際の暦日
@@ -769,11 +766,22 @@ function EntryForm({
 		}
 	}, [fetcher.state, fetcher.data]);
 
+	const handleToggle = () => {
+		if (!isOpen) {
+			// 開くタイミングで現在時刻をセット
+			const now = new Date();
+			setHour(now.getHours());
+			setMinute(now.getMinutes());
+			setDate(currentDate);
+		}
+		setIsOpen(!isOpen);
+	};
+
 	return (
 		<div className="mb-6">
 			<button
 				type="button"
-				onClick={() => setIsOpen(!isOpen)}
+				onClick={handleToggle}
 				className="w-full rounded-lg bg-violet-800/50 px-4 py-3 text-left text-sm font-medium text-violet-200 transition-colors hover:bg-violet-800"
 			>
 				{isOpen ? "▼ 記録を閉じる" : "＋ 新しい記録を追加"}
