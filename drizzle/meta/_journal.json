@@ -141,6 +141,13 @@
       "when": 1771099200000,
       "tag": "0019_split_hiphop_tracks",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1771200000000,
+      "tag": "0020_add_rhythm_entries",
+      "breakpoints": true
     }
   ]
 }

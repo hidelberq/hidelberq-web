@@ -280,6 +280,23 @@ export const hiphopTracks = sqliteTable("hiphop_tracks", {
 	unique("hiphop_tracks_date_type_unique").on(table.date, table.type),
 ]);
 
+// 社会リズム療法 行動記録票
+export const rhythmEntries = sqliteTable("rhythm_entries", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	date: text("date").notNull(), // YYYY-MM-DD
+	time: text("time").notNull(), // HH:MM
+	activity: text("activity").notNull(),
+	mood: integer("mood").notNull(), // -10 ~ +10
+	interpersonal: integer("interpersonal").notNull(), // 0 ~ 3
+	note: text("note"),
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const scrapedArticles = sqliteTable("scraped_articles", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	siteId: text("site_id").notNull(),
