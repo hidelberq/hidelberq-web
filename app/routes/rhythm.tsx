@@ -29,18 +29,26 @@ function todayJST(): string {
 	return toJSTDateString(new Date());
 }
 
+// ローカルタイムで YYYY-MM-DD を返す（toISOString は UTC なのでタイムゾーンずれを防ぐ）
+function toLocalYMD(d: Date): string {
+	const y = d.getFullYear();
+	const m = String(d.getMonth() + 1).padStart(2, "0");
+	const day = String(d.getDate()).padStart(2, "0");
+	return `${y}-${m}-${day}`;
+}
+
 function getMonday(dateStr: string): string {
 	const d = new Date(dateStr + "T00:00:00");
 	const day = d.getDay();
 	const diff = day === 0 ? -6 : 1 - day;
 	d.setDate(d.getDate() + diff);
-	return d.toISOString().slice(0, 10);
+	return toLocalYMD(d);
 }
 
 function addDays(dateStr: string, n: number): string {
 	const d = new Date(dateStr + "T00:00:00");
 	d.setDate(d.getDate() + n);
-	return d.toISOString().slice(0, 10);
+	return toLocalYMD(d);
 }
 
 function getMonthStart(dateStr: string): string {
@@ -51,7 +59,7 @@ function getMonthEnd(dateStr: string): string {
 	const d = new Date(dateStr.slice(0, 7) + "-01T00:00:00");
 	d.setMonth(d.getMonth() + 1);
 	d.setDate(d.getDate() - 1);
-	return d.toISOString().slice(0, 10);
+	return toLocalYMD(d);
 }
 
 function formatDate(dateStr: string): string {
@@ -549,9 +557,9 @@ function DateNavigation({
 	} else if (view === "month") {
 		const d = new Date(currentDate + "T00:00:00");
 		d.setMonth(d.getMonth() - 1);
-		prevDate = d.toISOString().slice(0, 10);
+		prevDate = toLocalYMD(d);
 		d.setMonth(d.getMonth() + 2);
-		nextDate = d.toISOString().slice(0, 10);
+		nextDate = toLocalYMD(d);
 		label = formatMonth(currentDate);
 	} else {
 		prevDate = addDays(currentDate, -1);
@@ -1125,7 +1133,7 @@ function MonthView({
 			if (current.getDay() === 1 || weeks.length === 0) {
 				weeks.push([]);
 			}
-			const dateStr = current.toISOString().slice(0, 10);
+			const dateStr = toLocalYMD(current);
 			weeks[weeks.length - 1].push({
 				date: dateStr,
 				inMonth: dateStr >= startDate && dateStr <= endDate,
