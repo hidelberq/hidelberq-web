@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useFetcher, type MetaFunction } from "react-router";
+import { useFetcher, useSearchParams, type MetaFunction } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { lifeCharts, lifeChartEvents } from "~/db/schema";
@@ -66,7 +66,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 				.values({ memberId, birthYear, name })
 				.returning();
 
-			return { chart: result[0], events: [] };
+			return { intent: "createChart", chart: result[0], events: [] };
 		}
 
 		case "updateChart": {
@@ -157,7 +157,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 				results.push(result[0]);
 			}
 
-			return { events: results };
+			return { intent: "addTemplateEvents", events: results };
 		}
 
 		default:
@@ -169,8 +169,9 @@ export default function LifeChartPage({
 	loaderData,
 }: Route.ComponentProps) {
 	const fetcher = useFetcher();
+	const [searchParams, setSearchParams] = useSearchParams();
 
-	// memberId を localStorage から取得・生成
+	// memberId を localStorage から取得・生成し、URL に反映
 	const [memberId, setMemberId] = useState<string | null>(null);
 	useEffect(() => {
 		let id = localStorage.getItem("life-chart-member-id");
@@ -179,59 +180,14 @@ export default function LifeChartPage({
 			localStorage.setItem("life-chart-member-id", id);
 		}
 		setMemberId(id);
-	}, []);
 
-	// チャートとイベントの state
-	const [chart, setChart] = useState(loaderData.chart);
-	const [events, setEvents] = useState<LifeChartEvent[]>(
-		(loaderData.events ?? []) as LifeChartEvent[],
-	);
-
-	// loader データの同期
-	useEffect(() => {
-		setChart(loaderData.chart);
-		setEvents((loaderData.events ?? []) as LifeChartEvent[]);
-	}, [loaderData]);
-
-	// fetcher の結果を反映
-	useEffect(() => {
-		if (!fetcher.data) return;
-		const data = fetcher.data as Record<string, unknown>;
-
-		if (data.chart && data.events) {
-			// createChart の結果
-			setChart(data.chart as typeof chart);
-			setEvents(data.events as LifeChartEvent[]);
+		// memberId が URL に含まれていなければ追加（loader が revalidation で参照できるように）
+		if (searchParams.get("memberId") !== id) {
+			const params = new URLSearchParams(searchParams);
+			params.set("memberId", id);
+			setSearchParams(params, { replace: true });
 		}
-		if (data.event) {
-			// addEvent の結果
-			setEvents((prev) => [...prev, data.event as LifeChartEvent]);
-			setShowForm(false);
-			setEditingEvent(null);
-		}
-		if (data.updatedEvent) {
-			// updateEvent の結果
-			const updated = data.updatedEvent as LifeChartEvent;
-			setEvents((prev) =>
-				prev.map((e) => (e.id === updated.id ? { ...e, ...updated } : e)),
-			);
-			setShowForm(false);
-			setEditingEvent(null);
-		}
-		if (data.deletedEventId) {
-			// deleteEvent の結果
-			setEvents((prev) =>
-				prev.filter((e) => e.id !== (data.deletedEventId as number)),
-			);
-		}
-		if (data.events && !data.chart) {
-			// addTemplateEvents の結果
-			setEvents((prev) => [
-				...prev,
-				...(data.events as LifeChartEvent[]),
-			]);
-		}
-	}, [fetcher.data]);
+	}, [searchParams, setSearchParams]);
 
 	// UI state
 	const [showForm, setShowForm] = useState(false);
@@ -243,6 +199,31 @@ export default function LifeChartPage({
 	);
 	const [birthYearInput, setBirthYearInput] = useState("");
 	const [chartName, setChartName] = useState("");
+
+	// fetcher の createChart 結果で URL に memberId を反映
+	useEffect(() => {
+		if (!fetcher.data) return;
+		const data = fetcher.data as Record<string, unknown>;
+		if (data.intent === "createChart" && data.chart && memberId) {
+			const params = new URLSearchParams(searchParams);
+			params.set("memberId", memberId);
+			setSearchParams(params, { replace: true });
+		}
+	}, [fetcher.data, memberId, searchParams, setSearchParams]);
+
+	// フォームリセット用: fetcher 完了時
+	useEffect(() => {
+		if (fetcher.state === "idle" && fetcher.data) {
+			const data = fetcher.data as Record<string, unknown>;
+			if (data.event || data.updatedEvent) {
+				setShowForm(false);
+				setEditingEvent(null);
+			}
+		}
+	}, [fetcher.state, fetcher.data]);
+
+	const chart = loaderData.chart;
+	const events = (loaderData.events ?? []) as LifeChartEvent[];
 
 	const toggleCategory = useCallback((cat: Category) => {
 		setHiddenCategories((prev) => {
