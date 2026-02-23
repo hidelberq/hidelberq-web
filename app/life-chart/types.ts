@@ -13,6 +13,8 @@ export interface LifeChartEvent {
 	id: number;
 	chartId: number;
 	age: number;
+	month: number | null;
+	day: number | null;
 	score: number;
 	category: Category;
 	title: string;
@@ -24,10 +26,13 @@ export interface LifeChart {
 	memberId: string;
 	name: string;
 	birthYear: number;
+	birthMonth: number | null;
+	birthDay: number | null;
 }
 
 export interface TemplateEvent {
 	age: number;
+	month?: number;
 	score: number;
 	category: Category;
 	title: string;
@@ -35,11 +40,11 @@ export interface TemplateEvent {
 
 export const TEMPLATE_EVENTS: TemplateEvent[] = [
 	{ age: 0, score: 5, category: "other", title: "誕生" },
-	{ age: 6, score: 3, category: "education", title: "小学校入学" },
-	{ age: 12, score: 3, category: "education", title: "中学校入学" },
-	{ age: 15, score: 3, category: "education", title: "高校入学" },
-	{ age: 18, score: 5, category: "education", title: "大学入学" },
-	{ age: 22, score: 4, category: "career", title: "就職" },
+	{ age: 6, month: 4, score: 3, category: "education", title: "小学校入学" },
+	{ age: 12, month: 4, score: 3, category: "education", title: "中学校入学" },
+	{ age: 15, month: 4, score: 3, category: "education", title: "高校入学" },
+	{ age: 18, month: 4, score: 5, category: "education", title: "大学入学" },
+	{ age: 22, month: 4, score: 4, category: "career", title: "就職" },
 	{ age: 25, score: 6, category: "relationship", title: "結婚" },
 	{ age: 30, score: 8, category: "relationship", title: "第一子誕生" },
 ];

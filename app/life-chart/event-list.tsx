@@ -1,4 +1,5 @@
 import { CATEGORIES, type Category, type LifeChartEvent } from "./types";
+import { formatAge, getFractionalAge } from "./utils";
 
 interface EventListProps {
 	events: LifeChartEvent[];
@@ -7,7 +8,9 @@ interface EventListProps {
 }
 
 export function EventList({ events, onEdit, onDelete }: EventListProps) {
-	const sorted = [...events].sort((a, b) => a.age - b.age);
+	const sorted = [...events].sort(
+		(a, b) => getFractionalAge(a) - getFractionalAge(b),
+	);
 
 	if (sorted.length === 0) {
 		return (
@@ -20,7 +23,8 @@ export function EventList({ events, onEdit, onDelete }: EventListProps) {
 	return (
 		<div className="space-y-1">
 			{sorted.map((event) => {
-				const cat = CATEGORIES[event.category as Category] ?? CATEGORIES.other;
+				const cat =
+					CATEGORIES[event.category as Category] ?? CATEGORIES.other;
 				return (
 					<div
 						key={event.id}
@@ -29,12 +33,14 @@ export function EventList({ events, onEdit, onDelete }: EventListProps) {
 						<span className="text-lg" title={cat.label}>
 							{cat.icon}
 						</span>
-						<span className="min-w-[3rem] text-sm font-medium text-zinc-300">
-							{event.age}歳
+						<span className="min-w-[4.5rem] text-sm font-medium text-zinc-300">
+							{formatAge(event.age, event.month, event.day)}
 						</span>
 						<span
 							className="min-w-[3rem] text-sm font-bold"
-							style={{ color: event.score >= 0 ? "#4ade80" : "#f87171" }}
+							style={{
+								color: event.score >= 0 ? "#4ade80" : "#f87171",
+							}}
 						>
 							{event.score > 0 ? `+${event.score}` : event.score}
 						</span>
@@ -57,7 +63,9 @@ export function EventList({ events, onEdit, onDelete }: EventListProps) {
 							<button
 								type="button"
 								onClick={() => {
-									if (confirm(`「${event.title}」を削除しますか？`)) {
+									if (
+										confirm(`「${event.title}」を削除しますか？`)
+									) {
 										onDelete(event.id);
 									}
 								}}

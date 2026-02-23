@@ -305,6 +305,8 @@ export const lifeCharts = sqliteTable("life_charts", {
 	memberId: text("member_id").notNull(),
 	name: text("name").notNull().default("マイライフチャート"),
 	birthYear: integer("birth_year").notNull(),
+	birthMonth: integer("birth_month"), // 1-12（任意）
+	birthDay: integer("birth_day"), // 1-31（任意）
 	createdAt: integer("created_at", { mode: "timestamp" }).default(
 		sql`(strftime('%s', 'now'))`,
 	),
@@ -318,6 +320,8 @@ export const lifeChartEvents = sqliteTable("life_chart_events", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	chartId: integer("chart_id").notNull(),
 	age: integer("age").notNull(),
+	month: integer("month"), // 1-12（任意：その年齢の何月か）
+	day: integer("day"), // 1-31（任意：その月の何日か）
 	score: integer("score").notNull(), // -10 ~ +10
 	category: text("category").notNull(), // education, career, relationship, health, hobby, other
 	title: text("title").notNull(),

@@ -46,6 +46,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	return { chart, events };
 }
 
+function getOptionalInt(formData: FormData, key: string): number | null {
+	const val = formData.get(key) as string;
+	if (!val || val === "") return null;
+	const num = Number(val);
+	return Number.isNaN(num) ? null : num;
+}
+
 export async function action({ request, context }: Route.ActionArgs) {
 	const formData = await request.formData();
 	const intent = formData.get("intent") as string;
@@ -55,6 +62,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 		case "createChart": {
 			const memberId = formData.get("memberId") as string;
 			const birthYear = Number(formData.get("birthYear"));
+			const birthMonth = getOptionalInt(formData, "birthMonth");
+			const birthDay = getOptionalInt(formData, "birthDay");
 			const name = (formData.get("name") as string) || "マイライフチャート";
 
 			if (!memberId || !birthYear || birthYear < 1900 || birthYear > new Date().getFullYear()) {
@@ -63,7 +72,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 			const result = await db
 				.insert(lifeCharts)
-				.values({ memberId, birthYear, name })
+				.values({ memberId, birthYear, birthMonth, birthDay, name })
 				.returning();
 
 			return { intent: "createChart", chart: result[0], events: [] };
@@ -72,11 +81,13 @@ export async function action({ request, context }: Route.ActionArgs) {
 		case "updateChart": {
 			const chartId = Number(formData.get("chartId"));
 			const birthYear = Number(formData.get("birthYear"));
+			const birthMonth = getOptionalInt(formData, "birthMonth");
+			const birthDay = getOptionalInt(formData, "birthDay");
 			const name = (formData.get("name") as string) || "マイライフチャート";
 
 			await db
 				.update(lifeCharts)
-				.set({ birthYear, name, updatedAt: new Date() })
+				.set({ birthYear, birthMonth, birthDay, name, updatedAt: new Date() })
 				.where(eq(lifeCharts.id, chartId));
 
 			return { success: true };
@@ -85,6 +96,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 		case "addEvent": {
 			const chartId = Number(formData.get("chartId"));
 			const age = Number(formData.get("age"));
+			const month = getOptionalInt(formData, "month");
+			const day = getOptionalInt(formData, "day");
 			const score = Number(formData.get("score"));
 			const category = formData.get("category") as string;
 			const title = formData.get("title") as string;
@@ -96,7 +109,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 			const result = await db
 				.insert(lifeChartEvents)
-				.values({ chartId, age, score, category, title, note })
+				.values({ chartId, age, month, day, score, category, title, note })
 				.returning();
 
 			return { event: result[0] };
@@ -105,6 +118,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 		case "updateEvent": {
 			const eventId = Number(formData.get("eventId"));
 			const age = Number(formData.get("age"));
+			const month = getOptionalInt(formData, "month");
+			const day = getOptionalInt(formData, "day");
 			const score = Number(formData.get("score"));
 			const category = formData.get("category") as string;
 			const title = formData.get("title") as string;
@@ -116,10 +131,10 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 			await db
 				.update(lifeChartEvents)
-				.set({ age, score, category, title, note })
+				.set({ age, month, day, score, category, title, note })
 				.where(eq(lifeChartEvents.id, eventId));
 
-			return { success: true, updatedEvent: { id: eventId, age, score, category, title, note } };
+			return { success: true, updatedEvent: { id: eventId, age, month, day, score, category, title, note } };
 		}
 
 		case "deleteEvent": {
@@ -136,6 +151,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 			const templateJson = formData.get("templates") as string;
 			const templates = JSON.parse(templateJson) as Array<{
 				age: number;
+				month?: number;
 				score: number;
 				category: string;
 				title: string;
@@ -148,6 +164,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 					.values({
 						chartId,
 						age: t.age,
+						month: t.month ?? null,
+						day: null,
 						score: t.score,
 						category: t.category,
 						title: t.title,
@@ -181,7 +199,6 @@ export default function LifeChartPage({
 		}
 		setMemberId(id);
 
-		// memberId が URL に含まれていなければ追加（loader が revalidation で参照できるように）
 		if (searchParams.get("memberId") !== id) {
 			const params = new URLSearchParams(searchParams);
 			params.set("memberId", id);
@@ -191,13 +208,11 @@ export default function LifeChartPage({
 
 	// UI state
 	const [showForm, setShowForm] = useState(false);
-	const [editingEvent, setEditingEvent] = useState<LifeChartEvent | null>(
-		null,
-	);
-	const [hiddenCategories, setHiddenCategories] = useState<Set<Category>>(
-		new Set(),
-	);
+	const [editingEvent, setEditingEvent] = useState<LifeChartEvent | null>(null);
+	const [hiddenCategories, setHiddenCategories] = useState<Set<Category>>(new Set());
 	const [birthYearInput, setBirthYearInput] = useState("");
+	const [birthMonthInput, setBirthMonthInput] = useState("");
+	const [birthDayInput, setBirthDayInput] = useState("");
 	const [chartName, setChartName] = useState("");
 
 	// fetcher の createChart 結果で URL に memberId を反映
@@ -211,7 +226,7 @@ export default function LifeChartPage({
 		}
 	}, [fetcher.data, memberId, searchParams, setSearchParams]);
 
-	// フォームリセット用: fetcher 完了時
+	// フォームリセット用
 	useEffect(() => {
 		if (fetcher.state === "idle" && fetcher.data) {
 			const data = fetcher.data as Record<string, unknown>;
@@ -242,7 +257,7 @@ export default function LifeChartPage({
 					ライフチャート
 				</h1>
 				<p className="mb-4 text-sm text-zinc-400">
-					人生の出来事とその充実度を曲線グラフで可視化します。まず生まれ年を入力してください。
+					人生の出来事とその充実度を曲線グラフで可視化します。まず生年月日を入力してください。
 				</p>
 
 				{memberId && (
@@ -259,19 +274,60 @@ export default function LifeChartPage({
 								className="w-full rounded border border-zinc-600 bg-zinc-900 px-3 py-2 text-zinc-100 placeholder:text-zinc-500"
 							/>
 						</div>
-						<div className="mb-4">
-							<label className="mb-1 block text-sm text-zinc-300">
-								生まれ年（西暦）
-							</label>
-							<input
-								type="number"
-								value={birthYearInput}
-								onChange={(e) => setBirthYearInput(e.target.value)}
-								placeholder="1990"
-								min={1900}
-								max={new Date().getFullYear()}
-								className="w-full rounded border border-zinc-600 bg-zinc-900 px-3 py-2 text-zinc-100 placeholder:text-zinc-500"
-							/>
+						<div className="mb-4 grid grid-cols-3 gap-3">
+							<div>
+								<label className="mb-1 block text-sm text-zinc-300">
+									生まれ年（西暦）
+								</label>
+								<input
+									type="number"
+									value={birthYearInput}
+									onChange={(e) => setBirthYearInput(e.target.value)}
+									placeholder="1990"
+									min={1900}
+									max={new Date().getFullYear()}
+									className="w-full rounded border border-zinc-600 bg-zinc-900 px-3 py-2 text-zinc-100 placeholder:text-zinc-500"
+									required
+								/>
+							</div>
+							<div>
+								<label className="mb-1 block text-sm text-zinc-300">
+									月 <span className="text-zinc-600">（任意）</span>
+								</label>
+								<select
+									value={birthMonthInput}
+									onChange={(e) => {
+										setBirthMonthInput(e.target.value);
+										if (!e.target.value) setBirthDayInput("");
+									}}
+									className="w-full rounded border border-zinc-600 bg-zinc-900 px-3 py-2 text-zinc-100"
+								>
+									<option value="">--</option>
+									{Array.from({ length: 12 }, (_, i) => (
+										<option key={i + 1} value={i + 1}>
+											{i + 1}月
+										</option>
+									))}
+								</select>
+							</div>
+							<div>
+								<label className="mb-1 block text-sm text-zinc-300">
+									日 <span className="text-zinc-600">（任意）</span>
+								</label>
+								<select
+									value={birthDayInput}
+									onChange={(e) => setBirthDayInput(e.target.value)}
+									disabled={!birthMonthInput}
+									className="w-full rounded border border-zinc-600 bg-zinc-900 px-3 py-2 text-zinc-100 disabled:opacity-40"
+								>
+									<option value="">--</option>
+									{Array.from({ length: 31 }, (_, i) => (
+										<option key={i + 1} value={i + 1}>
+											{i + 1}日
+										</option>
+									))}
+								</select>
+							</div>
 						</div>
 						<button
 							type="button"
@@ -285,6 +341,8 @@ export default function LifeChartPage({
 								fd.set("intent", "createChart");
 								fd.set("memberId", memberId);
 								fd.set("birthYear", birthYearInput);
+								if (birthMonthInput) fd.set("birthMonth", birthMonthInput);
+								if (birthDayInput) fd.set("birthDay", birthDayInput);
 								fd.set("name", chartName || "マイライフチャート");
 								fetcher.submit(fd, { method: "post" });
 							}}
@@ -304,13 +362,22 @@ export default function LifeChartPage({
 
 	const isSubmitting = fetcher.state !== "idle";
 
+	// 生年月日の表示テキスト
+	const birthDateText = [
+		`${chart.birthYear}年`,
+		chart.birthMonth ? `${chart.birthMonth}月` : null,
+		chart.birthDay ? `${chart.birthDay}日` : null,
+	]
+		.filter(Boolean)
+		.join("");
+
 	return (
 		<div className="mx-auto max-w-4xl px-4 py-8">
 			{/* ヘッダー */}
 			<div className="mb-6 flex flex-wrap items-center justify-between gap-3">
 				<h1 className="text-2xl font-bold text-zinc-100">{chart.name}</h1>
 				<div className="flex items-center gap-3 text-sm text-zinc-400">
-					<span>生まれ年: {chart.birthYear}</span>
+					<span>生年月日: {birthDateText}</span>
 					<span>
 						現在: {new Date().getFullYear() - chart.birthYear}歳
 					</span>
@@ -392,6 +459,8 @@ export default function LifeChartPage({
 							fd.set("intent", data.intent);
 							fd.set("chartId", String(data.chartId));
 							fd.set("age", String(data.age));
+							if (data.month != null) fd.set("month", String(data.month));
+							if (data.day != null) fd.set("day", String(data.day));
 							fd.set("score", String(data.score));
 							fd.set("category", data.category);
 							fd.set("title", data.title);

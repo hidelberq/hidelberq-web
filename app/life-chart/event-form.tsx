@@ -9,14 +9,14 @@ interface EventFormProps {
 		eventId?: number;
 		chartId: number;
 		age: number;
+		month: number | null;
+		day: number | null;
 		score: number;
 		category: Category;
 		title: string;
 		note: string;
 	}) => void;
 	onCancel: () => void;
-	/** リアルタイムプレビュー用 */
-	onPreview?: (age: number, score: number, category: Category) => void;
 }
 
 export function EventForm({
@@ -24,9 +24,14 @@ export function EventForm({
 	editingEvent,
 	onSubmit,
 	onCancel,
-	onPreview,
 }: EventFormProps) {
 	const [age, setAge] = useState(editingEvent?.age ?? 0);
+	const [month, setMonth] = useState<string>(
+		editingEvent?.month?.toString() ?? "",
+	);
+	const [day, setDay] = useState<string>(
+		editingEvent?.day?.toString() ?? "",
+	);
 	const [score, setScore] = useState(editingEvent?.score ?? 0);
 	const [category, setCategory] = useState<Category>(
 		(editingEvent?.category as Category) ?? "other",
@@ -34,23 +39,18 @@ export function EventForm({
 	const [title, setTitle] = useState(editingEvent?.title ?? "");
 	const [note, setNote] = useState(editingEvent?.note ?? "");
 
-	const handleScoreChange = (val: number) => {
-		setScore(val);
-		onPreview?.(age, val, category);
-	};
-	const handleAgeChange = (val: number) => {
-		setAge(val);
-		onPreview?.(val, score, category);
-	};
-
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!title.trim()) return;
+		const monthNum = month ? Number(month) : null;
+		const dayNum = day ? Number(day) : null;
 		onSubmit({
 			intent: editingEvent ? "updateEvent" : "addEvent",
 			eventId: editingEvent?.id,
 			chartId,
 			age,
+			month: monthNum && monthNum >= 1 && monthNum <= 12 ? monthNum : null,
+			day: dayNum && dayNum >= 1 && dayNum <= 31 ? dayNum : null,
 			score,
 			category,
 			title: title.trim(),
@@ -72,30 +72,52 @@ export function EventForm({
 						min={0}
 						max={150}
 						value={age}
-						onChange={(e) => handleAgeChange(Number(e.target.value))}
+						onChange={(e) => setAge(Number(e.target.value))}
 						className="w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100"
 						required
 					/>
 				</div>
 
-				{/* スコア */}
+				{/* 月（任意） */}
 				<div>
 					<label className="mb-1 block text-xs text-zinc-400">
-						充実度: <span className="font-bold text-zinc-200">{score > 0 ? `+${score}` : score}</span>
+						月 <span className="text-zinc-600">（任意）</span>
 					</label>
-					<input
-						type="range"
-						min={-10}
-						max={10}
-						value={score}
-						onChange={(e) => handleScoreChange(Number(e.target.value))}
-						className="w-full accent-blue-500"
-					/>
-					<div className="flex justify-between text-[10px] text-zinc-500">
-						<span>-10</span>
-						<span>0</span>
-						<span>+10</span>
-					</div>
+					<select
+						value={month}
+						onChange={(e) => {
+							setMonth(e.target.value);
+							if (!e.target.value) setDay("");
+						}}
+						className="w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100"
+					>
+						<option value="">--</option>
+						{Array.from({ length: 12 }, (_, i) => (
+							<option key={i + 1} value={i + 1}>
+								{i + 1}月
+							</option>
+						))}
+					</select>
+				</div>
+
+				{/* 日（任意、月が選択されている場合のみ） */}
+				<div>
+					<label className="mb-1 block text-xs text-zinc-400">
+						日 <span className="text-zinc-600">（任意）</span>
+					</label>
+					<select
+						value={day}
+						onChange={(e) => setDay(e.target.value)}
+						disabled={!month}
+						className="w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 disabled:opacity-40"
+					>
+						<option value="">--</option>
+						{Array.from({ length: 31 }, (_, i) => (
+							<option key={i + 1} value={i + 1}>
+								{i + 1}日
+							</option>
+						))}
+					</select>
 				</div>
 
 				{/* 種類 */}
@@ -103,11 +125,7 @@ export function EventForm({
 					<label className="mb-1 block text-xs text-zinc-400">種類</label>
 					<select
 						value={category}
-						onChange={(e) => {
-							const c = e.target.value as Category;
-							setCategory(c);
-							onPreview?.(age, score, c);
-						}}
+						onChange={(e) => setCategory(e.target.value as Category)}
 						className="w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100"
 					>
 						{Object.entries(CATEGORIES).map(([key, { label, icon }]) => (
@@ -117,7 +135,9 @@ export function EventForm({
 						))}
 					</select>
 				</div>
+			</div>
 
+			<div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
 				{/* タイトル */}
 				<div>
 					<label className="mb-1 block text-xs text-zinc-400">タイトル</label>
@@ -131,11 +151,36 @@ export function EventForm({
 						required
 					/>
 				</div>
+
+				{/* スコア */}
+				<div>
+					<label className="mb-1 block text-xs text-zinc-400">
+						充実度:{" "}
+						<span className="font-bold text-zinc-200">
+							{score > 0 ? `+${score}` : score}
+						</span>
+					</label>
+					<input
+						type="range"
+						min={-10}
+						max={10}
+						value={score}
+						onChange={(e) => setScore(Number(e.target.value))}
+						className="w-full accent-blue-500"
+					/>
+					<div className="flex justify-between text-[10px] text-zinc-500">
+						<span>-10</span>
+						<span>0</span>
+						<span>+10</span>
+					</div>
+				</div>
 			</div>
 
 			{/* 補足 */}
 			<div className="mt-3">
-				<label className="mb-1 block text-xs text-zinc-400">補足（任意）</label>
+				<label className="mb-1 block text-xs text-zinc-400">
+					補足（任意）
+				</label>
 				<input
 					type="text"
 					value={note}
