@@ -407,7 +407,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 						hidelberq
 					</h1>
 					<p className="text-lg text-purple-200/80 max-w-md mx-auto leading-relaxed mb-8">
-						ソフトウェアエンジニア。ラッパー。社会学(宮台真司氏など)に興味あります
+						ソフトウェアエンジニア。ラッパー。社会学に興味あります
 					</p>
 					{heroImage ? (
 						<div className="w-full mx-auto">
