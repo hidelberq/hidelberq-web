@@ -419,12 +419,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 								/>
 								<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
 								<div className="flex items-center gap-2 flex-wrap">
-									<span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-fuchsia-500/30 border border-fuchsia-400/30 text-[11px] font-medium text-fuchsia-200">
-										<svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-											<path d="M12 2v4m-7.071.929L6.343 8.343M2 12h4m-.929 7.071 1.414-1.414M12 18v4m5.657-2.343 1.414 1.414M18 12h4m-2.343-5.657-1.414 1.414" />
-										</svg>
-										AI Generated
-									</span>
 									<span className="inline-flex items-center gap-0.5 px-1 py-px rounded bg-fuchsia-500/20 border border-fuchsia-400/20 text-[9px] font-medium text-fuchsia-300/80">
 										{heroImage.source === "diary" ? "昨日の日記" : "天気情報"}からAI生成
 									</span>
