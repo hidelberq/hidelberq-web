@@ -425,8 +425,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 										</svg>
 										AI Generated
 									</span>
-									<span className="text-xs text-white/50">
-										{heroImage.source === "diary" ? "昨日の日記" : "天気情報"}からAIが毎朝自動生成 - {heroImage.date}
+									<span className="inline-flex items-center gap-0.5 px-1 py-px rounded bg-fuchsia-500/20 border border-fuchsia-400/20 text-[9px] font-medium text-fuchsia-300/80">
+										{heroImage.source === "diary" ? "昨日の日記" : "天気情報"}からAI生成
 									</span>
 								</div>
 							</div>
