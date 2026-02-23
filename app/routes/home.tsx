@@ -285,6 +285,10 @@ function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 							{track.title || "Untitled Track"}
 						</p>
 						<div className="flex items-center gap-1.5">
+							<span className="inline-flex items-center gap-0.5 px-1 py-px rounded bg-fuchsia-500/20 border border-fuchsia-400/20 text-[9px] font-medium text-fuchsia-300/80">
+								AI
+							</span>
+							<span className="text-[10px] text-purple-300/40 hidden sm:inline">日記から生成</span>
 							<span className="text-[10px] text-purple-300/50">{track.date}</span>
 							<span className={`text-[10px] ${track.type === "rap" ? "text-cyan-400/60" : "text-fuchsia-400/60"}`}>
 								{track.type === "rap" ? "Rap" : "Inst."}
