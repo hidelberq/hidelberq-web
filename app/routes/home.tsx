@@ -89,7 +89,7 @@ const skills = [
 ];
 
 const timeline = [
-	{ year: "2025", event: "NWU に参加。楽曲制作・Vlog・HP制作を開始" },
+	{ year: "2025", event: "NWU を創設。楽曲制作・Vlog・HP制作を開始" },
 	{ year: "2024", event: "宮台真司 荒野塾・界隈塾に参加" },
 	{ year: "2020", event: "Go を書き始める。クラウドインフラ (AWS/GCP) にも注力" },
 	{ year: "2015", event: "ITベンチャーに就職。Java / Node.js をメインにエンジニアキャリアをスタート" },
@@ -381,6 +381,8 @@ function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
 
 export default function Home({ loaderData }: Route.ComponentProps) {
 	const { heroImage, tracks, activities } = loaderData;
+	const [activityExpanded, setActivityExpanded] = useState(false);
+	const visibleActivities = activityExpanded ? activities : activities.slice(0, 5);
 
 	return (
 		<div className="min-h-dvh bg-gradient-to-br from-violet-950 via-fuchsia-950 to-indigo-950">
@@ -412,124 +414,22 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 									alt={`Daily hero image - ${heroImage.date}`}
 									className="w-full aspect-video object-cover"
 								/>
-								<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4">
-									<span className="text-xs text-white/60">
-										{heroImage.source === "diary" ? "from diary" : "from weather"} - {heroImage.date}
+								<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+								<div className="flex items-center gap-2 flex-wrap">
+									<span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-fuchsia-500/30 border border-fuchsia-400/30 text-[11px] font-medium text-fuchsia-200">
+										<svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+											<path d="M12 2v4m-7.071.929L6.343 8.343M2 12h4m-.929 7.071 1.414-1.414M12 18v4m5.657-2.343 1.414 1.414M18 12h4m-2.343-5.657-1.414 1.414" />
+										</svg>
+										AI Generated
+									</span>
+									<span className="text-xs text-white/50">
+										{heroImage.source === "diary" ? "昨日の日記" : "天気情報"}からAIが毎朝自動生成 - {heroImage.date}
 									</span>
 								</div>
+							</div>
 							</div>
 						</div>
 					) : null}
-				</section>
-
-				{/* Activity Feed */}
-				{activities.length > 0 && (
-					<section className="w-full max-w-2xl mb-16">
-						<SectionHeading>Activity</SectionHeading>
-						<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 overflow-hidden">
-							<div className="divide-y divide-white/5">
-								{activities.map((activity) => (
-									<div
-										key={activity.id}
-										className="flex items-start gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
-									>
-										<div className="mt-0.5 flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-fuchsia-500/20 to-cyan-500/20 border border-white/10 flex items-center justify-center text-fuchsia-300">
-											<ActivityIcon type={activity.type} />
-										</div>
-										<div className="flex-1 min-w-0">
-											<div className="flex items-center gap-2 mb-0.5">
-												<span className="text-[10px] font-medium uppercase tracking-wider text-fuchsia-400/70 bg-fuchsia-500/10 px-1.5 py-0.5 rounded">
-													{activityLabels[activity.type] ?? activity.type}
-												</span>
-												<span className="text-[11px] text-purple-300/40">
-													{formatRelativeTime(activity.createdAt)}
-												</span>
-											</div>
-											<p className="text-sm text-purple-100/80 truncate">
-												{activity.message}
-											</p>
-										</div>
-									</div>
-								))}
-							</div>
-						</div>
-					</section>
-				)}
-
-				{/* About */}
-				<section className="w-full max-w-2xl mb-16">
-					<SectionHeading>About</SectionHeading>
-					<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 p-6 space-y-3 text-purple-100/90 leading-relaxed">
-						<p>
-							サーバーサイドをメインとするITエンジニア。2015年からのキャリアで、Java
-							/ Go を中心にバックエンド開発を行っています。Node.js、Python、Terraform
-							も実務経験があり、AWS・GCP
-							等のクラウドインフラの設計・構築・運用も対応できます。
-						</p>
-						<p>
-							フロントエンドは React / TypeScript
-							を触った経験があり、このサイト自体も React Router + Cloudflare Workers
-							で構築しています。最近は AI / LLM
-							の活用にも取り組んでおり、LLMを使ったアプリケーション開発も行っています。
-						</p>
-						<p>
-							大学時代は放送研究部・映画研究部で映画制作やラジオ番組の制作に没頭。卒業後は情報系の研究室に進み、そこからラッパーとしての作詞・パフォーマンス活動も始めました。社会学、特に宮台真司氏の理論に関心があり、2024年から荒野塾・界隈塾に参加しています。
-						</p>
-						<p>
-							<a
-								href="https://nw-union.net/"
-								target="_blank"
-								rel="noopener noreferrer"
-								className="font-semibold text-fuchsia-300 hover:text-fuchsia-200 transition-colors underline underline-offset-2"
-							>
-								NWU (nw-union.net)
-							</a>{" "}
-							所属。
-						</p>
-					</div>
-				</section>
-
-				{/* Skills */}
-				<section className="w-full max-w-2xl mb-16">
-					<SectionHeading>Skills</SectionHeading>
-					<div className="grid gap-4">
-						{skills.map((skill) => (
-							<div key={skill.name} className="group">
-								<div className="flex justify-between mb-1.5">
-									<span className="text-sm font-medium text-purple-100">
-										{skill.name}
-									</span>
-									<span className="text-sm text-purple-300/70">
-										{skill.level}%
-									</span>
-								</div>
-								<div className="h-2.5 rounded-full bg-white/10 overflow-hidden">
-									<div
-										className={`h-full rounded-full bg-gradient-to-r ${skill.color} transition-all duration-500`}
-										style={{ width: `${skill.level}%` }}
-									/>
-								</div>
-							</div>
-						))}
-					</div>
-				</section>
-
-				{/* Timeline */}
-				<section className="w-full max-w-2xl mb-16">
-					<SectionHeading>Timeline</SectionHeading>
-					<div className="relative pl-6 border-l-2 border-fuchsia-500/30 space-y-6">
-						{timeline.map((item) => (
-							<div key={item.year} className="relative">
-								<div className="absolute -left-[1.6rem] top-1 w-3 h-3 rounded-full bg-fuchsia-500 border-2 border-fuchsia-300" />
-								<span className="text-sm font-bold text-fuchsia-300">
-									{item.year}
-								</span>
-								<p className="text-purple-100/80 mt-0.5">
-									{item.event}
-								</p>
-							</div>
-						))}
-					</div>
 				</section>
 
 				{/* Apps */}
@@ -608,6 +508,120 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 								</p>
 							</div>
 						</Link>
+					</div>
+				</section>
+
+				{/* Activity Feed */}
+				{activities.length > 0 && (
+					<section className="w-full max-w-2xl mb-16">
+						<SectionHeading>Activity</SectionHeading>
+						<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 overflow-hidden">
+							<div className="divide-y divide-white/5">
+								{visibleActivities.map((activity) => (
+									<div
+										key={activity.id}
+										className="flex items-center gap-3 px-4 py-2 hover:bg-white/5 transition-colors"
+									>
+										<div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-fuchsia-500/20 to-cyan-500/20 border border-white/10 flex items-center justify-center text-fuchsia-300">
+											<ActivityIcon type={activity.type} />
+										</div>
+										<span className="text-[10px] font-medium uppercase tracking-wider text-fuchsia-400/70 bg-fuchsia-500/10 px-1.5 py-0.5 rounded flex-shrink-0">
+											{activityLabels[activity.type] ?? activity.type}
+										</span>
+										<p className="text-sm text-purple-100/80 truncate flex-1 min-w-0">
+											{activity.message}
+										</p>
+										<span className="text-[11px] text-purple-300/40 flex-shrink-0">
+											{formatRelativeTime(activity.createdAt)}
+										</span>
+									</div>
+								))}
+							</div>
+							{activities.length > 5 && (
+								<button
+									onClick={() => setActivityExpanded(!activityExpanded)}
+									className="w-full px-4 py-2 text-xs text-purple-300/60 hover:text-purple-200 hover:bg-white/5 transition-colors border-t border-white/5"
+								>
+									{activityExpanded ? "折りたたむ" : `他 ${activities.length - 5} 件を表示`}
+								</button>
+							)}
+						</div>
+					</section>
+				)}
+
+				{/* About */}
+				<section className="w-full max-w-2xl mb-16">
+					<SectionHeading>About</SectionHeading>
+					<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 p-6 space-y-3 text-purple-100/90 leading-relaxed">
+						<p>
+							サーバーサイドをメインとするITエンジニア。2015年からのキャリアで、Java
+							/ Go を中心にバックエンド開発を行っています。Node.js、Python、Terraform
+							も実務経験があり、AWS・GCP
+							等のクラウドインフラの設計・構築・運用も対応できます。
+						</p>
+						<p>
+							フロントエンドは React / TypeScript
+							を触った経験があり、このサイト自体も React Router + Cloudflare Workers
+							で構築しています。最近は AI / LLM
+							の活用にも取り組んでおり、LLMを使ったアプリケーション開発も行っています。
+						</p>
+						<p>
+							大学時代は放送研究部・映画研究部で映画制作やラジオ番組の制作に没頭。卒業後は情報系の研究室に進み、そこからラッパーとしての作詞・パフォーマンス活動も始めました。社会学、特に宮台真司氏の理論に関心があり、2024年から荒野塾・界隈塾に参加しています。
+						</p>
+						<p>
+							<a
+								href="https://nw-union.net/"
+								target="_blank"
+								rel="noopener noreferrer"
+								className="font-semibold text-fuchsia-300 hover:text-fuchsia-200 transition-colors underline underline-offset-2"
+							>
+								NWU (nw-union.net)
+							</a>{" "}
+							を創設。
+						</p>
+					</div>
+				</section>
+
+				{/* Skills */}
+				<section className="w-full max-w-2xl mb-16">
+					<SectionHeading>Skills</SectionHeading>
+					<div className="grid gap-4">
+						{skills.map((skill) => (
+							<div key={skill.name} className="group">
+								<div className="flex justify-between mb-1.5">
+									<span className="text-sm font-medium text-purple-100">
+										{skill.name}
+									</span>
+									<span className="text-sm text-purple-300/70">
+										{skill.level}%
+									</span>
+								</div>
+								<div className="h-2.5 rounded-full bg-white/10 overflow-hidden">
+									<div
+										className={`h-full rounded-full bg-gradient-to-r ${skill.color} transition-all duration-500`}
+										style={{ width: `${skill.level}%` }}
+									/>
+								</div>
+							</div>
+						))}
+					</div>
+				</section>
+
+				{/* Timeline */}
+				<section className="w-full max-w-2xl mb-16">
+					<SectionHeading>Timeline</SectionHeading>
+					<div className="relative pl-6 border-l-2 border-fuchsia-500/30 space-y-6">
+						{timeline.map((item) => (
+							<div key={item.year} className="relative">
+								<div className="absolute -left-[1.6rem] top-1 w-3 h-3 rounded-full bg-fuchsia-500 border-2 border-fuchsia-300" />
+								<span className="text-sm font-bold text-fuchsia-300">
+									{item.year}
+								</span>
+								<p className="text-purple-100/80 mt-0.5">
+									{item.event}
+								</p>
+							</div>
+						))}
 					</div>
 				</section>
 
