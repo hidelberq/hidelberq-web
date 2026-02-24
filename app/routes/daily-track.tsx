@@ -2,8 +2,9 @@ import { Link } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { desc } from "drizzle-orm";
 import { hiphopTracks } from "../db/schema";
+import { useAudioPlayer } from "../audio-player-context";
 import type { Route } from "./+types/daily-track";
-import { useState, useRef } from "react";
+import { useState, useEffect } from "react";
 
 export function meta(_args: Route.MetaArgs) {
 	return [
@@ -59,60 +60,48 @@ function TrackPlayer({
 		diaryContent: string | null;
 	};
 }) {
-	const [isPlaying, setIsPlaying] = useState(false);
-	const [progress, setProgress] = useState(0);
-	const [currentTime, setCurrentTime] = useState(0);
-	const [audioDuration, setAudioDuration] = useState(track.duration || 0);
+	const player = useAudioPlayer();
 	const [showDiary, setShowDiary] = useState(false);
-	const audioRef = useRef<HTMLAudioElement>(null);
 
-	const audioSrc = `/daily-track/audio/${track.date}/${track.type}`;
 	const isRap = track.type === "rap";
 
+	// このトラックが現在グローバルプレイヤーで再生中か判定
+	const currentTrack = player.tracks[player.currentIndex];
+	const isCurrentTrack =
+		currentTrack?.date === track.date && currentTrack?.type === track.type;
+	const isPlaying = isCurrentTrack && player.isPlaying;
+	const progress = isCurrentTrack ? player.progress : 0;
+	const currentTime = isCurrentTrack ? player.currentTime : 0;
+	const audioDuration = isCurrentTrack
+		? player.duration || track.duration || 0
+		: track.duration || 0;
+
 	const togglePlay = () => {
-		const audio = audioRef.current;
-		if (!audio) return;
-		if (isPlaying) {
-			audio.pause();
+		if (isCurrentTrack) {
+			player.toggle();
 		} else {
-			audio.play();
+			// グローバルプレイヤーでこのトラックを再生
+			player.playTrack({
+				date: track.date,
+				type: track.type,
+				title: track.title,
+				style: track.style,
+				duration: track.duration,
+				source: track.source,
+			});
 		}
-		setIsPlaying(!isPlaying);
-	};
-
-	const handleTimeUpdate = () => {
-		const audio = audioRef.current;
-		if (!audio) return;
-		setCurrentTime(audio.currentTime);
-		if (audio.duration) {
-			setProgress((audio.currentTime / audio.duration) * 100);
-		}
-	};
-
-	const handleLoadedMetadata = () => {
-		const audio = audioRef.current;
-		if (audio?.duration) {
-			setAudioDuration(audio.duration);
-		}
-	};
-
-	const handleEnded = () => {
-		setIsPlaying(false);
-		setProgress(0);
-		setCurrentTime(0);
 	};
 
 	const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-		const audio = audioRef.current;
-		if (!audio || !audio.duration) return;
+		if (!isCurrentTrack || !player.duration) return;
 		const rect = e.currentTarget.getBoundingClientRect();
 		const x = e.clientX - rect.left;
 		const pct = x / rect.width;
-		audio.currentTime = pct * audio.duration;
+		player.seekTo(pct);
 	};
 
 	return (
-		<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 overflow-hidden transition-all hover:border-white/20">
+		<div className={`rounded-2xl bg-white/5 backdrop-blur-sm border overflow-hidden transition-all hover:border-white/20 ${isCurrentTrack ? "border-fuchsia-500/40" : "border-white/10"}`}>
 			{/* ヘッダー */}
 			<div className="px-5 pt-4 pb-2">
 				<div className="flex items-center justify-between mb-1">
@@ -144,17 +133,6 @@ function TrackPlayer({
 
 			{/* プレイヤー */}
 			<div className="px-5 py-3">
-				<audio
-					ref={audioRef}
-					src={audioSrc}
-					preload="none"
-					onTimeUpdate={handleTimeUpdate}
-					onLoadedMetadata={handleLoadedMetadata}
-					onEnded={handleEnded}
-					onPause={() => setIsPlaying(false)}
-					onPlay={() => setIsPlaying(true)}
-				/>
-
 				<div className="flex items-center gap-3">
 					{/* 再生ボタン */}
 					<button
@@ -195,7 +173,7 @@ function TrackPlayer({
 							</span>
 							<span className="text-[10px] text-purple-300/40">
 								{formatDuration(
-									Math.round(audioDuration || track.duration || 0),
+									Math.round(audioDuration),
 								)}
 							</span>
 						</div>
@@ -226,6 +204,23 @@ function TrackPlayer({
 
 export default function DailyTrackPage({ loaderData }: Route.ComponentProps) {
 	const { tracks } = loaderData;
+	const { setPlaylist, tracks: playerTracks } = useAudioPlayer();
+
+	// このページのトラックリストでプレイリストを更新
+	useEffect(() => {
+		if (tracks.length > 0) {
+			setPlaylist(
+				tracks.map((t) => ({
+					date: t.date,
+					type: t.type,
+					title: t.title,
+					style: t.style,
+					duration: t.duration,
+					source: t.source,
+				})),
+			);
+		}
+	}, [tracks, setPlaylist]);
 
 	return (
 		<div className="min-h-dvh bg-gradient-to-br from-violet-950 via-fuchsia-950 to-indigo-950">
@@ -270,7 +265,7 @@ export default function DailyTrackPage({ loaderData }: Route.ComponentProps) {
 				</section>
 
 				{/* フッター */}
-				<footer className="text-center text-sm text-purple-300/40 mt-16">
+				<footer className={`text-center text-sm text-purple-300/40 mt-16 ${playerTracks.length > 0 ? "pb-16" : ""}`}>
 					Powered by Suno AI &times; Gemini
 				</footer>
 			</div>
