@@ -1,42 +1,78 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import type { Category, LifeChartEvent } from "./types";
 import { CATEGORIES } from "./types";
 import {
-	buildCurvePath,
+	buildLinePath,
 	findExtrema,
 	formatAge,
 	getFractionalAge,
 	getMaxAge,
 } from "./utils";
 
-const PADDING = { top: 30, right: 30, bottom: 40, left: 50 };
+const PADDING = { top: 40, right: 30, bottom: 40, left: 50 };
 const CHART_WIDTH = 800;
-const CHART_HEIGHT = 400;
+const CHART_HEIGHT = 450;
 const INNER_W = CHART_WIDTH - PADDING.left - PADDING.right;
 const INNER_H = CHART_HEIGHT - PADDING.top - PADDING.bottom;
 
 interface ChartProps {
 	events: LifeChartEvent[];
 	birthYear: number;
+	birthMonth: number | null;
+	birthDay: number | null;
 	hiddenCategories: Set<Category>;
+}
+
+/** 吹き出しの尻尾付き背景パス */
+function balloonPath(
+	x: number,
+	y: number,
+	w: number,
+	h: number,
+	tailX: number,
+	tailY: number,
+	r: number,
+): string {
+	// 角丸四角形 + 尻尾
+	const left = x;
+	const right = x + w;
+	const top = y;
+	const bottom = y + h;
+	const tailW = 6;
+
+	// 尻尾の付け根位置（吹き出しの下辺中央付近）
+	const tx = Math.max(left + r + tailW, Math.min(right - r - tailW, tailX));
+
+	return [
+		`M ${left + r} ${top}`,
+		`L ${right - r} ${top}`,
+		`Q ${right} ${top} ${right} ${top + r}`,
+		`L ${right} ${bottom - r}`,
+		`Q ${right} ${bottom} ${right - r} ${bottom}`,
+		`L ${tx + tailW} ${bottom}`,
+		`L ${tailX} ${tailY}`,
+		`L ${tx - tailW} ${bottom}`,
+		`L ${left + r} ${bottom}`,
+		`Q ${left} ${bottom} ${left} ${bottom - r}`,
+		`L ${left} ${top + r}`,
+		`Q ${left} ${top} ${left + r} ${top}`,
+		"Z",
+	].join(" ");
 }
 
 export function LifeChartSVG({
 	events,
 	birthYear,
+	birthMonth,
+	birthDay,
 	hiddenCategories,
 }: ChartProps) {
 	const svgRef = useRef<SVGSVGElement>(null);
-	const [tooltip, setTooltip] = useState<{
-		x: number;
-		y: number;
-		event: LifeChartEvent;
-	} | null>(null);
 
 	const visibleEvents = events.filter(
 		(e) => !hiddenCategories.has(e.category as Category),
 	);
-	const maxAge = getMaxAge(events, birthYear);
+	const maxAge = getMaxAge(events, birthYear, birthMonth, birthDay);
 
 	const toX = useCallback(
 		(age: number) => PADDING.left + (age / maxAge) * INNER_W,
@@ -47,7 +83,7 @@ export function LifeChartSVG({
 		[],
 	);
 
-	const curvePath = buildCurvePath(visibleEvents, toX, toY);
+	const linePath = buildLinePath(visibleEvents, toX, toY);
 	const extrema = useMemo(() => findExtrema(visibleEvents), [visibleEvents]);
 
 	// X 軸の目盛り (5歳刻み)
@@ -55,8 +91,6 @@ export function LifeChartSVG({
 	for (let age = 0; age <= maxAge; age += 5) {
 		xTicks.push(age);
 	}
-
-	// Y 軸の目盛り
 	const yTicks = [-10, -5, 0, 5, 10];
 
 	const sortedVisible = useMemo(
@@ -91,7 +125,6 @@ export function LifeChartSVG({
 					ref={svgRef}
 					viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
 					className="min-w-[600px] w-full"
-					onMouseLeave={() => setTooltip(null)}
 				>
 					{/* グリッド線 */}
 					{yTicks.map((score) => (
@@ -145,10 +178,10 @@ export function LifeChartSVG({
 						</text>
 					))}
 
-					{/* 曲線 */}
-					{curvePath && (
+					{/* 折れ線 */}
+					{linePath && (
 						<path
-							d={curvePath}
+							d={linePath}
 							fill="none"
 							stroke="#60a5fa"
 							strokeWidth={2.5}
@@ -157,7 +190,7 @@ export function LifeChartSVG({
 						/>
 					)}
 
-					{/* データポイント */}
+					{/* データポイント + 吹き出し */}
 					{sortedVisible.map((event) => {
 						const cat =
 							CATEGORIES[event.category as Category] ??
@@ -171,7 +204,36 @@ export function LifeChartSVG({
 						const isLocalMin = extrema.minima.has(event.id);
 						const isExtreme =
 							isGlobalMax || isGlobalMin || isLocalMax || isLocalMin;
-						const r = isExtreme ? 8 : 6;
+						const r = isExtreme ? 8 : 5;
+
+						// 吹き出し内容
+						const ageText = formatAge(event.age, event.month, event.day);
+						const scoreText =
+							event.score > 0
+								? `+${event.score}`
+								: String(event.score);
+						const line1 = `${cat.icon} ${event.title}`;
+						const line2 = `${ageText} / ${scoreText}`;
+						const hasNote = !!event.note;
+
+						// 吹き出しサイズ
+						const bW = Math.max(
+							line1.length * 7 + 16,
+							line2.length * 6.5 + 16,
+							hasNote
+								? Math.min(event.note!.length, 20) * 6 + 16
+								: 0,
+							90,
+						);
+						const bH = hasNote ? 48 : 34;
+						const above = cy > PADDING.top + INNER_H / 2;
+						const bY = above ? cy - bH - 16 : cy + 16;
+						let bX = cx - bW / 2;
+						if (bX < PADDING.left) bX = PADDING.left;
+						if (bX + bW > CHART_WIDTH - PADDING.right)
+							bX = CHART_WIDTH - PADDING.right - bW;
+
+						const tailY = above ? bY + bH : bY;
 
 						return (
 							<g key={event.id}>
@@ -206,31 +268,16 @@ export function LifeChartSVG({
 												? "#f87171"
 												: "#18181b"
 									}
-									strokeWidth={isGlobalMax || isGlobalMin ? 3 : 2}
-									className="cursor-pointer"
-									onMouseEnter={() =>
-										setTooltip({ x: cx, y: cy, event })
+									strokeWidth={
+										isGlobalMax || isGlobalMin ? 3 : 2
 									}
-									onMouseLeave={() => setTooltip(null)}
 								/>
-
-								{/* イベント名ラベル */}
-								<text
-									x={cx}
-									y={cy - (isExtreme ? 20 : 12)}
-									textAnchor="middle"
-									fill="#d4d4d8"
-									fontSize={10}
-									className="pointer-events-none"
-								>
-									{event.title}
-								</text>
 
 								{/* 極大極小ラベル */}
 								{isGlobalMax && (
 									<text
 										x={cx}
-										y={cy - 32}
+										y={cy - (isExtreme ? 20 : 12)}
 										textAnchor="middle"
 										fill="#4ade80"
 										fontSize={10}
@@ -243,7 +290,7 @@ export function LifeChartSVG({
 								{isGlobalMin && (
 									<text
 										x={cx}
-										y={cy + (isExtreme ? 28 : 22)}
+										y={cy + (isExtreme ? 26 : 20)}
 										textAnchor="middle"
 										fill="#f87171"
 										fontSize={10}
@@ -256,7 +303,7 @@ export function LifeChartSVG({
 								{isLocalMax && !isGlobalMax && (
 									<text
 										x={cx}
-										y={cy - 32}
+										y={cy - (isExtreme ? 20 : 12)}
 										textAnchor="middle"
 										fill="#4ade8088"
 										fontSize={9}
@@ -268,7 +315,7 @@ export function LifeChartSVG({
 								{isLocalMin && !isGlobalMin && (
 									<text
 										x={cx}
-										y={cy + (isExtreme ? 28 : 22)}
+										y={cy + (isExtreme ? 26 : 20)}
 										textAnchor="middle"
 										fill="#f8717188"
 										fontSize={9}
@@ -277,78 +324,57 @@ export function LifeChartSVG({
 										▼
 									</text>
 								)}
+
+								{/* 吹き出し */}
+								<path
+									d={balloonPath(
+										bX,
+										bY,
+										bW,
+										bH,
+										cx,
+										tailY,
+										4,
+									)}
+									fill="#27272aee"
+									stroke="#52525b"
+									strokeWidth={0.5}
+								/>
+								<text
+									x={bX + 8}
+									y={bY + 14}
+									fill="#fafafa"
+									fontSize={11}
+									fontWeight="bold"
+									className="pointer-events-none"
+								>
+									{line1}
+								</text>
+								<text
+									x={bX + 8}
+									y={bY + 28}
+									fill="#a1a1aa"
+									fontSize={10}
+									className="pointer-events-none"
+								>
+									{line2}
+								</text>
+								{hasNote && (
+									<text
+										x={bX + 8}
+										y={bY + 42}
+										fill="#78716c"
+										fontSize={9}
+										className="pointer-events-none"
+									>
+										{event.note!.length > 20
+											? `${event.note!.slice(0, 20)}…`
+											: event.note}
+									</text>
+								)}
 							</g>
 						);
 					})}
-
-					{/* ツールチップ */}
-					{tooltip &&
-						(() => {
-							const cat =
-								CATEGORIES[tooltip.event.category as Category] ??
-								CATEGORIES.other;
-							const ageText = formatAge(
-								tooltip.event.age,
-								tooltip.event.month,
-								tooltip.event.day,
-							);
-							const boxW = 200;
-							const boxH = tooltip.event.note ? 62 : 46;
-							let tx = tooltip.x - boxW / 2;
-							let ty = tooltip.y - boxH - 24;
-							if (tx < PADDING.left) tx = PADDING.left;
-							if (tx + boxW > CHART_WIDTH - PADDING.right)
-								tx = CHART_WIDTH - PADDING.right - boxW;
-							if (ty < 4) ty = tooltip.y + 16;
-							return (
-								<g className="pointer-events-none">
-									<rect
-										x={tx}
-										y={ty}
-										width={boxW}
-										height={boxH}
-										rx={6}
-										fill="#27272a"
-										stroke="#52525b"
-										strokeWidth={1}
-									/>
-									<text
-										x={tx + 8}
-										y={ty + 18}
-										fill="#fafafa"
-										fontSize={12}
-										fontWeight="bold"
-									>
-										{cat.icon} {tooltip.event.title}
-									</text>
-									<text
-										x={tx + 8}
-										y={ty + 36}
-										fill="#a1a1aa"
-										fontSize={11}
-									>
-										{ageText} / スコア:{" "}
-										{tooltip.event.score > 0
-											? `+${tooltip.event.score}`
-											: tooltip.event.score}{" "}
-										/ {cat.label}
-									</text>
-									{tooltip.event.note && (
-										<text
-											x={tx + 8}
-											y={ty + 54}
-											fill="#a1a1aa"
-											fontSize={10}
-										>
-											{tooltip.event.note.slice(0, 30)}
-											{tooltip.event.note.length > 30
-												? "…"
-												: ""}
-										</text>
-									)}
-								</g>
-							);
-						})()}
 				</svg>
 			</div>
 

@@ -12,6 +12,7 @@ import {
 	type Category,
 	type LifeChartEvent,
 } from "~/life-chart/types";
+import { getCurrentAge } from "~/life-chart/utils";
 import type { Route } from "./+types/life-chart";
 
 export const meta: MetaFunction = () => [
@@ -379,7 +380,7 @@ export default function LifeChartPage({
 				<div className="flex items-center gap-3 text-sm text-zinc-400">
 					<span>生年月日: {birthDateText}</span>
 					<span>
-						現在: {new Date().getFullYear() - chart.birthYear}歳
+						現在: {getCurrentAge(chart.birthYear, chart.birthMonth, chart.birthDay)}歳
 					</span>
 				</div>
 			</div>
@@ -411,6 +412,8 @@ export default function LifeChartPage({
 			<LifeChartSVG
 				events={events}
 				birthYear={chart.birthYear}
+				birthMonth={chart.birthMonth}
+				birthDay={chart.birthDay}
 				hiddenCategories={hiddenCategories}
 			/>
 
@@ -453,6 +456,8 @@ export default function LifeChartPage({
 				<div className="mt-4">
 					<EventForm
 						chartId={chart.id}
+						birthYear={chart.birthYear}
+						birthMonth={chart.birthMonth}
 						editingEvent={editingEvent ?? undefined}
 						onSubmit={(data) => {
 							const fd = new FormData();

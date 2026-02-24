@@ -16,10 +16,36 @@ export function getFractionalAge(event: LifeChartEvent): number {
 }
 
 /**
- * イベントをソート済みの座標点に変換し、Catmull-Rom スプラインで
- * SVG の cubic bezier パスを生成する
+ * 生年月日を考慮した正確な現在年齢を計算
  */
-export function buildCurvePath(
+export function getCurrentAge(
+	birthYear: number,
+	birthMonth: number | null,
+	birthDay: number | null,
+): number {
+	const now = new Date();
+	const thisYear = now.getFullYear();
+	const thisMonth = now.getMonth() + 1;
+	const thisDay = now.getDate();
+
+	let age = thisYear - birthYear;
+
+	// 月日が指定されている場合、誕生日がまだ来ていなければ -1
+	if (birthMonth) {
+		if (thisMonth < birthMonth) {
+			age--;
+		} else if (thisMonth === birthMonth && birthDay && thisDay < birthDay) {
+			age--;
+		}
+	}
+
+	return age;
+}
+
+/**
+ * イベントをソート済みの座標点に変換し、折れ線グラフのパスを生成する
+ */
+export function buildLinePath(
 	events: LifeChartEvent[],
 	toX: (age: number) => number,
 	toY: (score: number) => number,
@@ -39,22 +65,9 @@ export function buildCurvePath(
 		y: toY(e.score),
 	}));
 
-	// Catmull-Rom → cubic bezier 変換
-	const tension = 0.3;
 	let d = `M ${points[0].x} ${points[0].y}`;
-
-	for (let i = 0; i < points.length - 1; i++) {
-		const p0 = points[Math.max(0, i - 1)];
-		const p1 = points[i];
-		const p2 = points[i + 1];
-		const p3 = points[Math.min(points.length - 1, i + 2)];
-
-		const cp1x = p1.x + (p2.x - p0.x) * tension;
-		const cp1y = p1.y + (p2.y - p0.y) * tension;
-		const cp2x = p2.x - (p3.x - p1.x) * tension;
-		const cp2y = p2.y - (p3.y - p1.y) * tension;
-
-		d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+	for (let i = 1; i < points.length; i++) {
+		d += ` L ${points[i].x} ${points[i].y}`;
 	}
 
 	return d;
@@ -66,8 +79,10 @@ export function buildCurvePath(
 export function getMaxAge(
 	events: LifeChartEvent[],
 	birthYear: number,
+	birthMonth: number | null,
+	birthDay: number | null,
 ): number {
-	const currentAge = new Date().getFullYear() - birthYear;
+	const currentAge = getCurrentAge(birthYear, birthMonth, birthDay);
 	const maxEventAge =
 		events.length > 0
 			? Math.max(...events.map((e) => getFractionalAge(e)))
@@ -77,7 +92,6 @@ export function getMaxAge(
 
 /**
  * 極大・極小イベントを検出する
- * 隣接イベント（ソート後）と比較し、スコアが両隣より高い/低いものを返す
  */
 export function findExtrema(events: LifeChartEvent[]): {
 	maxima: Set<number>;
@@ -97,7 +111,6 @@ export function findExtrema(events: LifeChartEvent[]): {
 		(a, b) => getFractionalAge(a) - getFractionalAge(b),
 	);
 
-	// 全体の最大・最小を求める
 	let maxScore = -Infinity;
 	let minScore = Infinity;
 	for (const e of sorted) {
@@ -111,7 +124,6 @@ export function findExtrema(events: LifeChartEvent[]): {
 		}
 	}
 
-	// 局所的な極大・極小を検出（3点以上必要）
 	for (let i = 0; i < sorted.length; i++) {
 		const prev = sorted[i - 1];
 		const curr = sorted[i];
@@ -125,7 +137,6 @@ export function findExtrema(events: LifeChartEvent[]): {
 				minima.add(curr.id);
 			}
 		} else if (sorted.length >= 2) {
-			// 端点: 最初と最後の点も隣接と比較
 			if (!prev && next && curr.score > next.score) {
 				maxima.add(curr.id);
 			}
@@ -160,4 +171,27 @@ export function formatAge(
 		}
 	}
 	return text;
+}
+
+/**
+ * 西暦から年齢に変換
+ */
+export function yearToAge(
+	year: number,
+	birthYear: number,
+	month?: number | null,
+	birthMonth?: number | null,
+): number {
+	let age = year - birthYear;
+	if (month && birthMonth && month < birthMonth) {
+		age--;
+	}
+	return Math.max(0, age);
+}
+
+/**
+ * 年齢から西暦に変換
+ */
+export function ageToYear(age: number, birthYear: number): number {
+	return birthYear + age;
 }
