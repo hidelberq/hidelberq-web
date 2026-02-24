@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { desc, sql } from "drizzle-orm";
 import { heroImages, activityLog, hiphopTracks } from "../db/schema";
+import { useAudioPlayer } from "../audio-player-context";
 import type { Route } from "./+types/home";
 
 export function meta(_args: Route.MetaArgs) {
@@ -178,214 +179,25 @@ function ActivityIcon({ type }: { type: string }) {
 	}
 }
 
-type TrackInfo = {
-	date: string;
-	type: string;
-	title: string | null;
-	style: string | null;
-	duration: number | null;
-	source: string;
-};
-
-function FixedBottomPlayer({ tracks }: { tracks: TrackInfo[] }) {
-	const [currentIndex, setCurrentIndex] = useState(0);
-	const [isPlaying, setIsPlaying] = useState(false);
-	const [progress, setProgress] = useState(0);
-	const [currentTime, setCurrentTime] = useState(0);
-	const [duration, setDuration] = useState(0);
-	const audioRef = useRef<HTMLAudioElement>(null);
-	// 自動再生の継続を追跡するref（onPause による isPlaying=false の影響を回避）
-	const autoAdvancingRef = useRef(false);
-
-	const track = tracks[currentIndex];
-
-	const audioSrc = `/daily-track/audio/${track.date}/${track.type}`;
-
-	const handlePrev = useCallback(() => {
-		if (currentIndex < tracks.length - 1) {
-			setCurrentIndex((i) => i + 1);
-			setIsPlaying(true);
-		}
-	}, [currentIndex, tracks.length]);
-
-	const handleNext = useCallback(() => {
-		if (currentIndex > 0) {
-			setCurrentIndex((i) => i - 1);
-			setIsPlaying(true);
-		}
-	}, [currentIndex]);
-
-	const togglePlay = useCallback(() => {
-		const audio = audioRef.current;
-		if (!audio) return;
-		if (isPlaying) {
-			audio.pause();
-		} else {
-			audio.play();
-		}
-	}, [isPlaying]);
-
-	// トラック切り替え時に自動再生
+// トップページのトラックリストをグローバルプレイヤーに設定する hook
+function useSetPlaylistOnMount(tracks: { date: string; type: string; title: string | null; style: string | null; duration: number | null; source: string }[]) {
+	const { setPlaylist, tracks: currentTracks } = useAudioPlayer();
 	useEffect(() => {
-		const audio = audioRef.current;
-		if (!audio) return;
-		audio.load();
-		// autoAdvancingRef が true なら自動再生を継続
-		if (isPlaying || autoAdvancingRef.current) {
-			autoAdvancingRef.current = false;
-			setIsPlaying(true);
-			audio.play();
+		// トラックがあり、まだプレイリストが設定されていない場合のみ設定
+		if (tracks.length > 0 && currentTracks.length === 0) {
+			setPlaylist(tracks);
 		}
-		setProgress(0);
-		setCurrentTime(0);
-		setDuration(0);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [currentIndex]);
-
-	const formatTime = (sec: number) => {
-		const m = Math.floor(sec / 60);
-		const s = Math.floor(sec % 60);
-		return `${m}:${s.toString().padStart(2, "0")}`;
-	};
-
-	return (
-		<div className="fixed bottom-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-xl border-t border-white/10">
-			{/* プログレスバー */}
-			<div
-				className="h-1 bg-white/10 cursor-pointer"
-				onClick={(e) => {
-					const audio = audioRef.current;
-					if (!audio || !duration) return;
-					const rect = e.currentTarget.getBoundingClientRect();
-					const ratio = (e.clientX - rect.left) / rect.width;
-					audio.currentTime = ratio * duration;
-				}}
-			>
-				<div
-					className="h-full bg-gradient-to-r from-fuchsia-500 to-cyan-400 transition-[width] duration-200"
-					style={{ width: `${progress}%` }}
-				/>
-			</div>
-
-			<div className="max-w-4xl mx-auto px-4 py-2 flex items-center gap-2 sm:gap-3">
-				{/* トラック情報 */}
-				<Link
-					to="/daily-track"
-					className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3 group"
-				>
-					<div className="flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-fuchsia-500/30 to-cyan-500/30 border border-white/10 flex items-center justify-center">
-						<svg className="w-4 h-4 sm:w-5 sm:h-5 text-fuchsia-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-							<path d="M9 18V5l12-3v13" />
-							<circle cx="6" cy="18" r="3" />
-							<circle cx="18" cy="15" r="3" />
-						</svg>
-					</div>
-					<div className="min-w-0">
-						<p className="text-sm font-semibold text-white group-hover:text-fuchsia-200 transition-colors truncate">
-							{track.title || "Untitled Track"}
-						</p>
-						<div className="flex items-center gap-1.5">
-							<span className="inline-flex items-center gap-0.5 px-1 py-px rounded bg-fuchsia-500/20 border border-fuchsia-400/20 text-[7px] font-medium text-fuchsia-300/80">
-								昨日の日記からAI生成
-							</span>
-							<span className="text-[10px] text-purple-300/50">{track.date}</span>
-							<span className={`text-[10px] ${track.type === "rap" ? "text-cyan-400/60" : "text-fuchsia-400/60"}`}>
-								{track.type === "rap" ? "Rap" : "Inst."}
-							</span>
-							{duration > 0 && (
-								<span className="text-[10px] text-purple-300/40">
-									{formatTime(currentTime)} / {formatTime(duration)}
-								</span>
-							)}
-						</div>
-					</div>
-				</Link>
-
-				{/* コントロール */}
-				<div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-					{/* 前の曲（古い方） */}
-					<button
-						onClick={handlePrev}
-						disabled={currentIndex >= tracks.length - 1}
-						className="w-8 h-8 flex items-center justify-center text-white/70 hover:text-white disabled:text-white/20 transition-colors"
-						title="前の曲"
-					>
-						<svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-							<path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" />
-						</svg>
-					</button>
-					{/* 再生/一時停止 */}
-					<button
-						onClick={togglePlay}
-						className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-full bg-white text-black hover:bg-white/90 transition-colors"
-						title={isPlaying ? "一時停止" : "再生"}
-					>
-						{isPlaying ? (
-							<svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-								<path d="M6 4h4v16H6zm8 0h4v16h-4z" />
-							</svg>
-						) : (
-							<svg className="w-5 h-5 ml-0.5" viewBox="0 0 24 24" fill="currentColor">
-								<path d="M8 5v14l11-7z" />
-							</svg>
-						)}
-					</button>
-					{/* 次の曲（新しい方） */}
-					<button
-						onClick={handleNext}
-						disabled={currentIndex <= 0}
-						className="w-8 h-8 flex items-center justify-center text-white/70 hover:text-white disabled:text-white/20 transition-colors"
-						title="次の曲"
-					>
-						<svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-							<path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
-						</svg>
-					</button>
-				</div>
-
-				{/* トラック番号 */}
-				<span className="text-[10px] text-purple-300/40 flex-shrink-0 hidden sm:block">
-					{tracks.length - currentIndex}/{tracks.length}
-				</span>
-			</div>
-
-			{/* 非表示 audio 要素 */}
-			<audio
-				ref={audioRef}
-				src={audioSrc}
-				preload="none"
-				onPlay={() => setIsPlaying(true)}
-				onPause={() => setIsPlaying(false)}
-				onTimeUpdate={() => {
-					const audio = audioRef.current;
-					if (!audio) return;
-					setCurrentTime(audio.currentTime);
-					if (audio.duration) {
-						setProgress((audio.currentTime / audio.duration) * 100);
-					}
-				}}
-				onLoadedMetadata={() => {
-					const audio = audioRef.current;
-					if (audio) setDuration(audio.duration);
-				}}
-				onEnded={() => {
-					// 新→古の順に自動再生
-					if (currentIndex < tracks.length - 1) {
-						autoAdvancingRef.current = true;
-						setCurrentIndex((i) => i + 1);
-					} else {
-						setIsPlaying(false);
-					}
-				}}
-			/>
-		</div>
-	);
+	}, [tracks, currentTracks.length, setPlaylist]);
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
 	const { heroImage, tracks, activities } = loaderData;
+	const { tracks: playerTracks } = useAudioPlayer();
 	const [activityExpanded, setActivityExpanded] = useState(false);
 	const visibleActivities = activityExpanded ? activities : activities.slice(0, 5);
+
+	// トラック一覧をグローバルプレイヤーに設定
+	useSetPlaylistOnMount(tracks);
 
 	return (
 		<div className="min-h-dvh bg-gradient-to-br from-violet-950 via-fuchsia-950 to-indigo-950">
@@ -685,13 +497,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 				</section>
 
 				{/* Footer */}
-				<footer className={`text-center text-sm text-purple-300/40 mt-8 ${tracks.length > 0 ? "pb-16" : ""}`}>
+				<footer className={`text-center text-sm text-purple-300/40 mt-8 ${playerTracks.length > 0 ? "pb-16" : ""}`}>
 					&copy; {new Date().getFullYear()} hidelberq
 				</footer>
 			</div>
-
-			{/* 画面下部固定プレイヤー */}
-			{tracks.length > 0 && <FixedBottomPlayer tracks={tracks} />}
 		</div>
 	);
 }
