@@ -1,0 +1,1 @@
+ALTER TABLE `life_charts` ADD `display_name` text;

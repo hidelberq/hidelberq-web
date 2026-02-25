@@ -303,6 +303,7 @@ export const rhythmEntries = sqliteTable("rhythm_entries", {
 export const lifeCharts = sqliteTable("life_charts", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	memberId: text("member_id").notNull(),
+	displayName: text("display_name"), // ログイン用表示名
 	name: text("name").notNull().default("マイライフチャート"),
 	birthYear: integer("birth_year").notNull(),
 	birthMonth: integer("birth_month"), // 1-12（任意）

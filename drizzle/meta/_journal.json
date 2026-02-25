@@ -169,6 +169,13 @@
       "when": 1771500000000,
       "tag": "0023_add_life_chart_month_day",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1771600000000,
+      "tag": "0024_add_life_chart_display_name",
+      "breakpoints": true
     }
   ]
 }

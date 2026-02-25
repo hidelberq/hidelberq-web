@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { Category, LifeChartEvent } from "./types";
 import { CATEGORIES } from "./types";
 import {
@@ -33,14 +33,12 @@ function balloonPath(
 	tailY: number,
 	r: number,
 ): string {
-	// 角丸四角形 + 尻尾
 	const left = x;
 	const right = x + w;
 	const top = y;
 	const bottom = y + h;
 	const tailW = 6;
 
-	// 尻尾の付け根位置（吹き出しの下辺中央付近）
 	const tx = Math.max(left + r + tailW, Math.min(right - r - tailW, tailX));
 
 	return [
@@ -68,6 +66,7 @@ export function LifeChartSVG({
 	hiddenCategories,
 }: ChartProps) {
 	const svgRef = useRef<SVGSVGElement>(null);
+	const [activeEventId, setActiveEventId] = useState<number | null>(null);
 
 	const visibleEvents = events.filter(
 		(e) => !hiddenCategories.has(e.category as Category),
@@ -190,7 +189,17 @@ export function LifeChartSVG({
 						/>
 					)}
 
-					{/* データポイント + 吹き出し */}
+					{/* 背景クリックで吹き出しを閉じる */}
+					<rect
+						x={PADDING.left}
+						y={PADDING.top}
+						width={INNER_W}
+						height={INNER_H}
+						fill="transparent"
+						onClick={() => setActiveEventId(null)}
+					/>
+
+					{/* データポイント */}
 					{sortedVisible.map((event) => {
 						const cat =
 							CATEGORIES[event.category as Category] ??
@@ -205,35 +214,6 @@ export function LifeChartSVG({
 						const isExtreme =
 							isGlobalMax || isGlobalMin || isLocalMax || isLocalMin;
 						const r = isExtreme ? 8 : 5;
-
-						// 吹き出し内容
-						const ageText = formatAge(event.age, event.month, event.day);
-						const scoreText =
-							event.score > 0
-								? `+${event.score}`
-								: String(event.score);
-						const line1 = `${cat.icon} ${event.title}`;
-						const line2 = `${ageText} / ${scoreText}`;
-						const hasNote = !!event.note;
-
-						// 吹き出しサイズ
-						const bW = Math.max(
-							line1.length * 7 + 16,
-							line2.length * 6.5 + 16,
-							hasNote
-								? Math.min(event.note!.length, 20) * 6 + 16
-								: 0,
-							90,
-						);
-						const bH = hasNote ? 48 : 34;
-						const above = cy > PADDING.top + INNER_H / 2;
-						const bY = above ? cy - bH - 16 : cy + 16;
-						let bX = cx - bW / 2;
-						if (bX < PADDING.left) bX = PADDING.left;
-						if (bX + bW > CHART_WIDTH - PADDING.right)
-							bX = CHART_WIDTH - PADDING.right - bW;
-
-						const tailY = above ? bY + bH : bY;
 
 						return (
 							<g key={event.id}>
@@ -271,6 +251,32 @@ export function LifeChartSVG({
 									strokeWidth={
 										isGlobalMax || isGlobalMin ? 3 : 2
 									}
+									className="pointer-events-none"
+								/>
+
+								{/* タッチ/ホバー用の透明ヒットエリア */}
+								<circle
+									cx={cx}
+									cy={cy}
+									r={16}
+									fill="transparent"
+									className="cursor-pointer"
+									onMouseEnter={() =>
+										setActiveEventId(event.id)
+									}
+									onMouseLeave={() =>
+										setActiveEventId((prev) =>
+											prev === event.id ? null : prev,
+										)
+									}
+									onClick={(e) => {
+										e.stopPropagation();
+										setActiveEventId((prev) =>
+											prev === event.id
+												? null
+												: event.id,
+										);
+									}}
 								/>
 
 								{/* 極大極小ラベル */}
@@ -324,57 +330,102 @@ export function LifeChartSVG({
 										▼
 									</text>
 								)}
-
-								{/* 吹き出し */}
-								<path
-									d={balloonPath(
-										bX,
-										bY,
-										bW,
-										bH,
-										cx,
-										tailY,
-										4,
-									)}
-									fill="#27272aee"
-									stroke="#52525b"
-									strokeWidth={0.5}
-								/>
-								<text
-									x={bX + 8}
-									y={bY + 14}
-									fill="#fafafa"
-									fontSize={11}
-									fontWeight="bold"
-									className="pointer-events-none"
-								>
-									{line1}
-								</text>
-								<text
-									x={bX + 8}
-									y={bY + 28}
-									fill="#a1a1aa"
-									fontSize={10}
-									className="pointer-events-none"
-								>
-									{line2}
-								</text>
-								{hasNote && (
-									<text
-										x={bX + 8}
-										y={bY + 42}
-										fill="#78716c"
-										fontSize={9}
-										className="pointer-events-none"
-									>
-										{event.note!.length > 20
-											? `${event.note!.slice(0, 20)}…`
-											: event.note}
-									</text>
-								)}
 							</g>
 						);
 					})}
+
+					{/* アクティブなイベントの吹き出し（最前面に描画） */}
+					{activeEventId != null &&
+						(() => {
+							const event = sortedVisible.find(
+								(e) => e.id === activeEventId,
+							);
+							if (!event) return null;
+							const cat =
+								CATEGORIES[event.category as Category] ??
+								CATEGORIES.other;
+							const fAge = getFractionalAge(event);
+							const cx = toX(fAge);
+							const cy = toY(event.score);
+
+							const ageText = formatAge(
+								event.age,
+								event.month,
+								event.day,
+							);
+							const scoreText =
+								event.score > 0
+									? `+${event.score}`
+									: String(event.score);
+							const line1 = `${cat.icon} ${event.title}`;
+							const line2 = `${ageText} / ${scoreText}`;
+							const hasNote = !!event.note;
+
+							const bW = Math.max(
+								line1.length * 7 + 16,
+								line2.length * 6.5 + 16,
+								hasNote
+									? Math.min(event.note!.length, 20) * 6 + 16
+									: 0,
+								90,
+							);
+							const bH = hasNote ? 48 : 34;
+							const above = cy > PADDING.top + INNER_H / 2;
+							const bY = above ? cy - bH - 16 : cy + 16;
+							let bX = cx - bW / 2;
+							if (bX < PADDING.left) bX = PADDING.left;
+							if (bX + bW > CHART_WIDTH - PADDING.right)
+								bX = CHART_WIDTH - PADDING.right - bW;
+							const tailY = above ? bY + bH : bY;
+
+							return (
+								<g className="pointer-events-none">
+									<path
+										d={balloonPath(
+											bX,
+											bY,
+											bW,
+											bH,
+											cx,
+											tailY,
+											4,
+										)}
+										fill="#27272aee"
+										stroke="#52525b"
+										strokeWidth={0.5}
+									/>
+									<text
+										x={bX + 8}
+										y={bY + 14}
+										fill="#fafafa"
+										fontSize={11}
+										fontWeight="bold"
+									>
+										{line1}
+									</text>
+									<text
+										x={bX + 8}
+										y={bY + 28}
+										fill="#a1a1aa"
+										fontSize={10}
+									>
+										{line2}
+									</text>
+									{hasNote && (
+										<text
+											x={bX + 8}
+											y={bY + 42}
+											fill="#78716c"
+											fontSize={9}
+										>
+											{event.note!.length > 20
+												? `${event.note!.slice(0, 20)}…`
+												: event.note}
+										</text>
+									)}
+								</g>
+							);
+						})()}
 				</svg>
 			</div>
 
