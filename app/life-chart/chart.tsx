@@ -3,7 +3,6 @@ import type { Category, LifeChartEvent } from "./types";
 import { CATEGORIES } from "./types";
 import {
 	buildLinePath,
-	findExtrema,
 	formatAge,
 	getFractionalAge,
 	getMaxAge,
@@ -83,7 +82,6 @@ export function LifeChartSVG({
 	);
 
 	const linePath = buildLinePath(visibleEvents, toX, toY);
-	const extrema = useMemo(() => findExtrema(visibleEvents), [visibleEvents]);
 
 	// X 軸の目盛り (5歳刻み)
 	const xTicks: number[] = [];
@@ -207,52 +205,48 @@ export function LifeChartSVG({
 						const fAge = getFractionalAge(event);
 						const cx = toX(fAge);
 						const cy = toY(event.score);
-						const isGlobalMax = extrema.globalMax === event.id;
-						const isGlobalMin = extrema.globalMin === event.id;
-						const isLocalMax = extrema.maxima.has(event.id);
-						const isLocalMin = extrema.minima.has(event.id);
-						const isExtreme =
-							isGlobalMax || isGlobalMin || isLocalMax || isLocalMin;
-						const r = isExtreme ? 8 : 5;
+						const above = event.score >= 0;
+						const labelY = above ? cy - 10 : cy + 16;
 
 						return (
 							<g key={event.id}>
-								{/* 極大極小の強調背景 */}
-								{isExtreme && (
-									<circle
-										cx={cx}
-										cy={cy}
-										r={14}
-										fill="none"
-										stroke={
-											isGlobalMax || isLocalMax
-												? "#4ade80"
-												: "#f87171"
-										}
-										strokeWidth={1.5}
-										strokeDasharray="3 3"
-										opacity={0.6}
-									/>
-								)}
-
-								{/* データポイント */}
 								<circle
 									cx={cx}
 									cy={cy}
-									r={r}
+									r={5}
 									fill={cat.color}
-									stroke={
-										isGlobalMax
-											? "#4ade80"
-											: isGlobalMin
-												? "#f87171"
-												: "#18181b"
-									}
-									strokeWidth={
-										isGlobalMax || isGlobalMin ? 3 : 2
-									}
+									stroke="#18181b"
+									strokeWidth={2}
 									className="pointer-events-none"
 								/>
+
+								{/* タイトル */}
+								<text
+									x={cx}
+									y={labelY}
+									textAnchor="middle"
+									fill="#d4d4d8"
+									fontSize={8}
+									className="pointer-events-none"
+								>
+									{event.title}
+								</text>
+
+								{/* 補足 */}
+								{event.note && (
+									<text
+										x={cx}
+										y={above ? labelY - 10 : labelY + 10}
+										textAnchor="middle"
+										fill="#71717a"
+										fontSize={7}
+										className="pointer-events-none"
+									>
+										{event.note.length > 15
+											? `${event.note.slice(0, 15)}…`
+											: event.note}
+									</text>
+								)}
 
 								{/* タッチ/ホバー用の透明ヒットエリア */}
 								<circle
@@ -278,58 +272,6 @@ export function LifeChartSVG({
 										);
 									}}
 								/>
-
-								{/* 極大極小ラベル */}
-								{isGlobalMax && (
-									<text
-										x={cx}
-										y={cy - (isExtreme ? 20 : 12)}
-										textAnchor="middle"
-										fill="#4ade80"
-										fontSize={10}
-										fontWeight="bold"
-										className="pointer-events-none"
-									>
-										▲ 最高
-									</text>
-								)}
-								{isGlobalMin && (
-									<text
-										x={cx}
-										y={cy + (isExtreme ? 26 : 20)}
-										textAnchor="middle"
-										fill="#f87171"
-										fontSize={10}
-										fontWeight="bold"
-										className="pointer-events-none"
-									>
-										▼ 最低
-									</text>
-								)}
-								{isLocalMax && !isGlobalMax && (
-									<text
-										x={cx}
-										y={cy - (isExtreme ? 20 : 12)}
-										textAnchor="middle"
-										fill="#4ade8088"
-										fontSize={9}
-										className="pointer-events-none"
-									>
-										▲
-									</text>
-								)}
-								{isLocalMin && !isGlobalMin && (
-									<text
-										x={cx}
-										y={cy + (isExtreme ? 26 : 20)}
-										textAnchor="middle"
-										fill="#f8717188"
-										fontSize={9}
-										className="pointer-events-none"
-									>
-										▼
-									</text>
-								)}
 							</g>
 						);
 					})}
