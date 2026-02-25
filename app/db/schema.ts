@@ -299,6 +299,39 @@ export const rhythmEntries = sqliteTable("rhythm_entries", {
 	),
 });
 
+// ライフチャート
+export const lifeCharts = sqliteTable("life_charts", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	memberId: text("member_id").notNull(),
+	displayName: text("display_name"), // ログイン用表示名
+	name: text("name").notNull().default("マイライフチャート"),
+	birthYear: integer("birth_year").notNull(),
+	birthMonth: integer("birth_month"), // 1-12（任意）
+	birthDay: integer("birth_day"), // 1-31（任意）
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
+// ライフチャート イベント
+export const lifeChartEvents = sqliteTable("life_chart_events", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	chartId: integer("chart_id").notNull(),
+	age: integer("age").notNull(),
+	month: integer("month"), // 1-12（任意：その年齢の何月か）
+	day: integer("day"), // 1-31（任意：その月の何日か）
+	score: integer("score").notNull(), // -10 ~ +10
+	category: text("category").notNull(), // education, career, relationship, health, hobby, other
+	title: text("title").notNull(),
+	note: text("note"),
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const scrapedArticles = sqliteTable("scraped_articles", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	siteId: text("site_id").notNull(),
