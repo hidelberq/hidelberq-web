@@ -98,11 +98,16 @@ export function LifeChartSVG({
 		[visibleEvents],
 	);
 
-	const handleExport = useCallback(() => {
+	const getSvgSource = useCallback(() => {
 		const svg = svgRef.current;
-		if (!svg) return;
+		if (!svg) return null;
 		const serializer = new XMLSerializer();
-		const source = serializer.serializeToString(svg);
+		return serializer.serializeToString(svg);
+	}, []);
+
+	const handleExportSvg = useCallback(() => {
+		const source = getSvgSource();
+		if (!source) return;
 		const blob = new Blob(
 			[`<?xml version="1.0" encoding="UTF-8"?>${source}`],
 			{ type: "image/svg+xml;charset=utf-8" },
@@ -113,7 +118,41 @@ export function LifeChartSVG({
 		a.download = "life-chart.svg";
 		a.click();
 		URL.revokeObjectURL(url);
-	}, []);
+	}, [getSvgSource]);
+
+	const handleExportPng = useCallback(() => {
+		const source = getSvgSource();
+		if (!source) return;
+		const scale = 2;
+		const canvas = document.createElement("canvas");
+		canvas.width = CHART_WIDTH * scale;
+		canvas.height = CHART_HEIGHT * scale;
+		const ctx = canvas.getContext("2d");
+		if (!ctx) return;
+
+		const img = new Image();
+		const blob = new Blob(
+			[`<?xml version="1.0" encoding="UTF-8"?>${source}`],
+			{ type: "image/svg+xml;charset=utf-8" },
+		);
+		const url = URL.createObjectURL(blob);
+		img.onload = () => {
+			ctx.fillStyle = "#18181b";
+			ctx.fillRect(0, 0, canvas.width, canvas.height);
+			ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+			URL.revokeObjectURL(url);
+			canvas.toBlob((pngBlob) => {
+				if (!pngBlob) return;
+				const pngUrl = URL.createObjectURL(pngBlob);
+				const a = document.createElement("a");
+				a.href = pngUrl;
+				a.download = "life-chart.png";
+				a.click();
+				URL.revokeObjectURL(pngUrl);
+			}, "image/png");
+		};
+		img.src = url;
+	}, [getSvgSource]);
 
 	return (
 		<div>
@@ -372,10 +411,17 @@ export function LifeChartSVG({
 			</div>
 
 			{/* エクスポートボタン */}
-			<div className="mt-2 flex justify-end">
+			<div className="mt-2 flex justify-end gap-2">
 				<button
 					type="button"
-					onClick={handleExport}
+					onClick={handleExportPng}
+					className="rounded bg-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-600"
+				>
+					PNG でダウンロード
+				</button>
+				<button
+					type="button"
+					onClick={handleExportSvg}
 					className="rounded bg-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-600"
 				>
 					SVG でダウンロード
