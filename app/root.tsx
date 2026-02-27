@@ -9,6 +9,7 @@ import {
 
 import type { Route } from "./+types/root";
 import { AudioPlayerProvider } from "./audio-player-context";
+import { InstallBanner } from "./install-banner";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
@@ -55,6 +56,7 @@ export default function App() {
   return (
     <AudioPlayerProvider>
       <Outlet />
+      <InstallBanner />
     </AudioPlayerProvider>
   );
 }
