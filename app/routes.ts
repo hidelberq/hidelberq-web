@@ -37,4 +37,5 @@ export default [
 	route("api/activity", "routes/api.activity.ts"),
 	route("api/tsundoku_2_0/search", "routes/api.books-search.ts"),
 	route("api/tsundoku_2_0/seed", "routes/api.books-seed.ts"),
+	route("offline", "routes/offline.tsx"),
 ] satisfies RouteConfig;
