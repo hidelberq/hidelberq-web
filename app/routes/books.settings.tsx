@@ -1,8 +1,9 @@
 import { Link } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { userProfiles, personalBooks } from "~/db/schema";
+import { userProfiles, personalBooks, googleAccounts } from "~/db/schema";
 import { GENRES, AVATAR_EMOJIS } from "~/books/types";
+import { getSessionUser } from "~/auth/session";
 import type { Route } from "./+types/books.settings";
 import { useState, useEffect } from "react";
 
@@ -21,9 +22,30 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const url = new URL(request.url);
 	const memberId = url.searchParams.get("memberId") ?? "";
 
+	// セッションからログインユーザー情報を取得
+	const sessionUser = await getSessionUser(request, db);
+
 	if (!memberId) {
-		return { profile: null };
+		return {
+			profile: null,
+			googleAccount: sessionUser
+				? { email: sessionUser.email, name: sessionUser.name, avatarUrl: sessionUser.avatarUrl }
+				: null,
+		};
 	}
+
+	// memberId に紐づく Google アカウントを検索
+	const [linkedAccount] = await db
+		.select()
+		.from(googleAccounts)
+		.where(eq(googleAccounts.memberId, memberId))
+		.limit(1);
+
+	const googleAccount = linkedAccount
+		? { email: linkedAccount.email, name: linkedAccount.name, avatarUrl: linkedAccount.avatarUrl }
+		: sessionUser
+			? { email: sessionUser.email, name: sessionUser.name, avatarUrl: sessionUser.avatarUrl }
+			: null;
 
 	const [profile] = await db
 		.select()
@@ -38,6 +60,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				createdAt: profile.createdAt?.getTime() ?? Date.now(),
 				updatedAt: profile.updatedAt?.getTime() ?? Date.now(),
 			},
+			googleAccount,
 		};
 	}
 
@@ -51,6 +74,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	return {
 		profile: null,
 		existingName: existingBook?.memberName ?? null,
+		googleAccount,
 	};
 }
 
@@ -154,6 +178,7 @@ export default function BookSettings({
 	const profile = loaderData.profile;
 	const existingName =
 		"existingName" in loaderData ? loaderData.existingName : null;
+	const googleAccount = loaderData.googleAccount;
 
 	const inputClass =
 		"w-full rounded-xl bg-white/10 border border-white/20 px-4 py-3 text-white placeholder:text-purple-300/40 focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/30";
@@ -314,6 +339,79 @@ export default function BookSettings({
 						{profile ? "保存する" : "プロフィールを作成"}
 					</button>
 				</form>
+
+				{/* Google アカウント連携 */}
+				<div className="w-full max-w-md mt-6 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 p-6">
+					<h2 className="text-lg font-semibold text-white mb-3">
+						Google アカウント連携
+					</h2>
+					{googleAccount ? (
+						<div className="space-y-3">
+							<div className="flex items-center gap-3 rounded-xl bg-white/5 border border-white/10 px-4 py-3">
+								{googleAccount.avatarUrl && (
+									<img
+										src={googleAccount.avatarUrl}
+										alt=""
+										className="w-8 h-8 rounded-full"
+										referrerPolicy="no-referrer"
+									/>
+								)}
+								<div className="min-w-0">
+									{googleAccount.name && (
+										<p className="text-sm text-white truncate">
+											{googleAccount.name}
+										</p>
+									)}
+									<p className="text-xs text-purple-300/60 truncate">
+										{googleAccount.email}
+									</p>
+								</div>
+								<span className="ml-auto text-xs text-green-400 shrink-0">
+									連携済み
+								</span>
+							</div>
+							<form method="post" action="/auth/logout">
+								<input type="hidden" name="returnTo" value="/tsundoku_2_0/settings" />
+								<button
+									type="submit"
+									className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-purple-300 hover:bg-white/10 transition-colors"
+								>
+									ログアウト
+								</button>
+							</form>
+						</div>
+					) : (
+						<div className="space-y-3">
+							<p className="text-sm text-purple-200/60">
+								Google アカウントと連携すると、別のデバイスからでも同じアカウントでログインできます。
+							</p>
+							<a
+								href={`/auth/google?memberId=${encodeURIComponent(memberId)}&returnTo=${encodeURIComponent("/tsundoku_2_0/settings")}`}
+								className="flex items-center justify-center gap-2 w-full rounded-xl bg-white px-4 py-3 font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+							>
+								<svg className="w-5 h-5" viewBox="0 0 24 24">
+									<path
+										d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+										fill="#4285F4"
+									/>
+									<path
+										d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+										fill="#34A853"
+									/>
+									<path
+										d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+										fill="#FBBC05"
+									/>
+									<path
+										d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+										fill="#EA4335"
+									/>
+								</svg>
+								Google でログイン
+							</a>
+						</div>
+					)}
+				</div>
 
 				{/* 公開プロフィールへのリンク */}
 				{profile && (

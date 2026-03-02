@@ -250,23 +250,48 @@ export default function Books({ actionData, loaderData }: Route.ComponentProps) 
 	const [showGroupSection, setShowGroupSection] = useState(false);
 
 	useEffect(() => {
-		// localStorage から memberId を取得 or 生成
-		let id = localStorage.getItem("bookMemberId");
-		if (!id) {
-			id = crypto.randomUUID();
-			localStorage.setItem("bookMemberId", id);
-		}
-		setMemberId(id);
+		// セッション認証をチェックし、localStorage の memberId を同期
+		const init = async () => {
+			try {
+				const res = await fetch("/api/auth/me");
+				const data = await res.json() as { authenticated: boolean; memberId?: string; name?: string };
+				if (data.authenticated && data.memberId) {
+					localStorage.setItem("bookMemberId", data.memberId);
+					if (data.name) {
+						localStorage.setItem("bookDisplayName", data.name);
+					}
+					setMemberId(data.memberId);
+					setDisplayName(data.name || localStorage.getItem("bookDisplayName") || "");
+					// 保存済みグループを取得
+					const groups = JSON.parse(
+						localStorage.getItem("bookGroups") || "[]",
+					) as Array<{ code: string; name: string }>;
+					setSavedGroups(groups);
+					return;
+				}
+			} catch {
+				// セッション取得に失敗した場合はフォールバック
+			}
 
-		// 表示名を取得
-		const name = localStorage.getItem("bookDisplayName") || "";
-		setDisplayName(name);
+			// localStorage から memberId を取得 or 生成
+			let id = localStorage.getItem("bookMemberId");
+			if (!id) {
+				id = crypto.randomUUID();
+				localStorage.setItem("bookMemberId", id);
+			}
+			setMemberId(id);
 
-		// 保存済みグループを取得
-		const groups = JSON.parse(
-			localStorage.getItem("bookGroups") || "[]",
-		) as Array<{ code: string; name: string }>;
-		setSavedGroups(groups);
+			// 表示名を取得
+			const name = localStorage.getItem("bookDisplayName") || "";
+			setDisplayName(name);
+
+			// 保存済みグループを取得
+			const groups = JSON.parse(
+				localStorage.getItem("bookGroups") || "[]",
+			) as Array<{ code: string; name: string }>;
+			setSavedGroups(groups);
+		};
+		init();
 	}, []);
 
 	// action 成功時の処理

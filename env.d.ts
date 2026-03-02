@@ -7,5 +7,7 @@ declare namespace Cloudflare {
 		ACTIVITY_API_KEY: string;
 		GOOGLE_BOOKS_API_KEY: string;
 		SUNO_API_KEY: string;
+		GOOGLE_CLIENT_ID: string;
+		GOOGLE_CLIENT_SECRET: string;
 	}
 }

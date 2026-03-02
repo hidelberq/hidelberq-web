@@ -332,6 +332,32 @@ export const lifeChartEvents = sqliteTable("life_chart_events", {
 	),
 });
 
+// Google OAuth アカウント連携
+export const googleAccounts = sqliteTable("google_accounts", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	googleId: text("google_id").notNull().unique(), // Google の sub (subject identifier)
+	email: text("email").notNull(),
+	name: text("name"),
+	avatarUrl: text("avatar_url"),
+	memberId: text("member_id").notNull(), // 既存の memberId と紐付け
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
+// セッション管理
+export const sessions = sqliteTable("sessions", {
+	id: text("id").primaryKey(), // crypto.randomUUID()
+	memberId: text("member_id").notNull(),
+	expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const scrapedArticles = sqliteTable("scraped_articles", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	siteId: text("site_id").notNull(),
