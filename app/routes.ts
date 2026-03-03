@@ -37,5 +37,9 @@ export default [
 	route("api/activity", "routes/api.activity.ts"),
 	route("api/tsundoku_2_0/search", "routes/api.books-search.ts"),
 	route("api/tsundoku_2_0/seed", "routes/api.books-seed.ts"),
+	route("auth/login", "routes/auth.login.tsx"),
+	route("auth/google", "routes/auth.google.ts"),
+	route("auth/google/callback", "routes/auth.google-callback.ts"),
+	route("auth/logout", "routes/auth.logout.ts"),
 	route("offline", "routes/offline.tsx"),
 ] satisfies RouteConfig;
