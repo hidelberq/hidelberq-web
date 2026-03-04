@@ -34,6 +34,7 @@ export default [
 	route("tsundoku_2_0/settings", "routes/books.settings.tsx"),
 	route("rhythm", "routes/rhythm.tsx"),
 	route("life-chart", "routes/life-chart.tsx"),
+	route("the-work", "routes/the-work.tsx"),
 	route("api/activity", "routes/api.activity.ts"),
 	route("api/tsundoku_2_0/search", "routes/api.books-search.ts"),
 	route("api/tsundoku_2_0/seed", "routes/api.books-seed.ts"),
