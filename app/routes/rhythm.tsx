@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link, useFetcher, useSearchParams } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, desc } from "drizzle-orm";
 import {
 	rhythmEntries,
 	bookGroupMembers,
@@ -87,8 +87,9 @@ function getWeekdayShort(dateStr: string): string {
 
 // --- 睡眠関連ユーティリティ ---
 
-const BEDTIME_PATTERN = /就寝|寝る|寝た|ベッド|おやすみ/i;
-const WAKEUP_PATTERN = /起床|起き|目覚|おはよう/i;
+const WAKEUP_PATTERN = /起床|起き|目覚|おはよう|ベッドから出る/i;
+// 起床系パターンにマッチしないもののみ就寝として判定
+const BEDTIME_PATTERN = /就寝|寝る|寝た|ベッドに入る|おやすみ|睡眠/i;
 
 function timeToMinutes(time: string): number {
 	const [h, m] = time.split(":").map(Number);
@@ -120,14 +121,14 @@ function computeSleepData(entries: Entry[]): Map<string, SleepData> {
 
 	for (const date of dates) {
 		const dayEntries = byDate.get(date)!;
-		// 就寝: その日の最後の就寝系エントリー
-		const bedEntry = [...dayEntries]
-			.reverse()
-			.find((e) => BEDTIME_PATTERN.test(e.activity));
 		// 起床: その日の最初の起床系エントリー
 		const wakeEntry = dayEntries.find((e) =>
 			WAKEUP_PATTERN.test(e.activity),
 		);
+		// 就寝: その日の最後の就寝系エントリー（起床系にマッチするものは除外）
+		const bedEntry = [...dayEntries]
+			.reverse()
+			.find((e) => BEDTIME_PATTERN.test(e.activity) && !WAKEUP_PATTERN.test(e.activity));
 
 		result.set(date, {
 			bedTime: bedEntry?.time ?? null,
@@ -237,6 +238,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 	if (!memberId) {
 		return {
 			entries: [] as Entry[],
+			recentEntries: [] as Entry[],
+			prevDayEntries: [] as Entry[],
 			view,
 			currentDate: dateParam,
 			startDate,
@@ -245,6 +248,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 	}
 
 	try {
+		// メインのエントリー取得
 		const entries = await db
 			.select()
 			.from(rhythmEntries)
@@ -257,17 +261,42 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 			)
 			.orderBy(rhythmEntries.date, rhythmEntries.time);
 
+		// 睡眠計算用: 開始日の前日のエントリーを取得
+		const prevDay = addDays(startDate, -1);
+		const prevDayEntries = await db
+			.select()
+			.from(rhythmEntries)
+			.where(
+				and(
+					eq(rhythmEntries.memberId, memberId),
+					eq(rhythmEntries.date, prevDay),
+				),
+			)
+			.orderBy(rhythmEntries.time);
+
+		// 最近の記録（直近20件、作成日時の新しい順）
+		const recentEntries = await db
+			.select()
+			.from(rhythmEntries)
+			.where(eq(rhythmEntries.memberId, memberId))
+			.orderBy(desc(rhythmEntries.createdAt))
+			.limit(20);
+
+		const mapEntry = (e: typeof entries[number]): Entry => ({
+			id: e.id,
+			date: e.date,
+			time: e.time,
+			activity: e.activity,
+			mood: e.mood,
+			interpersonal: e.interpersonal,
+			note: e.note,
+			isPrivate: e.isPrivate,
+		});
+
 		return {
-			entries: entries.map((e) => ({
-				id: e.id,
-				date: e.date,
-				time: e.time,
-				activity: e.activity,
-				mood: e.mood,
-				interpersonal: e.interpersonal,
-				note: e.note,
-				isPrivate: e.isPrivate,
-			})),
+			entries: entries.map(mapEntry),
+			recentEntries: recentEntries.map(mapEntry),
+			prevDayEntries: prevDayEntries.map(mapEntry),
 			view,
 			currentDate: dateParam,
 			startDate,
@@ -278,6 +307,8 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 		console.error("[rhythm loader]", message);
 		return {
 			entries: [] as Entry[],
+			recentEntries: [] as Entry[],
+			prevDayEntries: [] as Entry[],
 			view,
 			currentDate: dateParam,
 			startDate,
@@ -443,7 +474,7 @@ export default function RhythmTracker({
 	loaderData,
 	actionData,
 }: Route.ComponentProps) {
-	const { entries, view, currentDate, startDate, endDate } = loaderData;
+	const { entries, recentEntries, prevDayEntries, view, currentDate, startDate, endDate } = loaderData;
 	const loaderError =
 		"loaderError" in loaderData
 			? (loaderData.loaderError as string)
@@ -575,12 +606,14 @@ export default function RhythmTracker({
 						<EntryForm
 							currentDate={currentDate}
 							memberId={memberId}
+							fixedDate={view === "today"}
 						/>
 
 						{/* ビュー別表示 */}
 						{view === "today" && (
 							<TodayView
 								entries={entries}
+								prevDayEntries={prevDayEntries}
 								currentDate={currentDate}
 								memberId={memberId}
 							/>
@@ -588,6 +621,7 @@ export default function RhythmTracker({
 						{view === "week" && (
 							<WeekView
 								entries={entries}
+								prevDayEntries={prevDayEntries}
 								startDate={startDate}
 								endDate={endDate}
 								memberId={memberId}
@@ -601,6 +635,12 @@ export default function RhythmTracker({
 								endDate={endDate}
 							/>
 						)}
+
+						{/* 最近の記録履歴 */}
+						<RecentEntriesSection
+							recentEntries={recentEntries}
+							memberId={memberId}
+						/>
 
 						{/* グラフ */}
 						{entries.length > 0 && (
@@ -736,13 +776,31 @@ function DateNavigation({
 
 // --- 入力フォーム ---
 
+// アクティビティプリセット
+const ACTIVITY_PRESETS = [
+	"ベッドに入る",
+	"睡眠",
+	"起床",
+	"ベッドから出る",
+	"朝食",
+	"昼食",
+	"夕食",
+	"散歩",
+	"通勤",
+	"仕事",
+	"運動",
+	"入浴",
+] as const;
+
 function EntryForm({
 	currentDate,
 	memberId,
-}: { currentDate: string; memberId: string }) {
+	fixedDate = false,
+}: { currentDate: string; memberId: string; fixedDate?: boolean }) {
 	const fetcher = useFetcher();
 	const [mood, setMood] = useState(0);
 	const [isOpen, setIsOpen] = useState(false);
+	const [activity, setActivity] = useState("");
 	const isSubmitting = fetcher.state !== "idle";
 
 	const [hour, setHour] = useState(0);
@@ -763,8 +821,16 @@ function EntryForm({
 		if (fetcher.state === "idle" && fetcher.data && "success" in fetcher.data) {
 			setIsOpen(false);
 			setMood(0);
+			setActivity("");
 		}
 	}, [fetcher.state, fetcher.data]);
+
+	// fixedDate モードで日付が変わった場合にも追従
+	useEffect(() => {
+		if (fixedDate) {
+			setDate(currentDate);
+		}
+	}, [currentDate, fixedDate]);
 
 	const handleToggle = () => {
 		if (!isOpen) {
@@ -796,19 +862,29 @@ function EntryForm({
 					<input type="hidden" name="memberId" value={memberId} />
 					<input type="hidden" name="date" value={date} />
 					<input type="hidden" name="time" value={timeStr} />
+					<input type="hidden" name="activity" value={activity} />
 
 					<div className="grid grid-cols-2 gap-4">
 						<div>
 							<label className="mb-1 block text-xs text-violet-400">
 								日付
+								{fixedDate && (
+									<span className="ml-1 text-violet-500">（固定）</span>
+								)}
 							</label>
-							<input
-								type="date"
-								value={date}
-								onChange={(e) => setDate(e.target.value)}
-								className="w-full rounded-md border border-violet-700 bg-violet-950 px-3 py-2 text-sm text-white"
-								required
-							/>
+							{fixedDate ? (
+								<div className="w-full rounded-md border border-violet-700/50 bg-violet-900/50 px-3 py-2 text-sm text-violet-300">
+									{formatDate(date)}
+								</div>
+							) : (
+								<input
+									type="date"
+									value={date}
+									onChange={(e) => setDate(e.target.value)}
+									className="w-full rounded-md border border-violet-700 bg-violet-950 px-3 py-2 text-sm text-white"
+									required
+								/>
+							)}
 						</div>
 						<div>
 							<label className="mb-1 block text-xs text-violet-400">
@@ -859,10 +935,27 @@ function EntryForm({
 						<label className="mb-1 block text-xs text-violet-400">
 							活動
 						</label>
+						<div className="mb-2 flex flex-wrap gap-1.5">
+							{ACTIVITY_PRESETS.map((preset) => (
+								<button
+									key={preset}
+									type="button"
+									onClick={() => setActivity(preset)}
+									className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+										activity === preset
+											? "border-violet-500 bg-violet-600/50 text-white"
+											: "border-violet-700/50 bg-violet-900/50 text-violet-300 hover:border-violet-600 hover:bg-violet-800/50"
+									}`}
+								>
+									{preset}
+								</button>
+							))}
+						</div>
 						<input
 							type="text"
-							name="activity"
-							placeholder="例: 朝食、通勤、仕事、散歩..."
+							value={activity}
+							onChange={(e) => setActivity(e.target.value)}
+							placeholder="上のボタンで選択、または自由入力..."
 							className="w-full rounded-md border border-violet-700 bg-violet-950 px-3 py-2 text-sm text-white placeholder:text-violet-600"
 							required
 						/>
@@ -1052,6 +1145,7 @@ function EditEntryForm({
 	const fetcher = useFetcher();
 	const isSubmitting = fetcher.state !== "idle";
 	const [mood, setMood] = useState(entry.mood);
+	const [activity, setActivity] = useState(entry.activity);
 
 	const timeMinutes = timeToMinutes(entry.time);
 	const initialHour = Math.floor(timeMinutes / 60);
@@ -1085,6 +1179,7 @@ function EditEntryForm({
 			<input type="hidden" name="memberId" value={memberId} />
 			<input type="hidden" name="date" value={date} />
 			<input type="hidden" name="time" value={timeStr} />
+			<input type="hidden" name="activity" value={activity} />
 
 			<div className="grid grid-cols-2 gap-3">
 				<div>
@@ -1142,10 +1237,26 @@ function EditEntryForm({
 				<label className="mb-1 block text-xs text-violet-400">
 					活動
 				</label>
+				<div className="mb-1.5 flex flex-wrap gap-1">
+					{ACTIVITY_PRESETS.map((preset) => (
+						<button
+							key={preset}
+							type="button"
+							onClick={() => setActivity(preset)}
+							className={`rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
+								activity === preset
+									? "border-violet-500 bg-violet-600/50 text-white"
+									: "border-violet-700/50 bg-violet-900/50 text-violet-300 hover:border-violet-600 hover:bg-violet-800/50"
+							}`}
+						>
+							{preset}
+						</button>
+					))}
+				</div>
 				<input
 					type="text"
-					name="activity"
-					defaultValue={entry.activity}
+					value={activity}
+					onChange={(e) => setActivity(e.target.value)}
 					className="w-full rounded-md border border-violet-700 bg-violet-950 px-3 py-1.5 text-sm text-white"
 					required
 				/>
@@ -1331,9 +1442,10 @@ function EntryCard({
 
 function TodayView({
 	entries,
+	prevDayEntries,
 	currentDate,
 	memberId,
-}: { entries: Entry[]; currentDate: string; memberId: string }) {
+}: { entries: Entry[]; prevDayEntries: Entry[]; currentDate: string; memberId: string }) {
 	if (entries.length === 0) {
 		return (
 			<div className="rounded-lg border border-dashed border-violet-800 py-12 text-center text-violet-500">
@@ -1342,7 +1454,12 @@ function TodayView({
 		);
 	}
 
-	const sleepData = useMemo(() => computeSleepData(entries), [entries]);
+	// 前日のエントリーを含めて睡眠計算（前日の就寝→当日の起床）
+	const allEntriesForSleep = useMemo(
+		() => [...prevDayEntries, ...entries],
+		[prevDayEntries, entries],
+	);
+	const sleepData = useMemo(() => computeSleepData(allEntriesForSleep), [allEntriesForSleep]);
 	const todaySleep = sleepData.get(currentDate);
 
 	return (
@@ -1433,11 +1550,13 @@ function DaySummary({ entries }: { entries: Entry[] }) {
 
 function WeekView({
 	entries,
+	prevDayEntries,
 	startDate,
 	endDate,
 	memberId,
 }: {
 	entries: Entry[];
+	prevDayEntries: Entry[];
 	startDate: string;
 	endDate: string;
 	memberId: string;
@@ -1455,7 +1574,12 @@ function WeekView({
 	}, [entries, startDate]);
 
 	const today = todayJST();
-	const sleepData = useMemo(() => computeSleepData(entries), [entries]);
+	// 前日のエントリーを含めて睡眠計算
+	const allEntriesForSleep = useMemo(
+		() => [...prevDayEntries, ...entries],
+		[prevDayEntries, entries],
+	);
+	const sleepData = useMemo(() => computeSleepData(allEntriesForSleep), [allEntriesForSleep]);
 
 	// 全日のエントリーから最大件数を算出（縦幅の目安）
 	const maxEntries = Math.max(...days.map((d) => d.entries.length), 0);
@@ -1895,6 +2019,124 @@ function MonthView({
 			</table>
 
 			{entries.length > 0 && <DaySummary entries={entries} />}
+		</div>
+	);
+}
+
+// --- 最近の記録履歴 ---
+
+function RecentEntriesSection({
+	recentEntries,
+	memberId,
+}: { recentEntries: Entry[]; memberId: string }) {
+	const [isOpen, setIsOpen] = useState(false);
+
+	if (recentEntries.length === 0) return null;
+
+	return (
+		<div className="mb-6 mt-6">
+			<button
+				type="button"
+				onClick={() => setIsOpen(!isOpen)}
+				className="w-full rounded-lg bg-violet-900/40 px-4 py-3 text-left text-sm font-medium text-violet-300 transition-colors hover:bg-violet-800/50"
+			>
+				{isOpen ? "▼" : "▶"} 最近入力した記録（直近{recentEntries.length}件）
+			</button>
+
+			{isOpen && (
+				<div className="mt-2 space-y-2">
+					{recentEntries.map((entry) => (
+						<RecentEntryCard
+							key={entry.id}
+							entry={entry}
+							memberId={memberId}
+						/>
+					))}
+				</div>
+			)}
+		</div>
+	);
+}
+
+function RecentEntryCard({
+	entry,
+	memberId,
+}: { entry: Entry; memberId: string }) {
+	const [editing, setEditing] = useState(false);
+	const [revealed, setRevealed] = useState(false);
+	const blurred = entry.isPrivate && !revealed;
+
+	if (editing) {
+		return (
+			<EditEntryForm
+				entry={entry}
+				memberId={memberId}
+				onCancel={() => setEditing(false)}
+			/>
+		);
+	}
+
+	return (
+		<div
+			className={`rounded-lg border border-violet-800/50 ${moodBgClass(entry.mood)} p-3 transition-colors hover:border-violet-700`}
+			onClick={blurred ? () => setRevealed(true) : undefined}
+		>
+			<div className="flex items-start justify-between">
+				<div className="flex-1">
+					<div className="flex items-center gap-3">
+						<span className="font-mono text-xs text-violet-500">
+							{formatDate(entry.date)}
+						</span>
+						<span className="font-mono text-sm text-violet-400">
+							{entry.time}
+						</span>
+						<span
+							className={`font-medium text-white ${blurred ? "select-none blur-sm" : ""}`}
+						>
+							{entry.activity}
+						</span>
+						{entry.isPrivate && (
+							<span
+								className="cursor-pointer text-xs text-violet-600"
+								onClick={(e) => {
+									e.stopPropagation();
+									setRevealed((v) => !v);
+								}}
+								title={revealed ? "ぼかす" : "表示する"}
+							>
+								{revealed ? "🔓" : "🔒"}
+							</span>
+						)}
+					</div>
+					<div
+						className={`mt-1.5 flex flex-wrap gap-3 text-xs ${blurred ? "select-none blur-sm" : ""}`}
+					>
+						<span className={moodColor(entry.mood)}>
+							気分:{" "}
+							{entry.mood > 0 ? `+${entry.mood}` : entry.mood}{" "}
+							({moodLabel(entry.mood)})
+						</span>
+						<span className="text-violet-400">
+							対人: {entry.interpersonal} (
+							{INTERPERSONAL_LABELS[entry.interpersonal]})
+						</span>
+					</div>
+					{entry.note && (
+						<p
+							className={`mt-1.5 text-xs text-violet-400/80 ${blurred ? "select-none blur-sm" : ""}`}
+						>
+							{entry.note}
+						</p>
+					)}
+				</div>
+				<div className="ml-2">
+					<EntryActions
+						entry={entry}
+						memberId={memberId}
+						onEdit={() => setEditing(true)}
+					/>
+				</div>
+			</div>
 		</div>
 	);
 }
