@@ -332,6 +332,24 @@ export const lifeChartEvents = sqliteTable("life_chart_events", {
 	),
 });
 
+// ザ・ワーク セッション
+export const theWorkSessions = sqliteTable("the_work_sessions", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	memberId: text("member_id").notNull(), // localStorage の UUID
+	title: text("title").notNull(), // セッション名（対象者名など）
+	worksheet: text("worksheet").notNull(), // JSON: WorksheetAnswers
+	selectedBelief: text("selected_belief"),
+	fourQuestions: text("four_questions"), // JSON: FourQuestionsAnswers
+	turnaround: text("turnaround"), // JSON: TurnaroundAnswers
+	step: text("step").notNull().default("worksheet"), // 現在のステップ
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const scrapedArticles = sqliteTable("scraped_articles", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	siteId: text("site_id").notNull(),

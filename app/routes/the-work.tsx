@@ -1,5 +1,8 @@
-import { useState, useCallback } from "react";
-import { Link } from "react-router";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { Link, useFetcher } from "react-router";
+import { drizzle } from "drizzle-orm/d1";
+import { eq, desc } from "drizzle-orm";
+import { theWorkSessions } from "~/db/schema";
 import type { Route } from "./+types/the-work";
 
 export function meta(_args: Route.MetaArgs) {
@@ -13,24 +16,94 @@ export function meta(_args: Route.MetaArgs) {
 	];
 }
 
+// --- loader: 保存済みセッション一覧を取得 ---
+export async function loader({ request, context }: Route.LoaderArgs) {
+	const url = new URL(request.url);
+	const memberId = url.searchParams.get("memberId");
+	if (!memberId) {
+		return { sessions: [] };
+	}
+	const db = drizzle(context.cloudflare.env.DB);
+	const sessions = await db
+		.select()
+		.from(theWorkSessions)
+		.where(eq(theWorkSessions.memberId, memberId))
+		.orderBy(desc(theWorkSessions.updatedAt))
+		.limit(50);
+	return { sessions };
+}
+
+// --- action: セッションの保存・削除 ---
+export async function action({ request, context }: Route.ActionArgs) {
+	const formData = await request.formData();
+	const intent = formData.get("intent") as string;
+	const db = drizzle(context.cloudflare.env.DB);
+
+	if (intent === "save") {
+		const memberId = formData.get("memberId") as string;
+		const sessionId = formData.get("sessionId") as string | null;
+		const title = formData.get("title") as string;
+		const worksheet = formData.get("worksheet") as string;
+		const selectedBelief = formData.get("selectedBelief") as string;
+		const fourQuestions = formData.get("fourQuestions") as string;
+		const turnaround = formData.get("turnaround") as string;
+		const step = formData.get("step") as string;
+
+		if (sessionId) {
+			// 既存セッションを更新
+			await db
+				.update(theWorkSessions)
+				.set({
+					title,
+					worksheet,
+					selectedBelief: selectedBelief || null,
+					fourQuestions: fourQuestions || null,
+					turnaround: turnaround || null,
+					step,
+					updatedAt: new Date(),
+				})
+				.where(eq(theWorkSessions.id, Number(sessionId)));
+			return { success: true, sessionId: Number(sessionId) };
+		}
+		// 新規セッションを作成
+		const result = await db
+			.insert(theWorkSessions)
+			.values({
+				memberId,
+				title,
+				worksheet,
+				selectedBelief: selectedBelief || null,
+				fourQuestions: fourQuestions || null,
+				turnaround: turnaround || null,
+				step,
+			})
+			.returning({ id: theWorkSessions.id });
+		return { success: true, sessionId: result[0].id };
+	}
+
+	if (intent === "delete") {
+		const sessionId = formData.get("sessionId") as string;
+		await db
+			.delete(theWorkSessions)
+			.where(eq(theWorkSessions.id, Number(sessionId)));
+		return { success: true, deleted: true };
+	}
+
+	return { error: "不明な操作です" };
+}
+
 // ステップの定義
 type Step = "worksheet" | "select-belief" | "four-questions" | "turnaround";
 
 // ワークシートの回答
 type WorksheetAnswers = {
-	// 1. 誰に対して、なぜ怒り・悲しみ・恐れ・困惑しているか
 	name: string;
 	emotion: string;
 	reason: string;
-	// 2. 相手にどうしてほしいか
 	wants: string[];
-	// 3. 相手へのアドバイス
 	advice: string[];
-	// 4. 幸せになるために相手に何が必要か
 	needs: string[];
-	// 5. 相手についてどう思うか
 	traits: string[];
-	// 6. 二度と経験したくないこと
 	neverAgain: string[];
 };
 
@@ -60,23 +133,136 @@ const initialWorksheet: WorksheetAnswers = {
 	neverAgain: [""],
 };
 
-export default function TheWork() {
+const initialFourQuestions: FourQuestionsAnswers = {
+	isTrue: "",
+	absolutelyTrue: "",
+	reaction: "",
+	withoutThought: "",
+};
+
+const initialTurnaround: TurnaroundAnswers = {
+	toSelf: "",
+	toOther: "",
+	toOpposite: "",
+};
+
+const LOCAL_STORAGE_KEY = "theWork_draft";
+
+type DraftState = {
+	step: Step;
+	worksheet: WorksheetAnswers;
+	selectedBelief: string;
+	fourQuestions: FourQuestionsAnswers;
+	turnaround: TurnaroundAnswers;
+	beliefs: string[];
+};
+
+function saveDraft(state: DraftState) {
+	try {
+		localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+	} catch {
+		// localStorage が使えない環境では無視
+	}
+}
+
+function loadDraft(): DraftState | null {
+	try {
+		const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+		if (!raw) return null;
+		return JSON.parse(raw) as DraftState;
+	} catch {
+		return null;
+	}
+}
+
+function clearDraft() {
+	try {
+		localStorage.removeItem(LOCAL_STORAGE_KEY);
+	} catch {
+		// 無視
+	}
+}
+
+function getMemberId(): string {
+	let id = localStorage.getItem("theWorkMemberId");
+	if (!id) {
+		id = crypto.randomUUID();
+		localStorage.setItem("theWorkMemberId", id);
+	}
+	return id;
+}
+
+export default function TheWork({
+	loaderData,
+}: Route.ComponentProps) {
+	const fetcher = useFetcher();
+	const [memberId, setMemberId] = useState("");
 	const [step, setStep] = useState<Step>("worksheet");
 	const [worksheet, setWorksheet] =
 		useState<WorksheetAnswers>(initialWorksheet);
 	const [beliefs, setBeliefs] = useState<string[]>([]);
 	const [selectedBelief, setSelectedBelief] = useState("");
-	const [fourQuestions, setFourQuestions] = useState<FourQuestionsAnswers>({
-		isTrue: "",
-		absolutelyTrue: "",
-		reaction: "",
-		withoutThought: "",
-	});
-	const [turnaround, setTurnaround] = useState<TurnaroundAnswers>({
-		toSelf: "",
-		toOther: "",
-		toOpposite: "",
-	});
+	const [fourQuestions, setFourQuestions] =
+		useState<FourQuestionsAnswers>(initialFourQuestions);
+	const [turnaround, setTurnaround] =
+		useState<TurnaroundAnswers>(initialTurnaround);
+	const [currentSessionId, setCurrentSessionId] = useState<number | null>(
+		null,
+	);
+	const [showHistory, setShowHistory] = useState(false);
+	const [saveMessage, setSaveMessage] = useState("");
+	const [initialized, setInitialized] = useState(false);
+
+	// 初期化: localStorage からドラフトを復元、memberId を取得
+	useEffect(() => {
+		const id = getMemberId();
+		setMemberId(id);
+
+		const draft = loadDraft();
+		if (draft) {
+			setStep(draft.step);
+			setWorksheet(draft.worksheet);
+			setSelectedBelief(draft.selectedBelief);
+			setFourQuestions(draft.fourQuestions);
+			setTurnaround(draft.turnaround);
+			setBeliefs(draft.beliefs);
+		}
+		setInitialized(true);
+	}, []);
+
+	// 状態変更時に localStorage に自動保存 (デバウンス)
+	const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+	useEffect(() => {
+		if (!initialized) return;
+		clearTimeout(saveTimerRef.current);
+		saveTimerRef.current = setTimeout(() => {
+			saveDraft({
+				step,
+				worksheet,
+				selectedBelief,
+				fourQuestions,
+				turnaround,
+				beliefs,
+			});
+		}, 500);
+		return () => clearTimeout(saveTimerRef.current);
+	}, [step, worksheet, selectedBelief, fourQuestions, turnaround, beliefs, initialized]);
+
+	// action の結果を処理
+	useEffect(() => {
+		if (fetcher.data && "success" in fetcher.data && fetcher.data.success) {
+			if ("deleted" in fetcher.data) {
+				// 削除後にセッション一覧を再読み込み
+				if (memberId) {
+					fetcher.load(`/the-work?memberId=${memberId}`);
+				}
+			} else if ("sessionId" in fetcher.data) {
+				setCurrentSessionId(fetcher.data.sessionId as number);
+				setSaveMessage("保存しました");
+				setTimeout(() => setSaveMessage(""), 2000);
+			}
+		}
+	}, [fetcher.data, memberId]);
 
 	// ワークシートからビリーフを抽出
 	const extractBeliefs = useCallback(() => {
@@ -87,75 +273,54 @@ export default function TheWork() {
 			);
 		}
 		for (const want of worksheet.wants) {
-			if (want.trim()) {
+			if (want.trim())
 				result.push(`${worksheet.name}に${want.trim()}してほしい`);
-			}
 		}
 		for (const adv of worksheet.advice) {
-			if (adv.trim()) {
-				result.push(`${worksheet.name}は${adv.trim()}`);
-			}
+			if (adv.trim()) result.push(`${worksheet.name}は${adv.trim()}`);
 		}
 		for (const need of worksheet.needs) {
-			if (need.trim()) {
+			if (need.trim())
 				result.push(
 					`幸せになるために、${worksheet.name}には${need.trim()}が必要だ`,
 				);
-			}
 		}
 		for (const trait of worksheet.traits) {
-			if (trait.trim()) {
-				result.push(`${worksheet.name}は${trait.trim()}`);
-			}
+			if (trait.trim()) result.push(`${worksheet.name}は${trait.trim()}`);
 		}
 		for (const exp of worksheet.neverAgain) {
-			if (exp.trim()) {
-				result.push(`二度と${exp.trim()}を経験したくない`);
-			}
+			if (exp.trim()) result.push(`二度と${exp.trim()}を経験したくない`);
 		}
 		return result;
 	}, [worksheet]);
 
-	// ワークシート完了 → ビリーフ選択へ
 	const handleWorksheetComplete = useCallback(() => {
 		const extracted = extractBeliefs();
 		setBeliefs(extracted);
 		setStep("select-belief");
 	}, [extractBeliefs]);
 
-	// ビリーフ選択 → 4つの質問へ
 	const handleSelectBelief = useCallback((belief: string) => {
 		setSelectedBelief(belief);
-		setFourQuestions({
-			isTrue: "",
-			absolutelyTrue: "",
-			reaction: "",
-			withoutThought: "",
-		});
-		setTurnaround({ toSelf: "", toOther: "", toOpposite: "" });
+		setFourQuestions(initialFourQuestions);
+		setTurnaround(initialTurnaround);
 		setStep("four-questions");
 	}, []);
 
-	// 4つの質問完了 → ターンアラウンドへ
 	const handleFourQuestionsComplete = useCallback(() => {
 		setStep("turnaround");
 	}, []);
 
-	// リスト項目の追加
 	const addListItem = useCallback(
 		(field: keyof WorksheetAnswers) => {
 			const current = worksheet[field];
 			if (Array.isArray(current)) {
-				setWorksheet({
-					...worksheet,
-					[field]: [...current, ""],
-				});
+				setWorksheet({ ...worksheet, [field]: [...current, ""] });
 			}
 		},
 		[worksheet],
 	);
 
-	// リスト項目の更新
 	const updateListItem = useCallback(
 		(field: keyof WorksheetAnswers, index: number, value: string) => {
 			const current = worksheet[field];
@@ -168,7 +333,6 @@ export default function TheWork() {
 		[worksheet],
 	);
 
-	// リスト項目の削除
 	const removeListItem = useCallback(
 		(field: keyof WorksheetAnswers, index: number) => {
 			const current = worksheet[field];
@@ -182,26 +346,133 @@ export default function TheWork() {
 		[worksheet],
 	);
 
-	// 最初からやり直す
+	// D1 に保存
+	const handleSave = useCallback(() => {
+		const title = worksheet.name
+			? `${worksheet.name}に対するワーク`
+			: "無題のワーク";
+		const formData = new FormData();
+		formData.set("intent", "save");
+		formData.set("memberId", memberId);
+		formData.set("title", title);
+		formData.set("worksheet", JSON.stringify(worksheet));
+		formData.set("selectedBelief", selectedBelief);
+		formData.set("fourQuestions", JSON.stringify(fourQuestions));
+		formData.set("turnaround", JSON.stringify(turnaround));
+		formData.set("step", step);
+		if (currentSessionId) {
+			formData.set("sessionId", String(currentSessionId));
+		}
+		fetcher.submit(formData, { method: "POST" });
+	}, [
+		memberId,
+		worksheet,
+		selectedBelief,
+		fourQuestions,
+		turnaround,
+		step,
+		currentSessionId,
+		fetcher,
+	]);
+
+	// 保存済みセッションを読み込む
+	const handleLoadSession = useCallback(
+		(session: (typeof loaderData.sessions)[number]) => {
+			try {
+				const ws = JSON.parse(session.worksheet) as WorksheetAnswers;
+				setWorksheet(ws);
+				setSelectedBelief(session.selectedBelief || "");
+				setFourQuestions(
+					session.fourQuestions
+						? (JSON.parse(session.fourQuestions) as FourQuestionsAnswers)
+						: initialFourQuestions,
+				);
+				setTurnaround(
+					session.turnaround
+						? (JSON.parse(session.turnaround) as TurnaroundAnswers)
+						: initialTurnaround,
+				);
+				setStep(session.step as Step);
+				setCurrentSessionId(session.id);
+				// ビリーフも再抽出
+				const result: string[] = [];
+				if (ws.name && ws.emotion && ws.reason) {
+					result.push(
+						`${ws.name}に対して${ws.emotion}。なぜなら${ws.reason}`,
+					);
+				}
+				for (const w of ws.wants) {
+					if (w.trim()) result.push(`${ws.name}に${w.trim()}してほしい`);
+				}
+				for (const a of ws.advice) {
+					if (a.trim()) result.push(`${ws.name}は${a.trim()}`);
+				}
+				for (const n of ws.needs) {
+					if (n.trim())
+						result.push(
+							`幸せになるために、${ws.name}には${n.trim()}が必要だ`,
+						);
+				}
+				for (const t of ws.traits) {
+					if (t.trim()) result.push(`${ws.name}は${t.trim()}`);
+				}
+				for (const e of ws.neverAgain) {
+					if (e.trim()) result.push(`二度と${e.trim()}を経験したくない`);
+				}
+				setBeliefs(result);
+				setShowHistory(false);
+			} catch {
+				// パースエラーは無視
+			}
+		},
+		[],
+	);
+
+	// セッション削除
+	const handleDeleteSession = useCallback(
+		(sessionId: number) => {
+			const formData = new FormData();
+			formData.set("intent", "delete");
+			formData.set("sessionId", String(sessionId));
+			fetcher.submit(formData, { method: "POST" });
+			if (currentSessionId === sessionId) {
+				setCurrentSessionId(null);
+			}
+		},
+		[fetcher, currentSessionId],
+	);
+
+	// 新規ワーク
 	const handleReset = useCallback(() => {
 		setWorksheet(initialWorksheet);
 		setBeliefs([]);
 		setSelectedBelief("");
-		setFourQuestions({
-			isTrue: "",
-			absolutelyTrue: "",
-			reaction: "",
-			withoutThought: "",
-		});
-		setTurnaround({ toSelf: "", toOther: "", toOpposite: "" });
+		setFourQuestions(initialFourQuestions);
+		setTurnaround(initialTurnaround);
 		setStep("worksheet");
+		setCurrentSessionId(null);
+		clearDraft();
 	}, []);
 
-	// ワークシート入力の最低限チェック
+	// 履歴の表示/非表示切り替え
+	const handleToggleHistory = useCallback(() => {
+		if (!showHistory && memberId) {
+			fetcher.load(`/the-work?memberId=${memberId}`);
+		}
+		setShowHistory((prev) => !prev);
+	}, [showHistory, memberId, fetcher]);
+
 	const isWorksheetValid =
 		worksheet.name.trim() !== "" &&
 		worksheet.emotion.trim() !== "" &&
 		worksheet.reason.trim() !== "";
+
+	// SSR 中は何も表示しない (localStorage に依存するため)
+	if (!initialized) {
+		return (
+			<div className="min-h-dvh bg-gradient-to-br from-violet-950 via-fuchsia-950 to-indigo-950" />
+		);
+	}
 
 	return (
 		<div className="min-h-dvh bg-gradient-to-br from-violet-950 via-fuchsia-950 to-indigo-950">
@@ -221,13 +492,55 @@ export default function TheWork() {
 					>
 						← ホームに戻る
 					</Link>
-					<h1 className="text-3xl sm:text-4xl font-bold tracking-tight bg-gradient-to-r from-white via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent">
-						ザ・ワーク
-					</h1>
-					<p className="text-purple-200/70 mt-2">
-						バイロン・ケイティの「ザ・ワーク」- 思い込みを4つの質問で問いかける
-					</p>
+					<div className="flex items-start justify-between gap-4">
+						<div>
+							<h1 className="text-3xl sm:text-4xl font-bold tracking-tight bg-gradient-to-r from-white via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent">
+								ザ・ワーク
+							</h1>
+							<p className="text-purple-200/70 mt-2">
+								バイロン・ケイティの「ザ・ワーク」-
+								思い込みを4つの質問で問いかける
+							</p>
+						</div>
+						<div className="flex gap-2 shrink-0 mt-1">
+							<button
+								type="button"
+								onClick={handleSave}
+								disabled={fetcher.state !== "idle"}
+								className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+									saveMessage
+										? "bg-green-500/20 text-green-300 border border-green-500/30"
+										: "bg-white/10 text-purple-200 border border-white/10 hover:bg-white/20"
+								} disabled:opacity-50`}
+							>
+								{saveMessage || "保存"}
+							</button>
+							<button
+								type="button"
+								onClick={handleToggleHistory}
+								className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
+									showHistory
+										? "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30"
+										: "bg-white/10 text-purple-200 border-white/10 hover:bg-white/20"
+								}`}
+							>
+								履歴
+							</button>
+						</div>
+					</div>
 				</header>
+
+				{/* 保存済みセッション一覧 */}
+				{showHistory && (
+					<SessionHistory
+						sessions={loaderData.sessions}
+						currentSessionId={currentSessionId}
+						onLoad={handleLoadSession}
+						onDelete={handleDeleteSession}
+						onNewWork={handleReset}
+						isLoading={fetcher.state !== "idle"}
+					/>
+				)}
 
 				{/* ステッププログレス */}
 				<StepProgress currentStep={step} />
@@ -274,6 +587,107 @@ export default function TheWork() {
 					/>
 				)}
 			</div>
+		</div>
+	);
+}
+
+// --- セッション履歴 ---
+function SessionHistory({
+	sessions,
+	currentSessionId,
+	onLoad,
+	onDelete,
+	onNewWork,
+	isLoading,
+}: {
+	sessions: {
+		id: number;
+		memberId: string;
+		title: string;
+		worksheet: string;
+		selectedBelief: string | null;
+		fourQuestions: string | null;
+		turnaround: string | null;
+		step: string;
+		createdAt: Date | null;
+		updatedAt: Date | null;
+	}[];
+	currentSessionId: number | null;
+	onLoad: (session: (typeof sessions)[number]) => void;
+	onDelete: (sessionId: number) => void;
+	onNewWork: () => void;
+	isLoading: boolean;
+}) {
+	const stepLabels: Record<string, string> = {
+		worksheet: "ワークシート",
+		"select-belief": "ビリーフ選択",
+		"four-questions": "4つの質問",
+		turnaround: "置き換え",
+	};
+
+	return (
+		<div className="w-full mb-6">
+			<SectionCard>
+				<div className="flex items-center justify-between mb-4">
+					<h2 className="text-lg font-bold text-purple-100">保存済みワーク</h2>
+					<button
+						type="button"
+						onClick={onNewWork}
+						className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-white hover:from-fuchsia-600 hover:to-cyan-600 transition-all"
+					>
+						+ 新規ワーク
+					</button>
+				</div>
+
+				{isLoading ? (
+					<p className="text-sm text-purple-200/50 text-center py-4">
+						読み込み中...
+					</p>
+				) : sessions.length === 0 ? (
+					<p className="text-sm text-purple-200/50 text-center py-4">
+						保存済みのワークはまだありません
+					</p>
+				) : (
+					<div className="space-y-2">
+						{sessions.map((session) => (
+							<div
+								key={session.id}
+								className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-all ${
+									currentSessionId === session.id
+										? "border-fuchsia-500/50 bg-fuchsia-500/10"
+										: "border-white/10 bg-white/5 hover:bg-white/10"
+								}`}
+							>
+								<button
+									type="button"
+									onClick={() => onLoad(session)}
+									className="flex-1 text-left"
+								>
+									<p className="text-sm font-medium text-purple-100">
+										{session.title}
+									</p>
+									<p className="text-xs text-purple-200/50 mt-0.5">
+										{stepLabels[session.step] || session.step}
+										{session.updatedAt &&
+											` · ${new Date(session.updatedAt).toLocaleDateString("ja-JP")}`}
+									</p>
+								</button>
+								<button
+									type="button"
+									onClick={(e) => {
+										e.stopPropagation();
+										onDelete(session.id);
+									}}
+									className="px-2 py-1 text-xs text-purple-300/40 hover:text-red-400 transition-colors"
+									aria-label="削除"
+								>
+									削除
+								</button>
+							</div>
+						))}
+					</div>
+				)}
+			</SectionCard>
 		</div>
 	);
 }
@@ -359,8 +773,10 @@ function WorksheetForm({
 					誰かに対する不満やジャッジを正直に書き出してください。きれいに書く必要はありません。
 				</p>
 
-				{/* 質問1 */}
-				<QuestionBlock number={1} title="誰に対して、なぜ怒り・悲しみ・恐れ・困惑していますか？">
+				<QuestionBlock
+					number={1}
+					title="誰に対して、なぜ怒り・悲しみ・恐れ・困惑していますか？"
+				>
 					<p className="text-sm text-purple-200/50 mb-3 italic">
 						「（名前）に対して（感情）。なぜなら（理由）」
 					</p>
@@ -387,8 +803,10 @@ function WorksheetForm({
 					</div>
 				</QuestionBlock>
 
-				{/* 質問2 */}
-				<QuestionBlock number={2} title="その人にどう変わってほしいですか？ 何を求めますか？">
+				<QuestionBlock
+					number={2}
+					title="その人にどう変わってほしいですか？ 何を求めますか？"
+				>
 					<p className="text-sm text-purple-200/50 mb-3 italic">
 						「（名前）に〇〇してほしい」
 					</p>
@@ -402,8 +820,10 @@ function WorksheetForm({
 					/>
 				</QuestionBlock>
 
-				{/* 質問3 */}
-				<QuestionBlock number={3} title="その人にどんなアドバイスをしたいですか？">
+				<QuestionBlock
+					number={3}
+					title="その人にどんなアドバイスをしたいですか？"
+				>
 					<p className="text-sm text-purple-200/50 mb-3 italic">
 						「（名前）は〇〇すべきだ / すべきでない」
 					</p>
@@ -417,8 +837,10 @@ function WorksheetForm({
 					/>
 				</QuestionBlock>
 
-				{/* 質問4 */}
-				<QuestionBlock number={4} title="あなたが幸せになるために、その人に何が必要ですか？">
+				<QuestionBlock
+					number={4}
+					title="あなたが幸せになるために、その人に何が必要ですか？"
+				>
 					<p className="text-sm text-purple-200/50 mb-3 italic">
 						「幸せになるために、（名前）には〇〇が必要だ」
 					</p>
@@ -432,8 +854,10 @@ function WorksheetForm({
 					/>
 				</QuestionBlock>
 
-				{/* 質問5 */}
-				<QuestionBlock number={5} title="その人についてどう思いますか？ リストにしてください。">
+				<QuestionBlock
+					number={5}
+					title="その人についてどう思いますか？ リストにしてください。"
+				>
 					<p className="text-sm text-purple-200/50 mb-3 italic">
 						「（名前）は〇〇だ」
 					</p>
@@ -447,8 +871,10 @@ function WorksheetForm({
 					/>
 				</QuestionBlock>
 
-				{/* 質問6 */}
-				<QuestionBlock number={6} title="この人について、二度と経験したくないことは何ですか？">
+				<QuestionBlock
+					number={6}
+					title="この人について、二度と経験したくないことは何ですか？"
+				>
 					<p className="text-sm text-purple-200/50 mb-3 italic">
 						「二度と〇〇を経験したくない」
 					</p>
@@ -573,10 +999,10 @@ function FourQuestions({
 				</div>
 
 				<div className="space-y-6">
-					{/* 質問1 */}
 					<QuestionBlock number={1} title="それは本当ですか？">
 						<p className="text-sm text-purple-200/50 mb-3">
-							はい か いいえ で答えてください。「はい」の場合は質問2へ。「いいえ」の場合は質問3へ進んでください。
+							はい か いいえ
+							で答えてください。「はい」の場合は質問2へ。「いいえ」の場合は質問3へ進んでください。
 						</p>
 						<textarea
 							value={answers.isTrue}
@@ -589,8 +1015,10 @@ function FourQuestions({
 						/>
 					</QuestionBlock>
 
-					{/* 質問2 */}
-					<QuestionBlock number={2} title="それが本当だと、絶対に言い切れますか？">
+					<QuestionBlock
+						number={2}
+						title="それが本当だと、絶対に言い切れますか？"
+					>
 						<p className="text-sm text-purple-200/50 mb-3">
 							自分の内側に静かに問いかけてください。
 						</p>
@@ -605,7 +1033,6 @@ function FourQuestions({
 						/>
 					</QuestionBlock>
 
-					{/* 質問3 */}
 					<QuestionBlock
 						number={3}
 						title="その考えを信じるとき、あなたはどう反応しますか？ 何が起こりますか？"
@@ -624,7 +1051,6 @@ function FourQuestions({
 						/>
 					</QuestionBlock>
 
-					{/* 質問4 */}
 					<QuestionBlock
 						number={4}
 						title="その考えがなかったら、あなたはどうなりますか？"
@@ -697,12 +1123,10 @@ function Turnaround({
 				</p>
 
 				<div className="space-y-6">
-					{/* 自分への置き換え */}
 					<QuestionBlock title="自分への置き換え">
 						<p className="text-sm text-purple-200/50 mb-3">
 							主語を相手から自分に変えてみてください。
-							{name &&
-								`「${name}は〇〇」→「私は〇〇」`}
+							{name && `「${name}は〇〇」→「私は〇〇」`}
 						</p>
 						<textarea
 							value={answers.toSelf}
@@ -715,7 +1139,6 @@ function Turnaround({
 						/>
 					</QuestionBlock>
 
-					{/* 相手への置き換え */}
 					<QuestionBlock title="相手への置き換え">
 						<p className="text-sm text-purple-200/50 mb-3">
 							立場を入れ替えてみてください。
@@ -733,7 +1156,6 @@ function Turnaround({
 						/>
 					</QuestionBlock>
 
-					{/* 反対への置き換え */}
 					<QuestionBlock title="反対への置き換え">
 						<p className="text-sm text-purple-200/50 mb-3">
 							元の考えの正反対を書いてみてください。
