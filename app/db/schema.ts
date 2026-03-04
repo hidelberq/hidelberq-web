@@ -336,11 +336,12 @@ export const lifeChartEvents = sqliteTable("life_chart_events", {
 export const theWorkSessions = sqliteTable("the_work_sessions", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	memberId: text("member_id").notNull(), // localStorage の UUID
-	title: text("title").notNull(), // セッション名（対象者名など）
+	title: text("title").notNull(), // ユーザーが付けるセッション名
 	worksheet: text("worksheet").notNull(), // JSON: WorksheetAnswers
 	selectedBelief: text("selected_belief"),
 	fourQuestions: text("four_questions"), // JSON: FourQuestionsAnswers
 	turnaround: text("turnaround"), // JSON: TurnaroundAnswers
+	beliefWorks: text("belief_works"), // JSON: BeliefWork[] (完了済みビリーフワーク)
 	step: text("step").notNull().default("worksheet"), // 現在のステップ
 	createdAt: integer("created_at", { mode: "timestamp" }).default(
 		sql`(strftime('%s', 'now'))`,

@@ -16,7 +16,7 @@ export function meta(_args: Route.MetaArgs) {
 	];
 }
 
-// --- loader: 保存済みセッション一覧を取得 ---
+// --- loader ---
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const url = new URL(request.url);
 	const memberId = url.searchParams.get("memberId");
@@ -33,7 +33,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	return { sessions };
 }
 
-// --- action: セッションの保存・削除 ---
+// --- action ---
 export async function action({ request, context }: Route.ActionArgs) {
 	const formData = await request.formData();
 	const intent = formData.get("intent") as string;
@@ -47,36 +47,30 @@ export async function action({ request, context }: Route.ActionArgs) {
 		const selectedBelief = formData.get("selectedBelief") as string;
 		const fourQuestions = formData.get("fourQuestions") as string;
 		const turnaround = formData.get("turnaround") as string;
+		const beliefWorks = formData.get("beliefWorks") as string;
 		const step = formData.get("step") as string;
 
+		const values = {
+			title,
+			worksheet,
+			selectedBelief: selectedBelief || null,
+			fourQuestions: fourQuestions || null,
+			turnaround: turnaround || null,
+			beliefWorks: beliefWorks || null,
+			step,
+			updatedAt: new Date(),
+		};
+
 		if (sessionId) {
-			// 既存セッションを更新
 			await db
 				.update(theWorkSessions)
-				.set({
-					title,
-					worksheet,
-					selectedBelief: selectedBelief || null,
-					fourQuestions: fourQuestions || null,
-					turnaround: turnaround || null,
-					step,
-					updatedAt: new Date(),
-				})
+				.set(values)
 				.where(eq(theWorkSessions.id, Number(sessionId)));
 			return { success: true, sessionId: Number(sessionId) };
 		}
-		// 新規セッションを作成
 		const result = await db
 			.insert(theWorkSessions)
-			.values({
-				memberId,
-				title,
-				worksheet,
-				selectedBelief: selectedBelief || null,
-				fourQuestions: fourQuestions || null,
-				turnaround: turnaround || null,
-				step,
-			})
+			.values({ memberId, ...values })
 			.returning({ id: theWorkSessions.id });
 		return { success: true, sessionId: result[0].id };
 	}
@@ -92,10 +86,10 @@ export async function action({ request, context }: Route.ActionArgs) {
 	return { error: "不明な操作です" };
 }
 
-// ステップの定義
+// --- 型定義 ---
+
 type Step = "worksheet" | "select-belief" | "four-questions" | "turnaround";
 
-// ワークシートの回答
 type WorksheetAnswers = {
 	name: string;
 	emotion: string;
@@ -107,7 +101,6 @@ type WorksheetAnswers = {
 	neverAgain: string[];
 };
 
-// 4つの質問の回答
 type FourQuestionsAnswers = {
 	isTrue: string;
 	absolutelyTrue: string;
@@ -115,11 +108,17 @@ type FourQuestionsAnswers = {
 	withoutThought: string;
 };
 
-// ターンアラウンドの回答
 type TurnaroundAnswers = {
 	toSelf: string;
 	toOther: string;
 	toOpposite: string;
+};
+
+// 1つのビリーフに対するワーク結果
+type BeliefWork = {
+	belief: string;
+	fourQuestions: FourQuestionsAnswers;
+	turnaround: TurnaroundAnswers;
 };
 
 const initialWorksheet: WorksheetAnswers = {
@@ -155,13 +154,14 @@ type DraftState = {
 	fourQuestions: FourQuestionsAnswers;
 	turnaround: TurnaroundAnswers;
 	beliefs: string[];
+	completedBeliefWorks: BeliefWork[];
 };
 
 function saveDraft(state: DraftState) {
 	try {
 		localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
 	} catch {
-		// localStorage が使えない環境では無視
+		// 無視
 	}
 }
 
@@ -192,9 +192,38 @@ function getMemberId(): string {
 	return id;
 }
 
-export default function TheWork({
-	loaderData,
-}: Route.ComponentProps) {
+// ワークシートからビリーフを抽出
+function extractBeliefsFromWorksheet(ws: WorksheetAnswers): string[] {
+	const result: string[] = [];
+	if (ws.name && ws.emotion && ws.reason) {
+		result.push(
+			`${ws.name}に対して${ws.emotion}。なぜなら${ws.reason}`,
+		);
+	}
+	for (const want of ws.wants) {
+		if (want.trim()) result.push(`${ws.name}に${want.trim()}してほしい`);
+	}
+	for (const adv of ws.advice) {
+		if (adv.trim()) result.push(`${ws.name}は${adv.trim()}`);
+	}
+	for (const need of ws.needs) {
+		if (need.trim())
+			result.push(
+				`幸せになるために、${ws.name}には${need.trim()}が必要だ`,
+			);
+	}
+	for (const trait of ws.traits) {
+		if (trait.trim()) result.push(`${ws.name}は${trait.trim()}`);
+	}
+	for (const exp of ws.neverAgain) {
+		if (exp.trim()) result.push(`二度と${exp.trim()}を経験したくない`);
+	}
+	return result;
+}
+
+// --- メインコンポーネント ---
+
+export default function TheWork({ loaderData }: Route.ComponentProps) {
 	const fetcher = useFetcher();
 	const [memberId, setMemberId] = useState("");
 	const [step, setStep] = useState<Step>("worksheet");
@@ -206,18 +235,22 @@ export default function TheWork({
 		useState<FourQuestionsAnswers>(initialFourQuestions);
 	const [turnaround, setTurnaround] =
 		useState<TurnaroundAnswers>(initialTurnaround);
+	const [completedBeliefWorks, setCompletedBeliefWorks] = useState<
+		BeliefWork[]
+	>([]);
 	const [currentSessionId, setCurrentSessionId] = useState<number | null>(
 		null,
 	);
 	const [showHistory, setShowHistory] = useState(false);
+	const [showSaveDialog, setShowSaveDialog] = useState(false);
+	const [saveTitle, setSaveTitle] = useState("");
 	const [saveMessage, setSaveMessage] = useState("");
 	const [initialized, setInitialized] = useState(false);
 
-	// 初期化: localStorage からドラフトを復元、memberId を取得
+	// 初期化
 	useEffect(() => {
 		const id = getMemberId();
 		setMemberId(id);
-
 		const draft = loadDraft();
 		if (draft) {
 			setStep(draft.step);
@@ -226,11 +259,12 @@ export default function TheWork({
 			setFourQuestions(draft.fourQuestions);
 			setTurnaround(draft.turnaround);
 			setBeliefs(draft.beliefs);
+			setCompletedBeliefWorks(draft.completedBeliefWorks || []);
 		}
 		setInitialized(true);
 	}, []);
 
-	// 状態変更時に localStorage に自動保存 (デバウンス)
+	// localStorage 自動保存 (デバウンス)
 	const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 	useEffect(() => {
 		if (!initialized) return;
@@ -243,63 +277,45 @@ export default function TheWork({
 				fourQuestions,
 				turnaround,
 				beliefs,
+				completedBeliefWorks,
 			});
 		}, 500);
 		return () => clearTimeout(saveTimerRef.current);
-	}, [step, worksheet, selectedBelief, fourQuestions, turnaround, beliefs, initialized]);
+	}, [
+		step,
+		worksheet,
+		selectedBelief,
+		fourQuestions,
+		turnaround,
+		beliefs,
+		completedBeliefWorks,
+		initialized,
+	]);
 
-	// action の結果を処理
+	// action 結果の処理
 	useEffect(() => {
 		if (fetcher.data && "success" in fetcher.data && fetcher.data.success) {
 			if ("deleted" in fetcher.data) {
-				// 削除後にセッション一覧を再読み込み
 				if (memberId) {
 					fetcher.load(`/the-work?memberId=${memberId}`);
 				}
 			} else if ("sessionId" in fetcher.data) {
 				setCurrentSessionId(fetcher.data.sessionId as number);
 				setSaveMessage("保存しました");
+				setShowSaveDialog(false);
 				setTimeout(() => setSaveMessage(""), 2000);
 			}
 		}
 	}, [fetcher.data, memberId]);
 
-	// ワークシートからビリーフを抽出
-	const extractBeliefs = useCallback(() => {
-		const result: string[] = [];
-		if (worksheet.name && worksheet.emotion && worksheet.reason) {
-			result.push(
-				`${worksheet.name}に対して${worksheet.emotion}。なぜなら${worksheet.reason}`,
-			);
-		}
-		for (const want of worksheet.wants) {
-			if (want.trim())
-				result.push(`${worksheet.name}に${want.trim()}してほしい`);
-		}
-		for (const adv of worksheet.advice) {
-			if (adv.trim()) result.push(`${worksheet.name}は${adv.trim()}`);
-		}
-		for (const need of worksheet.needs) {
-			if (need.trim())
-				result.push(
-					`幸せになるために、${worksheet.name}には${need.trim()}が必要だ`,
-				);
-		}
-		for (const trait of worksheet.traits) {
-			if (trait.trim()) result.push(`${worksheet.name}は${trait.trim()}`);
-		}
-		for (const exp of worksheet.neverAgain) {
-			if (exp.trim()) result.push(`二度と${exp.trim()}を経験したくない`);
-		}
-		return result;
-	}, [worksheet]);
-
+	// ワークシート完了
 	const handleWorksheetComplete = useCallback(() => {
-		const extracted = extractBeliefs();
+		const extracted = extractBeliefsFromWorksheet(worksheet);
 		setBeliefs(extracted);
 		setStep("select-belief");
-	}, [extractBeliefs]);
+	}, [worksheet]);
 
+	// ビリーフ選択
 	const handleSelectBelief = useCallback((belief: string) => {
 		setSelectedBelief(belief);
 		setFourQuestions(initialFourQuestions);
@@ -307,10 +323,47 @@ export default function TheWork({
 		setStep("four-questions");
 	}, []);
 
+	// 4つの質問完了
 	const handleFourQuestionsComplete = useCallback(() => {
 		setStep("turnaround");
 	}, []);
 
+	// ターンアラウンド完了 → 完了済みに保存して次のビリーフへ
+	const handleCompleteBelief = useCallback(() => {
+		const work: BeliefWork = {
+			belief: selectedBelief,
+			fourQuestions,
+			turnaround,
+		};
+		setCompletedBeliefWorks((prev) => {
+			// 同じビリーフが既にあれば上書き
+			const existing = prev.findIndex((w) => w.belief === selectedBelief);
+			if (existing >= 0) {
+				const updated = [...prev];
+				updated[existing] = work;
+				return updated;
+			}
+			return [...prev, work];
+		});
+		setSelectedBelief("");
+		setFourQuestions(initialFourQuestions);
+		setTurnaround(initialTurnaround);
+		setStep("select-belief");
+	}, [selectedBelief, fourQuestions, turnaround]);
+
+	// 完了済みビリーフワークを再編集
+	const handleEditBeliefWork = useCallback(
+		(index: number) => {
+			const work = completedBeliefWorks[index];
+			setSelectedBelief(work.belief);
+			setFourQuestions(work.fourQuestions);
+			setTurnaround(work.turnaround);
+			setStep("four-questions");
+		},
+		[completedBeliefWorks],
+	);
+
+	// リスト操作
 	const addListItem = useCallback(
 		(field: keyof WorksheetAnswers) => {
 			const current = worksheet[field];
@@ -346,19 +399,28 @@ export default function TheWork({
 		[worksheet],
 	);
 
+	// 保存ダイアログを開く
+	const handleOpenSaveDialog = useCallback(() => {
+		setSaveTitle(
+			currentSessionId
+				? (saveTitle || worksheet.name || "")
+				: (worksheet.name || ""),
+		);
+		setShowSaveDialog(true);
+	}, [currentSessionId, saveTitle, worksheet.name]);
+
 	// D1 に保存
 	const handleSave = useCallback(() => {
-		const title = worksheet.name
-			? `${worksheet.name}に対するワーク`
-			: "無題のワーク";
+		if (!saveTitle.trim()) return;
 		const formData = new FormData();
 		formData.set("intent", "save");
 		formData.set("memberId", memberId);
-		formData.set("title", title);
+		formData.set("title", saveTitle.trim());
 		formData.set("worksheet", JSON.stringify(worksheet));
 		formData.set("selectedBelief", selectedBelief);
 		formData.set("fourQuestions", JSON.stringify(fourQuestions));
 		formData.set("turnaround", JSON.stringify(turnaround));
+		formData.set("beliefWorks", JSON.stringify(completedBeliefWorks));
 		formData.set("step", step);
 		if (currentSessionId) {
 			formData.set("sessionId", String(currentSessionId));
@@ -366,10 +428,12 @@ export default function TheWork({
 		fetcher.submit(formData, { method: "POST" });
 	}, [
 		memberId,
+		saveTitle,
 		worksheet,
 		selectedBelief,
 		fourQuestions,
 		turnaround,
+		completedBeliefWorks,
 		step,
 		currentSessionId,
 		fetcher,
@@ -392,34 +456,15 @@ export default function TheWork({
 						? (JSON.parse(session.turnaround) as TurnaroundAnswers)
 						: initialTurnaround,
 				);
+				setCompletedBeliefWorks(
+					session.beliefWorks
+						? (JSON.parse(session.beliefWorks) as BeliefWork[])
+						: [],
+				);
 				setStep(session.step as Step);
 				setCurrentSessionId(session.id);
-				// ビリーフも再抽出
-				const result: string[] = [];
-				if (ws.name && ws.emotion && ws.reason) {
-					result.push(
-						`${ws.name}に対して${ws.emotion}。なぜなら${ws.reason}`,
-					);
-				}
-				for (const w of ws.wants) {
-					if (w.trim()) result.push(`${ws.name}に${w.trim()}してほしい`);
-				}
-				for (const a of ws.advice) {
-					if (a.trim()) result.push(`${ws.name}は${a.trim()}`);
-				}
-				for (const n of ws.needs) {
-					if (n.trim())
-						result.push(
-							`幸せになるために、${ws.name}には${n.trim()}が必要だ`,
-						);
-				}
-				for (const t of ws.traits) {
-					if (t.trim()) result.push(`${ws.name}は${t.trim()}`);
-				}
-				for (const e of ws.neverAgain) {
-					if (e.trim()) result.push(`二度と${e.trim()}を経験したくない`);
-				}
-				setBeliefs(result);
+				setSaveTitle(session.title);
+				setBeliefs(extractBeliefsFromWorksheet(ws));
 				setShowHistory(false);
 			} catch {
 				// パースエラーは無視
@@ -449,12 +494,14 @@ export default function TheWork({
 		setSelectedBelief("");
 		setFourQuestions(initialFourQuestions);
 		setTurnaround(initialTurnaround);
+		setCompletedBeliefWorks([]);
 		setStep("worksheet");
 		setCurrentSessionId(null);
+		setSaveTitle("");
 		clearDraft();
 	}, []);
 
-	// 履歴の表示/非表示切り替え
+	// 履歴の表示/非表示
 	const handleToggleHistory = useCallback(() => {
 		if (!showHistory && memberId) {
 			fetcher.load(`/the-work?memberId=${memberId}`);
@@ -467,7 +514,6 @@ export default function TheWork({
 		worksheet.emotion.trim() !== "" &&
 		worksheet.reason.trim() !== "";
 
-	// SSR 中は何も表示しない (localStorage に依存するため)
 	if (!initialized) {
 		return (
 			<div className="min-h-dvh bg-gradient-to-br from-violet-950 via-fuchsia-950 to-indigo-950" />
@@ -505,7 +551,7 @@ export default function TheWork({
 						<div className="flex gap-2 shrink-0 mt-1">
 							<button
 								type="button"
-								onClick={handleSave}
+								onClick={handleOpenSaveDialog}
 								disabled={fetcher.state !== "idle"}
 								className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
 									saveMessage
@@ -530,6 +576,18 @@ export default function TheWork({
 					</div>
 				</header>
 
+				{/* 保存ダイアログ */}
+				{showSaveDialog && (
+					<SaveDialog
+						title={saveTitle}
+						setTitle={setSaveTitle}
+						onSave={handleSave}
+						onCancel={() => setShowSaveDialog(false)}
+						isSubmitting={fetcher.state !== "idle"}
+						isUpdate={currentSessionId !== null}
+					/>
+				)}
+
 				{/* 保存済みセッション一覧 */}
 				{showHistory && (
 					<SessionHistory
@@ -544,6 +602,17 @@ export default function TheWork({
 
 				{/* ステッププログレス */}
 				<StepProgress currentStep={step} />
+
+				{/* 完了済みビリーフワーク一覧 */}
+				{completedBeliefWorks.length > 0 &&
+					(step === "select-belief" ||
+						step === "four-questions" ||
+						step === "turnaround") && (
+						<CompletedBeliefWorks
+							works={completedBeliefWorks}
+							onEdit={handleEditBeliefWork}
+						/>
+					)}
 
 				{/* メインコンテンツ */}
 				{step === "worksheet" && (
@@ -561,6 +630,7 @@ export default function TheWork({
 				{step === "select-belief" && (
 					<BeliefSelector
 						beliefs={beliefs}
+						completedBeliefs={completedBeliefWorks.map((w) => w.belief)}
 						onSelect={handleSelectBelief}
 						onBack={() => setStep("worksheet")}
 					/>
@@ -582,11 +652,114 @@ export default function TheWork({
 						name={worksheet.name}
 						answers={turnaround}
 						setAnswers={setTurnaround}
-						onBackToBeliefs={() => setStep("select-belief")}
+						onComplete={handleCompleteBelief}
 						onReset={handleReset}
 					/>
 				)}
 			</div>
+		</div>
+	);
+}
+
+// --- 保存ダイアログ ---
+function SaveDialog({
+	title,
+	setTitle,
+	onSave,
+	onCancel,
+	isSubmitting,
+	isUpdate,
+}: {
+	title: string;
+	setTitle: (t: string) => void;
+	onSave: () => void;
+	onCancel: () => void;
+	isSubmitting: boolean;
+	isUpdate: boolean;
+}) {
+	return (
+		<div className="w-full mb-6">
+			<SectionCard>
+				<h2 className="text-lg font-bold text-purple-100 mb-3">
+					{isUpdate ? "ワークを上書き保存" : "ワークを保存"}
+				</h2>
+				<div className="space-y-3">
+					<div>
+						<label
+							htmlFor="save-title"
+							className="text-xs text-purple-200/60 mb-1 block"
+						>
+							ワークの名前
+						</label>
+						<input
+							id="save-title"
+							type="text"
+							value={title}
+							onChange={(e) => setTitle(e.target.value)}
+							placeholder="例：上司に対するワーク、母との関係"
+							className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-purple-100 placeholder:text-purple-300/30 focus:outline-none focus:border-fuchsia-500/50"
+							autoFocus
+							onKeyDown={(e) => {
+								if (e.key === "Enter" && title.trim()) onSave();
+							}}
+						/>
+					</div>
+					<div className="flex gap-2 justify-end">
+						<button
+							type="button"
+							onClick={onCancel}
+							className="px-4 py-2 rounded-xl text-sm text-purple-300/60 hover:text-purple-200 transition-colors"
+						>
+							キャンセル
+						</button>
+						<button
+							type="button"
+							onClick={onSave}
+							disabled={!title.trim() || isSubmitting}
+							className="px-4 py-2 rounded-xl font-medium text-sm text-white bg-fuchsia-500 hover:bg-fuchsia-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+						>
+							{isSubmitting ? "保存中..." : "保存"}
+						</button>
+					</div>
+				</div>
+			</SectionCard>
+		</div>
+	);
+}
+
+// --- 完了済みビリーフワーク一覧 ---
+function CompletedBeliefWorks({
+	works,
+	onEdit,
+}: {
+	works: BeliefWork[];
+	onEdit: (index: number) => void;
+}) {
+	return (
+		<div className="w-full mb-6">
+			<SectionCard>
+				<h2 className="text-sm font-semibold uppercase tracking-widest text-fuchsia-400/80 mb-3">
+					ワーク済みのビリーフ ({works.length})
+				</h2>
+				<div className="space-y-2">
+					{works.map((work, i) => (
+						<button
+							key={work.belief}
+							type="button"
+							onClick={() => onEdit(i)}
+							className="w-full text-left px-4 py-3 rounded-xl border border-green-500/20 bg-green-500/5 hover:bg-green-500/10 transition-all"
+						>
+							<div className="flex items-center gap-2">
+								<span className="text-green-400 text-xs">&#10003;</span>
+								<span className="text-sm text-purple-100">{work.belief}</span>
+							</div>
+							<p className="text-xs text-purple-200/40 mt-1 ml-5">
+								クリックして編集
+							</p>
+						</button>
+					))}
+				</div>
+			</SectionCard>
 		</div>
 	);
 }
@@ -608,6 +781,7 @@ function SessionHistory({
 		selectedBelief: string | null;
 		fourQuestions: string | null;
 		turnaround: string | null;
+		beliefWorks: string | null;
 		step: string;
 		createdAt: Date | null;
 		updatedAt: Date | null;
@@ -624,6 +798,17 @@ function SessionHistory({
 		"four-questions": "4つの質問",
 		turnaround: "置き換え",
 	};
+
+	// 完了済みビリーフ数を計算
+	function getBeliefCount(session: (typeof sessions)[number]): number {
+		if (!session.beliefWorks) return 0;
+		try {
+			const works = JSON.parse(session.beliefWorks) as BeliefWork[];
+			return works.length;
+		} catch {
+			return 0;
+		}
+	}
 
 	return (
 		<div className="w-full mb-6">
@@ -649,42 +834,46 @@ function SessionHistory({
 					</p>
 				) : (
 					<div className="space-y-2">
-						{sessions.map((session) => (
-							<div
-								key={session.id}
-								className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-all ${
-									currentSessionId === session.id
-										? "border-fuchsia-500/50 bg-fuchsia-500/10"
-										: "border-white/10 bg-white/5 hover:bg-white/10"
-								}`}
-							>
-								<button
-									type="button"
-									onClick={() => onLoad(session)}
-									className="flex-1 text-left"
+						{sessions.map((session) => {
+							const beliefCount = getBeliefCount(session);
+							return (
+								<div
+									key={session.id}
+									className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-all ${
+										currentSessionId === session.id
+											? "border-fuchsia-500/50 bg-fuchsia-500/10"
+											: "border-white/10 bg-white/5 hover:bg-white/10"
+									}`}
 								>
-									<p className="text-sm font-medium text-purple-100">
-										{session.title}
-									</p>
-									<p className="text-xs text-purple-200/50 mt-0.5">
-										{stepLabels[session.step] || session.step}
-										{session.updatedAt &&
-											` · ${new Date(session.updatedAt).toLocaleDateString("ja-JP")}`}
-									</p>
-								</button>
-								<button
-									type="button"
-									onClick={(e) => {
-										e.stopPropagation();
-										onDelete(session.id);
-									}}
-									className="px-2 py-1 text-xs text-purple-300/40 hover:text-red-400 transition-colors"
-									aria-label="削除"
-								>
-									削除
-								</button>
-							</div>
-						))}
+									<button
+										type="button"
+										onClick={() => onLoad(session)}
+										className="flex-1 text-left"
+									>
+										<p className="text-sm font-medium text-purple-100">
+											{session.title}
+										</p>
+										<p className="text-xs text-purple-200/50 mt-0.5">
+											{stepLabels[session.step] || session.step}
+											{beliefCount > 0 && ` · ${beliefCount}件のビリーフ`}
+											{session.updatedAt &&
+												` · ${new Date(session.updatedAt).toLocaleDateString("ja-JP")}`}
+										</p>
+									</button>
+									<button
+										type="button"
+										onClick={(e) => {
+											e.stopPropagation();
+											onDelete(session.id);
+										}}
+										className="px-2 py-1 text-xs text-purple-300/40 hover:text-red-400 transition-colors"
+										aria-label="削除"
+									>
+										削除
+									</button>
+								</div>
+							);
+						})}
 					</div>
 				)}
 			</SectionCard>
@@ -904,10 +1093,12 @@ function WorksheetForm({
 // --- ビリーフ選択 ---
 function BeliefSelector({
 	beliefs,
+	completedBeliefs,
 	onSelect,
 	onBack,
 }: {
 	beliefs: string[];
+	completedBeliefs: string[];
 	onSelect: (belief: string) => void;
 	onBack: () => void;
 }) {
@@ -924,16 +1115,28 @@ function BeliefSelector({
 				</p>
 
 				<div className="space-y-2 mb-6">
-					{beliefs.map((belief) => (
-						<button
-							key={belief}
-							type="button"
-							onClick={() => onSelect(belief)}
-							className="w-full text-left px-4 py-3 rounded-xl border border-white/10 bg-white/5 hover:border-fuchsia-500/40 hover:bg-white/10 transition-all text-purple-100 text-sm"
-						>
-							{belief}
-						</button>
-					))}
+					{beliefs.map((belief) => {
+						const isCompleted = completedBeliefs.includes(belief);
+						return (
+							<button
+								key={belief}
+								type="button"
+								onClick={() => onSelect(belief)}
+								className={`w-full text-left px-4 py-3 rounded-xl border transition-all text-sm ${
+									isCompleted
+										? "border-green-500/20 bg-green-500/5 hover:bg-green-500/10"
+										: "border-white/10 bg-white/5 hover:border-fuchsia-500/40 hover:bg-white/10"
+								}`}
+							>
+								<div className="flex items-center gap-2">
+									{isCompleted && (
+										<span className="text-green-400 text-xs">&#10003;</span>
+									)}
+									<span className="text-purple-100">{belief}</span>
+								</div>
+							</button>
+						);
+					})}
 				</div>
 
 				<div className="border-t border-white/10 pt-4">
@@ -1096,14 +1299,14 @@ function Turnaround({
 	name,
 	answers,
 	setAnswers,
-	onBackToBeliefs,
+	onComplete,
 	onReset,
 }: {
 	belief: string;
 	name: string;
 	answers: TurnaroundAnswers;
 	setAnswers: (a: TurnaroundAnswers) => void;
-	onBackToBeliefs: () => void;
+	onComplete: () => void;
 	onReset: () => void;
 }) {
 	return (
@@ -1175,10 +1378,10 @@ function Turnaround({
 				<div className="mt-6 flex flex-col gap-3">
 					<button
 						type="button"
-						onClick={onBackToBeliefs}
+						onClick={onComplete}
 						className="w-full px-6 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-fuchsia-500 to-cyan-500 hover:from-fuchsia-600 hover:to-cyan-600 transition-all"
 					>
-						別のビリーフでワークする
+						このビリーフを完了して次へ
 					</button>
 					<button
 						type="button"
