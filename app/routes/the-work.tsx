@@ -88,7 +88,21 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 // --- 型定義 ---
 
-type Step = "worksheet" | "select-belief" | "four-questions" | "turnaround";
+type Step =
+	| "worksheet"
+	| "select-belief"
+	| "four-questions"
+	| "turnaround"
+	| "review";
+
+const stepOrder: Step[] = [
+	"worksheet",
+	"select-belief",
+	"four-questions",
+	"turnaround",
+	"review",
+];
+const getStepIndex = (s: Step) => stepOrder.indexOf(s);
 
 type WorksheetAnswers = {
 	name: string;
@@ -155,6 +169,7 @@ type DraftState = {
 	turnaround: TurnaroundAnswers;
 	beliefs: string[];
 	completedBeliefWorks: BeliefWork[];
+	maxReachedStep: number;
 };
 
 function saveDraft(state: DraftState) {
@@ -238,6 +253,7 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 	const [completedBeliefWorks, setCompletedBeliefWorks] = useState<
 		BeliefWork[]
 	>([]);
+	const [maxReachedStep, setMaxReachedStep] = useState(0);
 	const [currentSessionId, setCurrentSessionId] = useState<number | null>(
 		null,
 	);
@@ -261,6 +277,9 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 			setTurnaround(draft.turnaround);
 			setBeliefs(draft.beliefs);
 			setCompletedBeliefWorks(draft.completedBeliefWorks || []);
+			setMaxReachedStep(
+				draft.maxReachedStep ?? getStepIndex(draft.step),
+			);
 		}
 		setInitialized(true);
 	}, []);
@@ -279,6 +298,7 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 				turnaround,
 				beliefs,
 				completedBeliefWorks,
+				maxReachedStep,
 			});
 		}, 500);
 		return () => clearTimeout(saveTimerRef.current);
@@ -290,6 +310,7 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 		turnaround,
 		beliefs,
 		completedBeliefWorks,
+		maxReachedStep,
 		initialized,
 	]);
 
@@ -329,6 +350,9 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 		const extracted = extractBeliefsFromWorksheet(worksheet);
 		setBeliefs(extracted);
 		setStep("select-belief");
+		setMaxReachedStep((prev) =>
+			Math.max(prev, getStepIndex("select-belief")),
+		);
 	}, [worksheet]);
 
 	// ビリーフ選択
@@ -337,14 +361,20 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 		setFourQuestions(initialFourQuestions);
 		setTurnaround(initialTurnaround);
 		setStep("four-questions");
+		setMaxReachedStep((prev) =>
+			Math.max(prev, getStepIndex("four-questions")),
+		);
 	}, []);
 
 	// 4つの質問完了
 	const handleFourQuestionsComplete = useCallback(() => {
 		setStep("turnaround");
+		setMaxReachedStep((prev) =>
+			Math.max(prev, getStepIndex("turnaround")),
+		);
 	}, []);
 
-	// ターンアラウンド完了 → 完了済みに保存して次のビリーフへ
+	// ターンアラウンド完了 → レビュー画面へ
 	const handleCompleteBelief = useCallback(() => {
 		const work: BeliefWork = {
 			belief: selectedBelief,
@@ -361,11 +391,36 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 			}
 			return [...prev, work];
 		});
+		setStep("review");
+		setMaxReachedStep((prev) => Math.max(prev, getStepIndex("review")));
+	}, [selectedBelief, fourQuestions, turnaround]);
+
+	// レビューから次のビリーフへ
+	const handleNextBelief = useCallback(() => {
 		setSelectedBelief("");
 		setFourQuestions(initialFourQuestions);
 		setTurnaround(initialTurnaround);
 		setStep("select-belief");
-	}, [selectedBelief, fourQuestions, turnaround]);
+	}, []);
+
+	// ワーク完了（ビリーフ選択に戻る）
+	const handleFinishWork = useCallback(() => {
+		setSelectedBelief("");
+		setFourQuestions(initialFourQuestions);
+		setTurnaround(initialTurnaround);
+		setStep("select-belief");
+	}, []);
+
+	// ステップクリックで戻る
+	const handleStepClick = useCallback(
+		(targetStep: Step) => {
+			const targetIndex = getStepIndex(targetStep);
+			if (targetIndex <= maxReachedStep) {
+				setStep(targetStep);
+			}
+		},
+		[maxReachedStep],
+	);
 
 	// 完了済みビリーフワークを再編集
 	const handleEditBeliefWork = useCallback(
@@ -477,7 +532,9 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 						? (JSON.parse(session.beliefWorks) as BeliefWork[])
 						: [],
 				);
-				setStep(session.step as Step);
+				const loadedStep = session.step as Step;
+				setStep(loadedStep);
+				setMaxReachedStep(getStepIndex(loadedStep));
 				setCurrentSessionId(session.id);
 				setSaveTitle(session.title);
 				setBeliefs(extractBeliefsFromWorksheet(ws));
@@ -512,6 +569,7 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 		setTurnaround(initialTurnaround);
 		setCompletedBeliefWorks([]);
 		setStep("worksheet");
+		setMaxReachedStep(0);
 		setCurrentSessionId(null);
 		setSaveTitle("");
 		clearDraft();
@@ -617,13 +675,18 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 				)}
 
 				{/* ステッププログレス */}
-				<StepProgress currentStep={step} />
+				<StepProgress
+					currentStep={step}
+					onStepClick={handleStepClick}
+					maxReachedStep={maxReachedStep}
+				/>
 
 				{/* 完了済みビリーフワーク一覧 */}
 				{completedBeliefWorks.length > 0 &&
 					(step === "select-belief" ||
 						step === "four-questions" ||
-						step === "turnaround") && (
+						step === "turnaround" ||
+						step === "review") && (
 						<CompletedBeliefWorks
 							works={completedBeliefWorks}
 							onEdit={handleEditBeliefWork}
@@ -669,7 +732,25 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 						answers={turnaround}
 						setAnswers={setTurnaround}
 						onComplete={handleCompleteBelief}
-						onReset={handleReset}
+						onBack={() => setStep("four-questions")}
+					/>
+				)}
+
+				{step === "review" && (
+					<BeliefWorkReview
+						belief={selectedBelief}
+						fourQuestions={fourQuestions}
+						turnaround={turnaround}
+						onNextBelief={handleNextBelief}
+						onFinish={handleFinishWork}
+						hasRemainingBeliefs={
+							beliefs.filter(
+								(b) =>
+									!completedBeliefWorks.some(
+										(w) => w.belief === b,
+									),
+							).length > 0
+						}
 					/>
 				)}
 			</div>
@@ -751,6 +832,8 @@ function CompletedBeliefWorks({
 	works: BeliefWork[];
 	onEdit: (index: number) => void;
 }) {
+	const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+
 	return (
 		<div className="w-full mb-6">
 			<SectionCard>
@@ -759,20 +842,111 @@ function CompletedBeliefWorks({
 				</h2>
 				<div className="space-y-2">
 					{works.map((work, i) => (
-						<button
+						<div
 							key={work.belief}
-							type="button"
-							onClick={() => onEdit(i)}
-							className="w-full text-left px-4 py-3 rounded-xl border border-green-500/20 bg-green-500/5 hover:bg-green-500/10 transition-all"
+							className="rounded-xl border border-green-500/20 bg-green-500/5 transition-all"
 						>
-							<div className="flex items-center gap-2">
-								<span className="text-green-400 text-xs">&#10003;</span>
-								<span className="text-sm text-purple-100">{work.belief}</span>
-							</div>
-							<p className="text-xs text-purple-200/40 mt-1 ml-5">
-								クリックして編集
-							</p>
-						</button>
+							<button
+								type="button"
+								onClick={() =>
+									setExpandedIndex(
+										expandedIndex === i ? null : i,
+									)
+								}
+								className="w-full text-left px-4 py-3 hover:bg-green-500/10 transition-all rounded-xl"
+							>
+								<div className="flex items-center gap-2 justify-between">
+									<div className="flex items-center gap-2 min-w-0">
+										<span className="text-green-400 text-xs shrink-0">
+											&#10003;
+										</span>
+										<span className="text-sm text-purple-100 truncate">
+											{work.belief}
+										</span>
+									</div>
+									<span className="text-purple-300/40 text-xs shrink-0">
+										{expandedIndex === i ? "▲" : "▼"}
+									</span>
+								</div>
+							</button>
+							{expandedIndex === i && (
+								<div className="px-4 pb-4 space-y-3 border-t border-white/10 mx-4 pt-3">
+									<div>
+										<p className="text-xs font-medium text-fuchsia-300/70">
+											1. それは本当ですか？
+										</p>
+										<p className="text-sm text-purple-100/80 mt-1 whitespace-pre-wrap">
+											{work.fourQuestions.isTrue ||
+												"（未回答）"}
+										</p>
+									</div>
+									<div>
+										<p className="text-xs font-medium text-fuchsia-300/70">
+											2.
+											それが本当だと、絶対に言い切れますか？
+										</p>
+										<p className="text-sm text-purple-100/80 mt-1 whitespace-pre-wrap">
+											{work.fourQuestions.absolutelyTrue ||
+												"（未回答）"}
+										</p>
+									</div>
+									<div>
+										<p className="text-xs font-medium text-fuchsia-300/70">
+											3.
+											その考えを信じるとき、あなたはどう反応しますか？
+										</p>
+										<p className="text-sm text-purple-100/80 mt-1 whitespace-pre-wrap">
+											{work.fourQuestions.reaction ||
+												"（未回答）"}
+										</p>
+									</div>
+									<div>
+										<p className="text-xs font-medium text-fuchsia-300/70">
+											4.
+											その考えがなかったら、あなたはどうなりますか？
+										</p>
+										<p className="text-sm text-purple-100/80 mt-1 whitespace-pre-wrap">
+											{work.fourQuestions.withoutThought ||
+												"（未回答）"}
+										</p>
+									</div>
+									<div className="border-t border-white/10 pt-3">
+										<p className="text-xs font-medium text-fuchsia-300/70">
+											自分への置き換え
+										</p>
+										<p className="text-sm text-purple-100/80 mt-1 whitespace-pre-wrap">
+											{work.turnaround.toSelf ||
+												"（未回答）"}
+										</p>
+									</div>
+									<div>
+										<p className="text-xs font-medium text-fuchsia-300/70">
+											相手への置き換え
+										</p>
+										<p className="text-sm text-purple-100/80 mt-1 whitespace-pre-wrap">
+											{work.turnaround.toOther ||
+												"（未回答）"}
+										</p>
+									</div>
+									<div>
+										<p className="text-xs font-medium text-fuchsia-300/70">
+											反対への置き換え
+										</p>
+										<p className="text-sm text-purple-100/80 mt-1 whitespace-pre-wrap">
+											{work.turnaround.toOpposite ||
+												"（未回答）"}
+										</p>
+									</div>
+									<button
+										type="button"
+										onClick={() => onEdit(i)}
+										className="w-full mt-2 px-4 py-2 rounded-xl text-sm font-medium text-fuchsia-300 border border-fuchsia-500/30 hover:bg-fuchsia-500/10 transition-all"
+									>
+										編集する
+									</button>
+								</div>
+							)}
+						</div>
 					))}
 				</div>
 			</SectionCard>
@@ -813,6 +987,7 @@ function SessionHistory({
 		"select-belief": "ビリーフ選択",
 		"four-questions": "4つの質問",
 		turnaround: "置き換え",
+		review: "レビュー",
 	};
 
 	// 完了済みビリーフ数を計算
@@ -898,49 +1073,77 @@ function SessionHistory({
 }
 
 // --- ステッププログレス ---
-function StepProgress({ currentStep }: { currentStep: Step }) {
+function StepProgress({
+	currentStep,
+	onStepClick,
+	maxReachedStep,
+}: {
+	currentStep: Step;
+	onStepClick: (step: Step) => void;
+	maxReachedStep: number;
+}) {
 	const steps: { key: Step; label: string }[] = [
 		{ key: "worksheet", label: "ワークシート" },
 		{ key: "select-belief", label: "ビリーフ選択" },
 		{ key: "four-questions", label: "4つの質問" },
 		{ key: "turnaround", label: "置き換え" },
+		{ key: "review", label: "レビュー" },
 	];
 	const currentIndex = steps.findIndex((s) => s.key === currentStep);
 
 	return (
 		<div className="w-full mb-8">
 			<div className="flex items-center justify-between">
-				{steps.map((s, i) => (
-					<div key={s.key} className="flex items-center flex-1 last:flex-none">
-						<div className="flex flex-col items-center">
-							<div
-								className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-									i <= currentIndex
-										? "bg-fuchsia-500 text-white"
-										: "bg-white/10 text-purple-300/50"
-								}`}
-							>
-								{i + 1}
+				{steps.map((s, i) => {
+					const isReachable = i <= maxReachedStep;
+					const isCurrent = i === currentIndex;
+					const isCompleted = i <= currentIndex;
+					return (
+						<div
+							key={s.key}
+							className="flex items-center flex-1 last:flex-none"
+						>
+							<div className="flex flex-col items-center">
+								<button
+									type="button"
+									onClick={() => onStepClick(s.key)}
+									disabled={!isReachable}
+									className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+										isCompleted
+											? "bg-fuchsia-500 text-white"
+											: isReachable
+												? "bg-white/10 text-purple-300/50"
+												: "bg-white/10 text-purple-300/50"
+									} ${
+										isReachable && !isCurrent
+											? "cursor-pointer hover:ring-2 hover:ring-fuchsia-400/50"
+											: ""
+									} ${isCurrent ? "ring-2 ring-fuchsia-300" : ""} ${!isReachable ? "cursor-not-allowed opacity-50" : ""}`}
+								>
+									{i + 1}
+								</button>
+								<span
+									className={`text-xs mt-1 whitespace-nowrap ${
+										isCompleted
+											? "text-fuchsia-300"
+											: "text-purple-300/40"
+									}`}
+								>
+									{s.label}
+								</span>
 							</div>
-							<span
-								className={`text-xs mt-1 whitespace-nowrap ${
-									i <= currentIndex
-										? "text-fuchsia-300"
-										: "text-purple-300/40"
-								}`}
-							>
-								{s.label}
-							</span>
+							{i < steps.length - 1 && (
+								<div
+									className={`flex-1 h-0.5 mx-2 mb-5 ${
+										i < currentIndex
+											? "bg-fuchsia-500/50"
+											: "bg-white/10"
+									}`}
+								/>
+							)}
 						</div>
-						{i < steps.length - 1 && (
-							<div
-								className={`flex-1 h-0.5 mx-2 mb-5 ${
-									i < currentIndex ? "bg-fuchsia-500/50" : "bg-white/10"
-								}`}
-							/>
-						)}
-					</div>
-				))}
+					);
+				})}
 			</div>
 		</div>
 	);
@@ -1316,14 +1519,14 @@ function Turnaround({
 	answers,
 	setAnswers,
 	onComplete,
-	onReset,
+	onBack,
 }: {
 	belief: string;
 	name: string;
 	answers: TurnaroundAnswers;
 	setAnswers: (a: TurnaroundAnswers) => void;
 	onComplete: () => void;
-	onReset: () => void;
+	onBack: () => void;
 }) {
 	return (
 		<div className="w-full space-y-6">
@@ -1397,14 +1600,140 @@ function Turnaround({
 						onClick={onComplete}
 						className="w-full px-6 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-fuchsia-500 to-cyan-500 hover:from-fuchsia-600 hover:to-cyan-600 transition-all"
 					>
-						このビリーフを完了して次へ
+						このビリーフのワークを確認する
 					</button>
 					<button
 						type="button"
-						onClick={onReset}
+						onClick={onBack}
 						className="w-full px-6 py-3 rounded-xl font-semibold text-fuchsia-300 border border-fuchsia-500/30 hover:bg-fuchsia-500/10 transition-all"
 					>
-						最初からやり直す
+						4つの質問に戻る
+					</button>
+				</div>
+			</SectionCard>
+		</div>
+	);
+}
+
+// --- レビュー画面 ---
+function BeliefWorkReview({
+	belief,
+	fourQuestions,
+	turnaround,
+	onNextBelief,
+	onFinish,
+	hasRemainingBeliefs,
+}: {
+	belief: string;
+	fourQuestions: FourQuestionsAnswers;
+	turnaround: TurnaroundAnswers;
+	onNextBelief: () => void;
+	onFinish: () => void;
+	hasRemainingBeliefs: boolean;
+}) {
+	const questions = [
+		{ label: "それは本当ですか？", value: fourQuestions.isTrue },
+		{
+			label: "それが本当だと、絶対に言い切れますか？",
+			value: fourQuestions.absolutelyTrue,
+		},
+		{
+			label: "その考えを信じるとき、あなたはどう反応しますか？",
+			value: fourQuestions.reaction,
+		},
+		{
+			label: "その考えがなかったら、あなたはどうなりますか？",
+			value: fourQuestions.withoutThought,
+		},
+	];
+
+	const turnarounds = [
+		{ label: "自分への置き換え", value: turnaround.toSelf },
+		{ label: "相手への置き換え", value: turnaround.toOther },
+		{ label: "反対への置き換え", value: turnaround.toOpposite },
+	];
+
+	return (
+		<div className="w-full space-y-6">
+			<SectionCard>
+				<h2 className="text-lg font-bold text-purple-100 mb-1">
+					ワークのレビュー
+				</h2>
+				<p className="text-sm text-purple-200/60 mb-6">
+					このビリーフに対するワーク全体を確認しましょう。
+				</p>
+
+				{/* ビリーフ */}
+				<div className="rounded-xl bg-fuchsia-500/10 border border-fuchsia-500/20 px-4 py-3 mb-6">
+					<p className="text-xs text-fuchsia-200/80 font-medium">
+						ビリーフ
+					</p>
+					<p className="text-purple-100 mt-1">「{belief}」</p>
+				</div>
+
+				{/* 4つの質問 */}
+				<div className="mb-6">
+					<h3 className="text-sm font-semibold uppercase tracking-widest text-fuchsia-400/80 mb-4">
+						4つの質問
+					</h3>
+					<div className="space-y-4">
+						{questions.map((q, i) => (
+							<div key={q.label}>
+								<p className="text-xs font-medium text-fuchsia-300/70 mb-1">
+									{i + 1}. {q.label}
+								</p>
+								<div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3">
+									<p className="text-sm text-purple-100/80 whitespace-pre-wrap">
+										{q.value || "（未回答）"}
+									</p>
+								</div>
+							</div>
+						))}
+					</div>
+				</div>
+
+				{/* ターンアラウンド */}
+				<div className="mb-6">
+					<h3 className="text-sm font-semibold uppercase tracking-widest text-fuchsia-400/80 mb-4">
+						置き換え（ターンアラウンド）
+					</h3>
+					<div className="space-y-4">
+						{turnarounds.map((t) => (
+							<div key={t.label}>
+								<p className="text-xs font-medium text-fuchsia-300/70 mb-1">
+									{t.label}
+								</p>
+								<div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3">
+									<p className="text-sm text-purple-100/80 whitespace-pre-wrap">
+										{t.value || "（未回答）"}
+									</p>
+								</div>
+							</div>
+						))}
+					</div>
+				</div>
+
+				{/* アクションボタン */}
+				<div className="flex flex-col gap-3">
+					{hasRemainingBeliefs && (
+						<button
+							type="button"
+							onClick={onNextBelief}
+							className="w-full px-6 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-fuchsia-500 to-cyan-500 hover:from-fuchsia-600 hover:to-cyan-600 transition-all"
+						>
+							次のビリーフへ
+						</button>
+					)}
+					<button
+						type="button"
+						onClick={onFinish}
+						className={`w-full px-6 py-3 rounded-xl font-semibold transition-all ${
+							hasRemainingBeliefs
+								? "text-fuchsia-300 border border-fuchsia-500/30 hover:bg-fuchsia-500/10"
+								: "text-white bg-gradient-to-r from-fuchsia-500 to-cyan-500 hover:from-fuchsia-600 hover:to-cyan-600"
+						}`}
+					>
+						ビリーフ選択に戻る
 					</button>
 				</div>
 			</SectionCard>
