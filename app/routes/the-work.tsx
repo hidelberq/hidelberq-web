@@ -327,6 +327,7 @@ function extractBeliefsFromWorksheet(ws: WorksheetAnswers): string[] {
 export default function TheWork({ loaderData }: Route.ComponentProps) {
 	const fetcher = useFetcher();
 	const [memberId, setMemberId] = useState("");
+	const [displayName, setDisplayName] = useState("");
 	const [step, setStep] = useState<Step>("worksheet");
 	const [worksheet, setWorksheet] =
 		useState<WorksheetAnswers>(initialWorksheet);
@@ -356,6 +357,7 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 	useEffect(() => {
 		const id = getMemberId();
 		setMemberId(id);
+		setDisplayName(localStorage.getItem("bookDisplayName") || "");
 		const draft = loadDraft();
 		if (draft) {
 			setStep(draft.step);
@@ -730,6 +732,17 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 	);
 
 	// 新規ワーク
+	// 表示名設定
+	const handleSetDisplayName = useCallback(
+		(name: string) => {
+			const trimmed = name.trim();
+			if (!trimmed) return;
+			localStorage.setItem("bookDisplayName", trimmed);
+			setDisplayName(trimmed);
+		},
+		[],
+	);
+
 	const handleReset = useCallback(() => {
 		setWorksheet(initialWorksheet);
 		setBeliefs([]);
@@ -773,7 +786,13 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 			</div>
 
 			<div className="relative flex flex-col items-center px-4 py-8 max-w-3xl mx-auto">
+				{/* 表示名未設定: ログイン画面 */}
+				{!displayName && initialized && (
+					<NameSetup onSetName={handleSetDisplayName} />
+				)}
+
 				{/* ヘッダー */}
+				{displayName && (
 				<header className="w-full mb-8">
 					<Link
 						to="/"
@@ -818,7 +837,9 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 						</div>
 					</div>
 				</header>
+				)}
 
+				{displayName && (<>
 				{/* 保存ダイアログ */}
 				{showSaveDialog && (
 					<SaveDialog
@@ -929,7 +950,65 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 						}
 					/>
 				)}
+				</>)}
 			</div>
+		</div>
+	);
+}
+
+// --- 名前設定画面 ---
+function NameSetup({ onSetName }: { onSetName: (name: string) => void }) {
+	const [name, setName] = useState("");
+
+	return (
+		<div className="flex flex-col items-center w-full max-w-md">
+			<header className="w-full mb-8 text-center">
+				<Link
+					to="/"
+					className="inline-flex items-center gap-2 text-sm text-purple-300/70 hover:text-purple-200 transition-colors mb-4"
+				>
+					← ホームに戻る
+				</Link>
+				<h1 className="text-3xl sm:text-4xl font-bold tracking-tight bg-gradient-to-r from-white via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent">
+					ザ・ワーク
+				</h1>
+				<p className="text-purple-200/70 mt-2">
+					バイロン・ケイティの「ザ・ワーク」-
+					思い込みを4つの質問で問いかける
+				</p>
+			</header>
+			<section className="w-full">
+				<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-fuchsia-500/30 p-6">
+					<h2 className="text-lg font-semibold text-white mb-3">
+						はじめに表示名を設定
+					</h2>
+					<p className="text-sm text-purple-200/60 mb-4">
+						ワークの記録に使用される名前です
+					</p>
+					<form
+						onSubmit={(e) => {
+							e.preventDefault();
+							onSetName(name);
+						}}
+						className="space-y-4"
+					>
+						<input
+							type="text"
+							value={name}
+							onChange={(e) => setName(e.target.value)}
+							required
+							placeholder="例: hidelberq"
+							className="w-full rounded-xl bg-white/10 border border-white/20 px-4 py-3 text-white placeholder:text-purple-300/40 focus:outline-none focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/30"
+						/>
+						<button
+							type="submit"
+							className="w-full rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 px-6 py-3 font-semibold text-white transition-all hover:from-fuchsia-500 hover:to-purple-500 hover:shadow-lg hover:shadow-fuchsia-500/20"
+						>
+							設定する
+						</button>
+					</form>
+				</div>
+			</section>
 		</div>
 	);
 }
