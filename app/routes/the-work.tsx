@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { Link, useFetcher } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, desc } from "drizzle-orm";
+import { GoogleGenAI } from "@google/genai";
 import { theWorkSessions } from "~/db/schema";
 import type { Route } from "./+types/the-work";
 
@@ -73,6 +74,89 @@ export async function action({ request, context }: Route.ActionArgs) {
 			.values({ memberId, ...values })
 			.returning({ id: theWorkSessions.id });
 		return { success: true, sessionId: result[0].id };
+	}
+
+	if (intent === "ai-review") {
+		const belief = formData.get("belief") as string;
+		const fourQuestionsJson = formData.get("fourQuestions") as string;
+		const turnaroundJson = formData.get("turnaround") as string;
+
+		const geminiApiKey = context.cloudflare.env.GEMINI_API_KEY;
+		if (!geminiApiKey) {
+			return { error: "GEMINI_API_KEY が設定されていません" };
+		}
+
+		const fq = JSON.parse(fourQuestionsJson) as {
+			isTrue: string;
+			absolutelyTrue: string;
+			reaction: string;
+			withoutThought: string;
+		};
+		const ta = JSON.parse(turnaroundJson) as {
+			toSelf: string;
+			toOther: string;
+			toOpposite: string;
+		};
+
+		const prompt = `あなたはバイロン・ケイティです。「ザ・ワーク」の創始者として、以下のワークに対して温かく、直接的なフィードバックを日本語で提供してください。
+
+ケイティとしての語り口の特徴:
+- 優しく、しかし直接的に語りかける
+- 質問を通じてさらなる気づきを促す
+- ワークをした人の勇気を認める
+- 「ハニー」「スウィートハート」のような愛称は日本語では使わず、「あなた」で語りかける
+
+## ワークの内容
+
+**ビリーフ:** 「${belief}」
+
+### 4つの質問への回答:
+1. それは本当ですか？ → ${fq.isTrue || "（未回答）"}
+2. それが本当だと、絶対に言い切れますか？ → ${fq.absolutelyTrue || "（未回答）"}
+3. その考えを信じるとき、どう反応しますか？ → ${fq.reaction || "（未回答）"}
+4. その考えがなかったら、どうなりますか？ → ${fq.withoutThought || "（未回答）"}
+
+### 置き換え（ターンアラウンド）:
+- 自分への置き換え: ${ta.toSelf || "（未回答）"}
+- 相手への置き換え: ${ta.toOther || "（未回答）"}
+- 反対への置き換え: ${ta.toOpposite || "（未回答）"}
+
+## フィードバックの指針:
+1. ワークの深さを認め、良い点を具体的に伝える
+2. 質問3（反応）と質問4（考えなしの自分）の回答が十分に掘り下げられているかチェックし、さらに探求できるポイントがあれば問いかけの形で提案する
+3. ターンアラウンドの具体例が十分かどうかコメントする（3つ以上の具体例が理想）
+4. ワークを通じて見えてきた可能性や気づきについて語る
+5. 400字程度で簡潔にまとめる`;
+
+		try {
+			const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+			const response = await ai.models.generateContent({
+				model: "gemini-2.5-flash",
+				contents: prompt,
+			});
+
+			let reviewText = "";
+			try {
+				reviewText = response.text ?? "";
+			} catch {
+				const parts = response.candidates?.[0]?.content?.parts;
+				if (parts) {
+					reviewText = parts
+						.filter(
+							(p: { text?: string }) =>
+								typeof p.text === "string",
+						)
+						.map((p: { text?: string }) => p.text)
+						.join("");
+				}
+			}
+
+			return { aiReview: reviewText };
+		} catch (e) {
+			return {
+				error: `AIレビューの生成に失敗しました: ${e instanceof Error ? e.message : "不明なエラー"}`,
+			};
+		}
 	}
 
 	if (intent === "delete") {
@@ -262,6 +346,7 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 	const [showSaveDialog, setShowSaveDialog] = useState(false);
 	const [saveTitle, setSaveTitle] = useState("");
 	const [saveMessage, setSaveMessage] = useState("");
+	const [aiReview, setAiReview] = useState<string | null>(null);
 	const [initialized, setInitialized] = useState(false);
 
 	// 初期化
@@ -323,6 +408,12 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 			setSessions(
 				fetcher.data.sessions as typeof loaderData.sessions,
 			);
+			return;
+		}
+
+		// AIレビューの結果
+		if ("aiReview" in fetcher.data) {
+			setAiReview(fetcher.data.aiReview as string);
 			return;
 		}
 
@@ -400,6 +491,7 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 		setSelectedBelief("");
 		setFourQuestions(initialFourQuestions);
 		setTurnaround(initialTurnaround);
+		setAiReview(null);
 		setStep("select-belief");
 	}, []);
 
@@ -408,8 +500,19 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 		setSelectedBelief("");
 		setFourQuestions(initialFourQuestions);
 		setTurnaround(initialTurnaround);
+		setAiReview(null);
 		setStep("select-belief");
 	}, []);
+
+	// AIレビューをリクエスト
+	const handleRequestAiReview = useCallback(() => {
+		const formData = new FormData();
+		formData.set("intent", "ai-review");
+		formData.set("belief", selectedBelief);
+		formData.set("fourQuestions", JSON.stringify(fourQuestions));
+		formData.set("turnaround", JSON.stringify(turnaround));
+		fetcher.submit(formData, { method: "POST" });
+	}, [selectedBelief, fourQuestions, turnaround, fetcher]);
 
 	// レビュー画面からステップ編集
 	const handleReviewEditStep = useCallback((targetStep: Step) => {
@@ -762,6 +865,9 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 						onNextBelief={handleNextBelief}
 						onFinish={handleFinishWork}
 						onEditStep={handleReviewEditStep}
+						onRequestAiReview={handleRequestAiReview}
+						aiReview={aiReview}
+						isReviewLoading={fetcher.state !== "idle"}
 						hasRemainingBeliefs={
 							beliefs.filter(
 								(b) =>
@@ -1676,6 +1782,9 @@ function BeliefWorkReview({
 	onNextBelief,
 	onFinish,
 	onEditStep,
+	onRequestAiReview,
+	aiReview,
+	isReviewLoading,
 	hasRemainingBeliefs,
 }: {
 	belief: string;
@@ -1684,6 +1793,9 @@ function BeliefWorkReview({
 	onNextBelief: () => void;
 	onFinish: () => void;
 	onEditStep: (step: Step) => void;
+	onRequestAiReview: () => void;
+	aiReview: string | null;
+	isReviewLoading: boolean;
 	hasRemainingBeliefs: boolean;
 }) {
 	const questions = [
@@ -1784,6 +1896,38 @@ function BeliefWorkReview({
 							</div>
 						))}
 					</div>
+				</div>
+
+				{/* AIレビュー */}
+				<div className="mb-6 border-t border-white/10 pt-6">
+					{aiReview ? (
+						<div>
+							<h3 className="text-sm font-semibold uppercase tracking-widest text-fuchsia-400/80 mb-3">
+								ケイティからのフィードバック
+							</h3>
+							<div className="rounded-xl bg-fuchsia-500/5 border border-fuchsia-500/20 px-4 py-4">
+								<p className="text-sm text-purple-100/90 whitespace-pre-wrap leading-relaxed">
+									{aiReview}
+								</p>
+							</div>
+						</div>
+					) : (
+						<button
+							type="button"
+							onClick={onRequestAiReview}
+							disabled={isReviewLoading}
+							className="w-full px-6 py-3 rounded-xl font-semibold text-fuchsia-300 border border-fuchsia-500/30 hover:bg-fuchsia-500/10 transition-all disabled:opacity-50"
+						>
+							{isReviewLoading ? (
+								<span className="flex items-center justify-center gap-2">
+									<span className="inline-block w-4 h-4 border-2 border-fuchsia-400/30 border-t-fuchsia-400 rounded-full animate-spin" />
+									ケイティが考えています...
+								</span>
+							) : (
+								"ケイティに聞いてみる"
+							)}
+						</button>
+					)}
 				</div>
 
 				{/* アクションボタン */}
