@@ -217,6 +217,8 @@ type BeliefWork = {
 	belief: string;
 	fourQuestions: FourQuestionsAnswers;
 	turnaround: TurnaroundAnswers;
+	aiReview?: string;
+	memo?: string;
 };
 
 const initialWorksheet: WorksheetAnswers = {
@@ -347,6 +349,7 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 	const [saveTitle, setSaveTitle] = useState("");
 	const [saveMessage, setSaveMessage] = useState("");
 	const [aiReview, setAiReview] = useState<string | null>(null);
+	const [memo, setMemo] = useState("");
 	const [initialized, setInitialized] = useState(false);
 
 	// 初期化
@@ -471,38 +474,82 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 			belief: selectedBelief,
 			fourQuestions,
 			turnaround,
+			aiReview: aiReview ?? undefined,
+			memo: memo || undefined,
 		};
 		setCompletedBeliefWorks((prev) => {
-			// 同じビリーフが既にあれば上書き
+			// 同じビリーフが既にあれば上書き（既存の aiReview/memo を保持）
 			const existing = prev.findIndex((w) => w.belief === selectedBelief);
 			if (existing >= 0) {
 				const updated = [...prev];
-				updated[existing] = work;
+				updated[existing] = {
+					...work,
+					aiReview: work.aiReview ?? prev[existing].aiReview,
+					memo: work.memo ?? prev[existing].memo,
+				};
 				return updated;
 			}
 			return [...prev, work];
 		});
 		setStep("review");
 		setMaxReachedStep((prev) => Math.max(prev, getStepIndex("review")));
-	}, [selectedBelief, fourQuestions, turnaround]);
+	}, [selectedBelief, fourQuestions, turnaround, aiReview, memo]);
 
-	// レビューから次のビリーフへ
+	// レビューから次のビリーフへ（現在のワークを保存してから遷移）
 	const handleNextBelief = useCallback(() => {
+		// 現在のビリーフワークを aiReview・memo 込みで保存
+		if (selectedBelief) {
+			setCompletedBeliefWorks((prev) => {
+				const existing = prev.findIndex(
+					(w) => w.belief === selectedBelief,
+				);
+				if (existing >= 0) {
+					const updated = [...prev];
+					updated[existing] = {
+						...updated[existing],
+						aiReview: aiReview ?? updated[existing].aiReview,
+						memo: memo || updated[existing].memo,
+					};
+					return updated;
+				}
+				return prev;
+			});
+		}
 		setSelectedBelief("");
 		setFourQuestions(initialFourQuestions);
 		setTurnaround(initialTurnaround);
 		setAiReview(null);
+		setMemo("");
 		setStep("select-belief");
-	}, []);
+	}, [selectedBelief, aiReview, memo]);
 
 	// ワーク完了（ビリーフ選択に戻る）
 	const handleFinishWork = useCallback(() => {
+		// 現在のビリーフワークを aiReview・memo 込みで保存
+		if (selectedBelief) {
+			setCompletedBeliefWorks((prev) => {
+				const existing = prev.findIndex(
+					(w) => w.belief === selectedBelief,
+				);
+				if (existing >= 0) {
+					const updated = [...prev];
+					updated[existing] = {
+						...updated[existing],
+						aiReview: aiReview ?? updated[existing].aiReview,
+						memo: memo || updated[existing].memo,
+					};
+					return updated;
+				}
+				return prev;
+			});
+		}
 		setSelectedBelief("");
 		setFourQuestions(initialFourQuestions);
 		setTurnaround(initialTurnaround);
 		setAiReview(null);
+		setMemo("");
 		setStep("select-belief");
-	}, []);
+	}, [selectedBelief, aiReview, memo]);
 
 	// AIレビューをリクエスト
 	const handleRequestAiReview = useCallback(() => {
@@ -526,6 +573,8 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 			setSelectedBelief(work.belief);
 			setFourQuestions(work.fourQuestions);
 			setTurnaround(work.turnaround);
+			setAiReview(work.aiReview ?? null);
+			setMemo(work.memo ?? "");
 			setStep(targetStep);
 		},
 		[completedBeliefWorks],
@@ -868,6 +917,8 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 						onRequestAiReview={handleRequestAiReview}
 						aiReview={aiReview}
 						isReviewLoading={fetcher.state !== "idle"}
+						memo={memo}
+						onMemoChange={setMemo}
 						hasRemainingBeliefs={
 							beliefs.filter(
 								(b) =>
@@ -1103,6 +1154,26 @@ function CompletedBeliefWorks({
 											</div>
 										</div>
 									</div>
+									{work.aiReview && (
+										<div className="border-t border-white/10 pt-3">
+											<p className="text-xs font-semibold uppercase tracking-widest text-fuchsia-400/80 mb-2">
+												AIケイティからのフィードバック
+											</p>
+											<p className="text-sm text-purple-100/80 whitespace-pre-wrap">
+												{work.aiReview}
+											</p>
+										</div>
+									)}
+									{work.memo && (
+										<div className="border-t border-white/10 pt-3">
+											<p className="text-xs font-semibold uppercase tracking-widest text-fuchsia-400/80 mb-2">
+												メモ・感想
+											</p>
+											<p className="text-sm text-purple-100/80 whitespace-pre-wrap">
+												{work.memo}
+											</p>
+										</div>
+									)}
 								</div>
 							)}
 						</div>
@@ -1785,6 +1856,8 @@ function BeliefWorkReview({
 	onRequestAiReview,
 	aiReview,
 	isReviewLoading,
+	memo,
+	onMemoChange,
 	hasRemainingBeliefs,
 }: {
 	belief: string;
@@ -1796,6 +1869,8 @@ function BeliefWorkReview({
 	onRequestAiReview: () => void;
 	aiReview: string | null;
 	isReviewLoading: boolean;
+	memo: string;
+	onMemoChange: (memo: string) => void;
 	hasRemainingBeliefs: boolean;
 }) {
 	const questions = [
@@ -1903,7 +1978,7 @@ function BeliefWorkReview({
 					{aiReview ? (
 						<div>
 							<h3 className="text-sm font-semibold uppercase tracking-widest text-fuchsia-400/80 mb-3">
-								ケイティからのフィードバック
+								AIケイティからのフィードバック
 							</h3>
 							<div className="rounded-xl bg-fuchsia-500/5 border border-fuchsia-500/20 px-4 py-4">
 								<p className="text-sm text-purple-100/90 whitespace-pre-wrap leading-relaxed">
@@ -1921,13 +1996,27 @@ function BeliefWorkReview({
 							{isReviewLoading ? (
 								<span className="flex items-center justify-center gap-2">
 									<span className="inline-block w-4 h-4 border-2 border-fuchsia-400/30 border-t-fuchsia-400 rounded-full animate-spin" />
-									ケイティが考えています...
+									AIケイティが考えています...
 								</span>
 							) : (
-								"ケイティに聞いてみる"
+								"AIケイティに聞いてみる"
 							)}
 						</button>
 					)}
+				</div>
+
+				{/* メモ */}
+				<div className="mb-6 border-t border-white/10 pt-6">
+					<h3 className="text-sm font-semibold uppercase tracking-widest text-fuchsia-400/80 mb-3">
+						メモ・感想
+					</h3>
+					<textarea
+						value={memo}
+						onChange={(e) => onMemoChange(e.target.value)}
+						placeholder="ワークを終えた感想や気づきをメモ..."
+						className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-sm text-purple-100 placeholder:text-purple-300/30 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/40 resize-y min-h-[80px]"
+						rows={3}
+					/>
 				</div>
 
 				{/* アクションボタン */}
