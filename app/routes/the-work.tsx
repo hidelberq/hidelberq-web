@@ -241,6 +241,7 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 	const [currentSessionId, setCurrentSessionId] = useState<number | null>(
 		null,
 	);
+	const [sessions, setSessions] = useState<typeof loaderData.sessions>([]);
 	const [showHistory, setShowHistory] = useState(false);
 	const [showSaveDialog, setShowSaveDialog] = useState(false);
 	const [saveTitle, setSaveTitle] = useState("");
@@ -292,9 +293,20 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 		initialized,
 	]);
 
-	// action 結果の処理
+	// fetcher.data の処理（load結果 + action結果）
 	useEffect(() => {
-		if (fetcher.data && "success" in fetcher.data && fetcher.data.success) {
+		if (!fetcher.data) return;
+
+		// fetcher.load の結果（セッション一覧）
+		if ("sessions" in fetcher.data) {
+			setSessions(
+				fetcher.data.sessions as typeof loaderData.sessions,
+			);
+			return;
+		}
+
+		// action の結果（保存・削除）
+		if ("success" in fetcher.data && fetcher.data.success) {
 			if ("deleted" in fetcher.data) {
 				if (memberId) {
 					fetcher.load(`/the-work?memberId=${memberId}`);
@@ -304,6 +316,10 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 				setSaveMessage("保存しました");
 				setShowSaveDialog(false);
 				setTimeout(() => setSaveMessage(""), 2000);
+				// 保存後もリロードして一覧を更新
+				if (memberId) {
+					fetcher.load(`/the-work?memberId=${memberId}`);
+				}
 			}
 		}
 	}, [fetcher.data, memberId]);
@@ -441,7 +457,7 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 
 	// 保存済みセッションを読み込む
 	const handleLoadSession = useCallback(
-		(session: (typeof loaderData.sessions)[number]) => {
+		(session: (typeof sessions)[number]) => {
 			try {
 				const ws = JSON.parse(session.worksheet) as WorksheetAnswers;
 				setWorksheet(ws);
@@ -591,7 +607,7 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 				{/* 保存済みセッション一覧 */}
 				{showHistory && (
 					<SessionHistory
-						sessions={loaderData.sessions}
+						sessions={sessions}
 						currentSessionId={currentSessionId}
 						onLoad={handleLoadSession}
 						onDelete={handleDeleteSession}
