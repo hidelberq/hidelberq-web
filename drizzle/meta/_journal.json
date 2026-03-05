@@ -176,6 +176,20 @@
       "when": 1771600000000,
       "tag": "0024_add_life_chart_display_name",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1771700000000,
+      "tag": "0025_add_the_work_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1771800000000,
+      "tag": "0026_add_belief_works",
+      "breakpoints": true
     }
   ]
 }
