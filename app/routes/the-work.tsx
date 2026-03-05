@@ -411,6 +411,23 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 		setStep("select-belief");
 	}, []);
 
+	// レビュー画面からステップ編集
+	const handleReviewEditStep = useCallback((targetStep: Step) => {
+		setStep(targetStep);
+	}, []);
+
+	// 完了済みビリーフのステップ編集
+	const handleCompletedEditStep = useCallback(
+		(index: number, targetStep: Step) => {
+			const work = completedBeliefWorks[index];
+			setSelectedBelief(work.belief);
+			setFourQuestions(work.fourQuestions);
+			setTurnaround(work.turnaround);
+			setStep(targetStep);
+		},
+		[completedBeliefWorks],
+	);
+
 	// ステップクリックで戻る
 	const handleStepClick = useCallback(
 		(targetStep: Step) => {
@@ -690,6 +707,7 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 						<CompletedBeliefWorks
 							works={completedBeliefWorks}
 							onEdit={handleEditBeliefWork}
+							onEditStep={handleCompletedEditStep}
 						/>
 					)}
 
@@ -743,6 +761,7 @@ export default function TheWork({ loaderData }: Route.ComponentProps) {
 						turnaround={turnaround}
 						onNextBelief={handleNextBelief}
 						onFinish={handleFinishWork}
+						onEditStep={handleReviewEditStep}
 						hasRemainingBeliefs={
 							beliefs.filter(
 								(b) =>
@@ -828,9 +847,11 @@ function SaveDialog({
 function CompletedBeliefWorks({
 	works,
 	onEdit,
+	onEditStep,
 }: {
 	works: BeliefWork[];
 	onEdit: (index: number) => void;
+	onEditStep: (index: number, step: Step) => void;
 }) {
 	const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
@@ -871,6 +892,23 @@ function CompletedBeliefWorks({
 							</button>
 							{expandedIndex === i && (
 								<div className="px-4 pb-4 space-y-3 border-t border-white/10 mx-4 pt-3">
+									<div className="flex items-center justify-between">
+										<p className="text-xs font-semibold uppercase tracking-widest text-fuchsia-400/80">
+											4つの質問
+										</p>
+										<button
+											type="button"
+											onClick={() =>
+												onEditStep(
+													i,
+													"four-questions",
+												)
+											}
+											className="text-xs text-fuchsia-400/70 hover:text-fuchsia-300 transition-colors"
+										>
+											編集
+										</button>
+									</div>
 									<div>
 										<p className="text-xs font-medium text-fuchsia-300/70">
 											1. それは本当ですか？
@@ -911,39 +949,54 @@ function CompletedBeliefWorks({
 										</p>
 									</div>
 									<div className="border-t border-white/10 pt-3">
-										<p className="text-xs font-medium text-fuchsia-300/70">
-											自分への置き換え
-										</p>
-										<p className="text-sm text-purple-100/80 mt-1 whitespace-pre-wrap">
-											{work.turnaround.toSelf ||
-												"（未回答）"}
-										</p>
+										<div className="flex items-center justify-between mb-3">
+											<p className="text-xs font-semibold uppercase tracking-widest text-fuchsia-400/80">
+												置き換え
+											</p>
+											<button
+												type="button"
+												onClick={() =>
+													onEditStep(
+														i,
+														"turnaround",
+													)
+												}
+												className="text-xs text-fuchsia-400/70 hover:text-fuchsia-300 transition-colors"
+											>
+												編集
+											</button>
+										</div>
+										<div className="space-y-3">
+											<div>
+												<p className="text-xs font-medium text-fuchsia-300/70">
+													自分への置き換え
+												</p>
+												<p className="text-sm text-purple-100/80 mt-1 whitespace-pre-wrap">
+													{work.turnaround.toSelf ||
+														"（未回答）"}
+												</p>
+											</div>
+											<div>
+												<p className="text-xs font-medium text-fuchsia-300/70">
+													相手への置き換え
+												</p>
+												<p className="text-sm text-purple-100/80 mt-1 whitespace-pre-wrap">
+													{work.turnaround.toOther ||
+														"（未回答）"}
+												</p>
+											</div>
+											<div>
+												<p className="text-xs font-medium text-fuchsia-300/70">
+													反対への置き換え
+												</p>
+												<p className="text-sm text-purple-100/80 mt-1 whitespace-pre-wrap">
+													{work.turnaround
+														.toOpposite ||
+														"（未回答）"}
+												</p>
+											</div>
+										</div>
 									</div>
-									<div>
-										<p className="text-xs font-medium text-fuchsia-300/70">
-											相手への置き換え
-										</p>
-										<p className="text-sm text-purple-100/80 mt-1 whitespace-pre-wrap">
-											{work.turnaround.toOther ||
-												"（未回答）"}
-										</p>
-									</div>
-									<div>
-										<p className="text-xs font-medium text-fuchsia-300/70">
-											反対への置き換え
-										</p>
-										<p className="text-sm text-purple-100/80 mt-1 whitespace-pre-wrap">
-											{work.turnaround.toOpposite ||
-												"（未回答）"}
-										</p>
-									</div>
-									<button
-										type="button"
-										onClick={() => onEdit(i)}
-										className="w-full mt-2 px-4 py-2 rounded-xl text-sm font-medium text-fuchsia-300 border border-fuchsia-500/30 hover:bg-fuchsia-500/10 transition-all"
-									>
-										編集する
-									</button>
 								</div>
 							)}
 						</div>
@@ -1622,6 +1675,7 @@ function BeliefWorkReview({
 	turnaround,
 	onNextBelief,
 	onFinish,
+	onEditStep,
 	hasRemainingBeliefs,
 }: {
 	belief: string;
@@ -1629,6 +1683,7 @@ function BeliefWorkReview({
 	turnaround: TurnaroundAnswers;
 	onNextBelief: () => void;
 	onFinish: () => void;
+	onEditStep: (step: Step) => void;
 	hasRemainingBeliefs: boolean;
 }) {
 	const questions = [
@@ -1673,9 +1728,18 @@ function BeliefWorkReview({
 
 				{/* 4つの質問 */}
 				<div className="mb-6">
-					<h3 className="text-sm font-semibold uppercase tracking-widest text-fuchsia-400/80 mb-4">
-						4つの質問
-					</h3>
+					<div className="flex items-center justify-between mb-4">
+						<h3 className="text-sm font-semibold uppercase tracking-widest text-fuchsia-400/80">
+							4つの質問
+						</h3>
+						<button
+							type="button"
+							onClick={() => onEditStep("four-questions")}
+							className="text-xs text-fuchsia-400/70 hover:text-fuchsia-300 transition-colors"
+						>
+							編集
+						</button>
+					</div>
 					<div className="space-y-4">
 						{questions.map((q, i) => (
 							<div key={q.label}>
@@ -1694,9 +1758,18 @@ function BeliefWorkReview({
 
 				{/* ターンアラウンド */}
 				<div className="mb-6">
-					<h3 className="text-sm font-semibold uppercase tracking-widest text-fuchsia-400/80 mb-4">
-						置き換え（ターンアラウンド）
-					</h3>
+					<div className="flex items-center justify-between mb-4">
+						<h3 className="text-sm font-semibold uppercase tracking-widest text-fuchsia-400/80">
+							置き換え（ターンアラウンド）
+						</h3>
+						<button
+							type="button"
+							onClick={() => onEditStep("turnaround")}
+							className="text-xs text-fuchsia-400/70 hover:text-fuchsia-300 transition-colors"
+						>
+							編集
+						</button>
+					</div>
 					<div className="space-y-4">
 						{turnarounds.map((t) => (
 							<div key={t.label}>
