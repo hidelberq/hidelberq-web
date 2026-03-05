@@ -285,10 +285,10 @@ function clearDraft() {
 }
 
 function getMemberId(): string {
-	let id = localStorage.getItem("theWorkMemberId");
+	let id = localStorage.getItem("bookMemberId");
 	if (!id) {
 		id = crypto.randomUUID();
-		localStorage.setItem("theWorkMemberId", id);
+		localStorage.setItem("bookMemberId", id);
 	}
 	return id;
 }
