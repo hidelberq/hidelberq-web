@@ -241,6 +241,45 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 					) : null}
 				</section>
 
+
+				{/* Activity Feed */}
+				{activities.length > 0 && (
+					<section className="w-full max-w-2xl mb-16">
+						<SectionHeading>Activity</SectionHeading>
+						<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 overflow-hidden">
+							<div className="divide-y divide-white/5">
+								{visibleActivities.map((activity) => (
+									<div
+										key={activity.id}
+										className="flex items-center gap-3 px-4 py-2 hover:bg-white/5 transition-colors"
+									>
+										<div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-fuchsia-500/20 to-cyan-500/20 border border-white/10 flex items-center justify-center text-fuchsia-300">
+											<ActivityIcon type={activity.type} />
+										</div>
+										<span className="text-[10px] font-medium uppercase tracking-wider text-fuchsia-400/70 bg-fuchsia-500/10 px-1.5 py-0.5 rounded flex-shrink-0">
+											{activityLabels[activity.type] ?? activity.type}
+										</span>
+										<p className="text-sm text-purple-100/80 truncate flex-1 min-w-0">
+											{activity.message}
+										</p>
+										<span className="text-[11px] text-purple-300/40 flex-shrink-0">
+											{formatRelativeTime(activity.createdAt)}
+										</span>
+									</div>
+								))}
+							</div>
+							{activities.length > 5 && (
+								<button
+									onClick={() => setActivityExpanded(!activityExpanded)}
+									className="w-full px-4 py-2 text-xs text-purple-300/60 hover:text-purple-200 hover:bg-white/5 transition-colors border-t border-white/5"
+								>
+									{activityExpanded ? "折りたたむ" : `他 ${activities.length - 5} 件を表示`}
+								</button>
+							)}
+						</div>
+					</section>
+				)}
+
 				{/* Apps */}
 				<section className="w-full max-w-2xl mb-16">
 					<SectionHeading>Apps</SectionHeading>
@@ -343,44 +382,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 						</Link>
 					</div>
 				</section>
-
-				{/* Activity Feed */}
-				{activities.length > 0 && (
-					<section className="w-full max-w-2xl mb-16">
-						<SectionHeading>Activity</SectionHeading>
-						<div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 overflow-hidden">
-							<div className="divide-y divide-white/5">
-								{visibleActivities.map((activity) => (
-									<div
-										key={activity.id}
-										className="flex items-center gap-3 px-4 py-2 hover:bg-white/5 transition-colors"
-									>
-										<div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-fuchsia-500/20 to-cyan-500/20 border border-white/10 flex items-center justify-center text-fuchsia-300">
-											<ActivityIcon type={activity.type} />
-										</div>
-										<span className="text-[10px] font-medium uppercase tracking-wider text-fuchsia-400/70 bg-fuchsia-500/10 px-1.5 py-0.5 rounded flex-shrink-0">
-											{activityLabels[activity.type] ?? activity.type}
-										</span>
-										<p className="text-sm text-purple-100/80 truncate flex-1 min-w-0">
-											{activity.message}
-										</p>
-										<span className="text-[11px] text-purple-300/40 flex-shrink-0">
-											{formatRelativeTime(activity.createdAt)}
-										</span>
-									</div>
-								))}
-							</div>
-							{activities.length > 5 && (
-								<button
-									onClick={() => setActivityExpanded(!activityExpanded)}
-									className="w-full px-4 py-2 text-xs text-purple-300/60 hover:text-purple-200 hover:bg-white/5 transition-colors border-t border-white/5"
-								>
-									{activityExpanded ? "折りたたむ" : `他 ${activities.length - 5} 件を表示`}
-								</button>
-							)}
-						</div>
-					</section>
-				)}
 
 				{/* About */}
 				<section className="w-full max-w-2xl mb-16">
