@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { drizzle } from "drizzle-orm/d1";
 import { desc, sql } from "drizzle-orm";
-import { heroImages, activityLog, hiphopTracks } from "../db/schema";
+import { heroImages, activityLog, hiphopTracks, youtubeVideos } from "../db/schema";
 import { useAudioPlayer } from "../audio-player-context";
 import type { Route } from "./+types/home";
 
@@ -49,6 +49,18 @@ export async function loader({ context }: Route.LoaderArgs) {
 		.orderBy(desc(activityLog.createdAt))
 		.limit(20);
 
+	// YouTube動画を取得（新しい順）
+	const videos = await db
+		.select({
+			id: youtubeVideos.id,
+			videoId: youtubeVideos.videoId,
+			title: youtubeVideos.title,
+			description: youtubeVideos.description,
+			publishedAt: youtubeVideos.publishedAt,
+		})
+		.from(youtubeVideos)
+		.orderBy(desc(youtubeVideos.createdAt));
+
 	// 古いアクティビティを削除（30日以上前）
 	const thirtyDaysAgo = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
 	await db
@@ -74,6 +86,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 			metadata: a.metadata,
 			createdAt: a.createdAt?.getTime() ?? Date.now(),
 		})),
+		videos,
 	};
 }
 
@@ -191,7 +204,7 @@ function useSetPlaylistOnMount(tracks: { date: string; type: string; title: stri
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-	const { heroImage, tracks, activities } = loaderData;
+	const { heroImage, tracks, activities, videos } = loaderData;
 	const { tracks: playerTracks } = useAudioPlayer();
 	const [activityExpanded, setActivityExpanded] = useState(false);
 	const visibleActivities = activityExpanded ? activities : activities.slice(0, 5);
@@ -276,6 +289,44 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 									{activityExpanded ? "折りたたむ" : `他 ${activities.length - 5} 件を表示`}
 								</button>
 							)}
+						</div>
+					</section>
+				)}
+
+				{/* YouTube Videos */}
+				{videos.length > 0 && (
+					<section className="w-full max-w-2xl mb-16">
+						<SectionHeading>YouTube</SectionHeading>
+						<div className="grid gap-4 sm:grid-cols-2">
+							{videos.map((video) => (
+								<div
+									key={video.id}
+									className="rounded-2xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm"
+								>
+									<div className="aspect-video">
+										<iframe
+											src={`https://www.youtube.com/embed/${video.videoId}`}
+											title={video.title}
+											allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+											allowFullScreen
+											className="w-full h-full"
+										/>
+									</div>
+									<div className="px-4 py-3">
+										<p className="text-sm font-semibold">{video.title}</p>
+										{video.description && (
+											<p className="text-xs text-purple-200/60 mt-1 line-clamp-2">
+												{video.description}
+											</p>
+										)}
+										{video.publishedAt && (
+											<p className="text-xs text-purple-300/40 mt-1">
+												{video.publishedAt}
+											</p>
+										)}
+									</div>
+								</div>
+							))}
 						</div>
 					</section>
 				)}
