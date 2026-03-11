@@ -1,7 +1,7 @@
 import type { Route } from "./+types/debug";
 import { useState } from "react";
 import { drizzle } from "drizzle-orm/d1";
-import { newsCache, heroImages, scrapedArticles, tweets, scrapeSites, activityLog, bookGroups, bookGroupMembers, books, bookMemberStatuses, personalBooks, bookPrerequisites, hiphopTracks } from "../db/schema";
+import { newsCache, heroImages, scrapedArticles, tweets, scrapeSites, activityLog, bookGroups, bookGroupMembers, books, bookMemberStatuses, personalBooks, bookPrerequisites, hiphopTracks, youtubeVideos } from "../db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { GoogleGenAI } from "@google/genai";
 import { generateHeroImage, regenerateHeroImageWithPrompt } from "../../workers/hero-image";
@@ -16,6 +16,7 @@ import { TweetSection } from "../debug/tweet-section";
 import { HeroSection } from "../debug/hero-section";
 import { NewsCacheSection } from "../debug/news-cache-section";
 import { MusicSection } from "../debug/music-section";
+import { YouTubeSection } from "../debug/youtube-section";
 
 // --- タブ定義 ---
 const TABS = [
@@ -25,6 +26,7 @@ const TABS = [
 	{ id: "tweets", label: "ツイート", color: "text-violet-400 border-violet-400" },
 	{ id: "hero", label: "ヒーロー", color: "text-fuchsia-400 border-fuchsia-400" },
 	{ id: "music", label: "Hiphop", color: "text-pink-400 border-pink-400" },
+	{ id: "youtube", label: "YouTube", color: "text-red-400 border-red-400" },
 	{ id: "news", label: "ニュース", color: "text-amber-400 border-amber-400" },
 ] as const;
 
@@ -148,6 +150,17 @@ export async function loader({ context }: Route.LoaderArgs) {
 		.select({ count: sql<number>`count(*)` })
 		.from(hiphopTracks);
 
+	// YouTube動画関連
+	const videoEntries = await db
+		.select()
+		.from(youtubeVideos)
+		.orderBy(desc(youtubeVideos.createdAt))
+		.limit(50);
+
+	const [videoCount] = await db
+		.select({ count: sql<number>`count(*)` })
+		.from(youtubeVideos);
+
 	return {
 		entries,
 		heroEntries,
@@ -185,6 +198,16 @@ export async function loader({ context }: Route.LoaderArgs) {
 			})),
 			count: trackCount?.count ?? 0,
 		},
+		youtubeData: {
+			entries: videoEntries.map((v) => ({
+				id: v.id,
+				videoId: v.videoId,
+				title: v.title,
+				description: v.description,
+				publishedAt: v.publishedAt,
+			})),
+			count: videoCount?.count ?? 0,
+		},
 	};
 }
 
@@ -192,6 +215,53 @@ export async function loader({ context }: Route.LoaderArgs) {
 export async function action({ request, context }: Route.ActionArgs) {
 	const formData = await request.formData();
 	const intent = formData.get("intent");
+
+	// --- YouTube動画追加 ---
+	if (intent === "add-youtube-video") {
+		const videoUrl = (formData.get("videoUrl") as string)?.trim();
+		const title = (formData.get("title") as string)?.trim();
+		const description = (formData.get("description") as string)?.trim() || null;
+		const publishedAt = (formData.get("publishedAt") as string)?.trim() || null;
+
+		if (!videoUrl || !title) {
+			return { error: "YouTube URL とタイトルは必須です" };
+		}
+
+		// URLから動画IDを抽出
+		const patterns = [
+			/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+			/^([a-zA-Z0-9_-]{11})$/,
+		];
+		let videoId: string | null = null;
+		for (const pattern of patterns) {
+			const match = videoUrl.match(pattern);
+			if (match) {
+				videoId = match[1];
+				break;
+			}
+		}
+		if (!videoId) {
+			return { error: "有効な YouTube URL または動画IDを入力してください" };
+		}
+
+		const db = drizzle(context.cloudflare.env.DB);
+		await db.insert(youtubeVideos).values({
+			videoId,
+			title,
+			description,
+			publishedAt,
+		});
+		return { ok: true, intent: "youtube", message: `動画「${title}」を追加しました` };
+	}
+
+	// --- YouTube動画削除 ---
+	if (intent === "delete-youtube-video") {
+		const id = Number(formData.get("id"));
+		if (!id) return { error: "IDが不正です" };
+		const db = drizzle(context.cloudflare.env.DB);
+		await db.delete(youtubeVideos).where(eq(youtubeVideos.id, id));
+		return { ok: true, intent: "youtube", message: "動画を削除しました" };
+	}
 
 	// --- アクティビティログ追加 ---
 	if (intent === "add-activity") {
@@ -802,6 +872,13 @@ export default function Debug({ loaderData }: Route.ComponentProps) {
 					<MusicSection
 						trackEntries={loaderData.trackData.entries}
 						trackCount={loaderData.trackData.count}
+					/>
+				)}
+
+				{activeTab === "youtube" && (
+					<YouTubeSection
+						videoEntries={loaderData.youtubeData.entries}
+						videoCount={loaderData.youtubeData.count}
 					/>
 				)}
 

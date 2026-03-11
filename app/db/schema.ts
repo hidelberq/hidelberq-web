@@ -351,6 +351,18 @@ export const theWorkSessions = sqliteTable("the_work_sessions", {
 	),
 });
 
+// YouTube 動画
+export const youtubeVideos = sqliteTable("youtube_videos", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	videoId: text("video_id").notNull(), // YouTube の動画ID (例: dQw4w9WgXcQ)
+	title: text("title").notNull(),
+	description: text("description"),
+	publishedAt: text("published_at"), // YYYY-MM-DD
+	createdAt: integer("created_at", { mode: "timestamp" }).default(
+		sql`(strftime('%s', 'now'))`,
+	),
+});
+
 export const scrapedArticles = sqliteTable("scraped_articles", {
 	id: integer("id").primaryKey({ autoIncrement: true }),
 	siteId: text("site_id").notNull(),
