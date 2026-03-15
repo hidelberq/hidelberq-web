@@ -1758,6 +1758,20 @@ function WeekView({
 						</tr>
 					</thead>
 					<tbody>
+						{/* クイック追加行 */}
+						<tr>
+							{days.map((day) => (
+								<td
+									key={day.date}
+									className="border border-violet-800/30 p-1 align-top"
+								>
+									<WeekQuickAdd
+										date={day.date}
+										memberId={memberId}
+									/>
+								</td>
+							))}
+						</tr>
 						{maxEntries === 0 ? (
 							<tr>
 								<td
@@ -1930,6 +1944,165 @@ function WeekView({
 
 			{/* 週間サマリー */}
 			{entries.length > 0 && <DaySummary entries={entries} />}
+		</div>
+	);
+}
+
+// --- 週間ビューのクイック追加 ---
+
+const WEEK_QUICK_ACTIVITIES = [
+	"起床",
+	"朝食",
+	"昼食",
+	"夕食",
+	"入浴",
+	"就寝",
+	"仕事",
+	"散歩",
+] as const;
+
+function WeekQuickAdd({
+	date,
+	memberId,
+}: { date: string; memberId: string }) {
+	const fetcher = useFetcher();
+	const [isOpen, setIsOpen] = useState(false);
+	const [activity, setActivity] = useState("");
+	const [mood, setMood] = useState(0);
+	const [timeStr, setTimeStr] = useState("");
+	const isSubmitting = fetcher.state !== "idle";
+
+	// 成功時に閉じる
+	useEffect(() => {
+		if (fetcher.state === "idle" && fetcher.data && "success" in fetcher.data) {
+			setIsOpen(false);
+			setActivity("");
+			setMood(0);
+			setTimeStr("");
+		}
+	}, [fetcher.state, fetcher.data]);
+
+	const handleOpen = () => {
+		const now = new Date();
+		const h = now.getHours().toString().padStart(2, "0");
+		const m = (Math.round(now.getMinutes() / 5) * 5).toString().padStart(2, "0");
+		setTimeStr(`${h}:${m}`);
+		setIsOpen(true);
+	};
+
+	if (!isOpen) {
+		return (
+			<button
+				type="button"
+				onClick={handleOpen}
+				className="w-full rounded py-0.5 text-center text-[10px] text-violet-600 transition-colors hover:bg-violet-800/40 hover:text-violet-300"
+			>
+				＋
+			</button>
+		);
+	}
+
+	const fetcherError =
+		fetcher.data && "error" in fetcher.data
+			? (fetcher.data.error as string)
+			: null;
+
+	return (
+		<div className="space-y-1.5">
+			{/* 時刻 */}
+			<input
+				type="time"
+				value={timeStr}
+				onChange={(e) => setTimeStr(e.target.value)}
+				className="w-full rounded border border-violet-700 bg-violet-950 px-1 py-0.5 text-[10px] text-white"
+			/>
+
+			{/* 活動プリセット */}
+			<div className="flex flex-wrap gap-0.5">
+				{WEEK_QUICK_ACTIVITIES.map((a) => (
+					<button
+						key={a}
+						type="button"
+						onClick={() => setActivity(a)}
+						className={`rounded px-1 py-0.5 text-[9px] transition-colors ${
+							activity === a
+								? "bg-violet-600/50 text-white"
+								: "bg-violet-900/50 text-violet-400 hover:bg-violet-800/50"
+						}`}
+					>
+						{a}
+					</button>
+				))}
+			</div>
+
+			{/* 自由入力 */}
+			<input
+				type="text"
+				value={activity}
+				onChange={(e) => setActivity(e.target.value)}
+				placeholder="活動..."
+				className="w-full rounded border border-violet-700 bg-violet-950 px-1 py-0.5 text-[10px] text-white placeholder:text-violet-600"
+			/>
+
+			{/* 気分クイック */}
+			<div className="flex gap-0.5">
+				{[
+					{ v: -5, l: "辛" },
+					{ v: -2, l: "微辛" },
+					{ v: 0, l: "普通" },
+					{ v: 2, l: "微良" },
+					{ v: 5, l: "良" },
+				].map((opt) => (
+					<button
+						key={opt.v}
+						type="button"
+						onClick={() => setMood(opt.v)}
+						className={`flex-1 rounded py-0.5 text-[9px] transition-colors ${
+							mood === opt.v
+								? "bg-violet-600/50 text-white"
+								: "bg-violet-900/50 text-violet-400 hover:bg-violet-800/50"
+						}`}
+					>
+						{opt.l}
+					</button>
+				))}
+			</div>
+
+			{fetcherError && (
+				<div className="text-[9px] text-red-400">{fetcherError}</div>
+			)}
+
+			{/* ボタン */}
+			<div className="flex gap-1">
+				<button
+					type="button"
+					disabled={isSubmitting || !activity || !timeStr}
+					onClick={() => {
+						fetcher.submit(
+							{
+								intent: "create",
+								memberId,
+								date,
+								time: timeStr,
+								activity,
+								mood: String(mood),
+								interpersonal: "0",
+							},
+							{ method: "post" },
+						);
+					}}
+					className="flex-1 rounded bg-violet-600 py-1 text-[10px] font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+				>
+					{isSubmitting ? "..." : "記録"}
+				</button>
+				<button
+					type="button"
+					onClick={() => setIsOpen(false)}
+					className="rounded px-1.5 py-1 text-[10px] text-violet-500 transition-colors hover:bg-violet-800/50"
+				>
+					×
+				</button>
+			</div>
 		</div>
 	);
 }
