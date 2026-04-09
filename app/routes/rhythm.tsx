@@ -602,11 +602,18 @@ export default function RhythmTracker({
 							memberId={memberId}
 						/>
 
+						{/* ワンタップ記録 */}
+						<QuickEntrySection
+							currentDate={currentDate}
+							memberId={memberId}
+						/>
+
 						{/* 入力フォーム */}
 						<EntryForm
 							currentDate={currentDate}
 							memberId={memberId}
 							fixedDate={view === "today"}
+							recentEntries={recentEntries}
 						/>
 
 						{/* ビュー別表示 */}
@@ -774,6 +781,79 @@ function DateNavigation({
 	);
 }
 
+// --- ワンタップ記録 ---
+
+// クイック記録用プリセット（よく使う活動）
+const QUICK_PRESETS = [
+	{ label: "起床", activity: "起床" },
+	{ label: "朝食", activity: "朝食" },
+	{ label: "昼食", activity: "昼食" },
+	{ label: "夕食", activity: "夕食" },
+	{ label: "入浴", activity: "入浴" },
+	{ label: "就寝", activity: "ベッドに入る" },
+] as const;
+
+function QuickEntrySection({
+	currentDate,
+	memberId,
+}: { currentDate: string; memberId: string }) {
+	const fetcher = useFetcher();
+	const isSubmitting = fetcher.state !== "idle";
+	const [submitted, setSubmitted] = useState<string | null>(null);
+
+	// 成功フィードバック
+	useEffect(() => {
+		if (fetcher.state === "idle" && fetcher.data && "success" in fetcher.data) {
+			const timer = setTimeout(() => setSubmitted(null), 1500);
+			return () => clearTimeout(timer);
+		}
+	}, [fetcher.state, fetcher.data]);
+
+	const handleQuickEntry = (activity: string) => {
+		const now = new Date();
+		const hour = now.getHours().toString().padStart(2, "0");
+		const min = (Math.round(now.getMinutes() / 5) * 5).toString().padStart(2, "0");
+		setSubmitted(activity);
+		fetcher.submit(
+			{
+				intent: "create",
+				memberId,
+				date: currentDate,
+				time: `${hour}:${min}`,
+				activity,
+				mood: "0",
+				interpersonal: "0",
+			},
+			{ method: "post" },
+		);
+	};
+
+	return (
+		<div className="mb-4">
+			<p className="mb-2 text-xs text-violet-500">
+				ワンタップ記録（現在時刻・気分0で即記録）
+			</p>
+			<div className="flex flex-wrap gap-2">
+				{QUICK_PRESETS.map((preset) => (
+					<button
+						key={preset.label}
+						type="button"
+						disabled={isSubmitting}
+						onClick={() => handleQuickEntry(preset.activity)}
+						className={`rounded-lg border px-3 py-2 text-sm font-medium transition-all ${
+							submitted === preset.activity
+								? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+								: "border-violet-700/50 bg-violet-900/40 text-violet-200 hover:border-violet-500 hover:bg-violet-800/60 active:scale-95"
+						} disabled:opacity-50`}
+					>
+						{submitted === preset.activity ? "✓" : ""} {preset.label}
+					</button>
+				))}
+			</div>
+		</div>
+	);
+}
+
 // --- 入力フォーム ---
 
 // アクティビティプリセット
@@ -792,14 +872,27 @@ const ACTIVITY_PRESETS = [
 	"入浴",
 ] as const;
 
+// 気分クイック選択ボタン
+const MOOD_QUICK_OPTIONS = [
+	{ value: -5, label: "辛い" },
+	{ value: -2, label: "やや辛い" },
+	{ value: 0, label: "普通" },
+	{ value: 2, label: "やや良い" },
+	{ value: 5, label: "良い" },
+] as const;
+
 function EntryForm({
 	currentDate,
 	memberId,
 	fixedDate = false,
-}: { currentDate: string; memberId: string; fixedDate?: boolean }) {
+	recentEntries = [],
+}: { currentDate: string; memberId: string; fixedDate?: boolean; recentEntries?: Entry[] }) {
 	const fetcher = useFetcher();
-	const [mood, setMood] = useState(0);
+	// 直近の記録から気分の初期値を引き継ぐ
+	const lastMood = recentEntries.length > 0 ? recentEntries[0].mood : 0;
+	const [mood, setMood] = useState(lastMood);
 	const [isOpen, setIsOpen] = useState(false);
+	const [showDetails, setShowDetails] = useState(false);
 	const [activity, setActivity] = useState("");
 	const isSubmitting = fetcher.state !== "idle";
 
@@ -968,6 +1061,24 @@ function EntryForm({
 								({moodLabel(mood)})
 							</span>
 						</label>
+						{/* クイック選択ボタン */}
+						<div className="mb-2 flex gap-1.5">
+							{MOOD_QUICK_OPTIONS.map((opt) => (
+								<button
+									key={opt.value}
+									type="button"
+									onClick={() => setMood(opt.value)}
+									className={`flex-1 rounded-md border py-1.5 text-xs transition-colors ${
+										mood === opt.value
+											? "border-violet-500 bg-violet-600/50 text-white"
+											: "border-violet-700/50 bg-violet-900/50 text-violet-300 hover:border-violet-600 hover:bg-violet-800/50"
+									}`}
+								>
+									{opt.label}
+								</button>
+							))}
+						</div>
+						{/* 細かい調整用スライダー */}
 						<input
 							type="range"
 							name="mood"
@@ -978,62 +1089,73 @@ function EntryForm({
 							className="w-full accent-violet-500"
 						/>
 						<div className="flex justify-between text-xs text-violet-500">
-							<span>-10 最悪</span>
-							<span>-5 辛い</span>
-							<span>0 普通</span>
-							<span>+5 良い</span>
-							<span>+10 最高</span>
+							<span>-10</span>
+							<span>0</span>
+							<span>+10</span>
 						</div>
 					</div>
 
-					<div>
-						<label className="mb-1 block text-xs text-violet-400">
-							対人
-						</label>
-						<div className="space-y-1">
-							{INTERPERSONAL_LABELS.map((label, i) => (
-								<label
-									key={i}
-									className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-violet-800/30"
-								>
-									<input
-										type="radio"
-										name="interpersonal"
-										value={i}
-										defaultChecked={i === 0}
-										className="accent-violet-500"
-									/>
-									<span className="text-violet-200">
-										{i}: {label}
-									</span>
+					{/* 詳細（折りたたみ） */}
+					<button
+						type="button"
+						onClick={() => setShowDetails(!showDetails)}
+						className="w-full rounded-md px-3 py-1.5 text-left text-xs text-violet-500 transition-colors hover:bg-violet-800/30 hover:text-violet-300"
+					>
+						{showDetails ? "▼ 詳細を閉じる" : "▶ 詳細（対人・メモ）"}
+					</button>
+
+					{showDetails && (
+						<>
+							<div>
+								<label className="mb-1 block text-xs text-violet-400">
+									対人
 								</label>
-							))}
-						</div>
-					</div>
+								<div className="space-y-1">
+									{INTERPERSONAL_LABELS.map((label, i) => (
+										<label
+											key={i}
+											className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-violet-800/30"
+										>
+											<input
+												type="radio"
+												name="interpersonal"
+												value={i}
+												defaultChecked={i === 0}
+												className="accent-violet-500"
+											/>
+											<span className="text-violet-200">
+												{i}: {label}
+											</span>
+										</label>
+									))}
+								</div>
+							</div>
 
-					<div>
-						<label className="mb-1 block text-xs text-violet-400">
-							メモ（任意）
-						</label>
-						<textarea
-							name="note"
-							rows={2}
-							placeholder="自由記入..."
-							className="w-full rounded-md border border-violet-700 bg-violet-950 px-3 py-2 text-sm text-white placeholder:text-violet-600"
-						/>
-					</div>
+							<div>
+								<label className="mb-1 block text-xs text-violet-400">
+									メモ（任意）
+								</label>
+								<textarea
+									name="note"
+									rows={2}
+									placeholder="自由記入..."
+									className="w-full rounded-md border border-violet-700 bg-violet-950 px-3 py-2 text-sm text-white placeholder:text-violet-600"
+								/>
+							</div>
 
-					<label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-violet-800/30">
-						<input
-							type="checkbox"
-							name="isPrivate"
-							value="1"
-							className="accent-violet-500"
-						/>
-						<span className="text-violet-300">
-							内容をぼかす（タップで表示）
-						</span>
-					</label>
+							<label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-violet-800/30">
+								<input
+									type="checkbox"
+									name="isPrivate"
+									value="1"
+									className="accent-violet-500"
+								/>
+								<span className="text-violet-300">
+									内容をぼかす（タップで表示）
+								</span>
+							</label>
+						</>
+					)}
 
 					{fetcherError && (
 						<div className="rounded-md border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-300">
@@ -1636,6 +1758,20 @@ function WeekView({
 						</tr>
 					</thead>
 					<tbody>
+						{/* クイック追加行 */}
+						<tr>
+							{days.map((day) => (
+								<td
+									key={day.date}
+									className="border border-violet-800/30 p-1 align-top"
+								>
+									<WeekQuickAdd
+										date={day.date}
+										memberId={memberId}
+									/>
+								</td>
+							))}
+						</tr>
 						{maxEntries === 0 ? (
 							<tr>
 								<td
@@ -1808,6 +1944,165 @@ function WeekView({
 
 			{/* 週間サマリー */}
 			{entries.length > 0 && <DaySummary entries={entries} />}
+		</div>
+	);
+}
+
+// --- 週間ビューのクイック追加 ---
+
+const WEEK_QUICK_ACTIVITIES = [
+	"起床",
+	"朝食",
+	"昼食",
+	"夕食",
+	"入浴",
+	"就寝",
+	"仕事",
+	"散歩",
+] as const;
+
+function WeekQuickAdd({
+	date,
+	memberId,
+}: { date: string; memberId: string }) {
+	const fetcher = useFetcher();
+	const [isOpen, setIsOpen] = useState(false);
+	const [activity, setActivity] = useState("");
+	const [mood, setMood] = useState(0);
+	const [timeStr, setTimeStr] = useState("");
+	const isSubmitting = fetcher.state !== "idle";
+
+	// 成功時に閉じる
+	useEffect(() => {
+		if (fetcher.state === "idle" && fetcher.data && "success" in fetcher.data) {
+			setIsOpen(false);
+			setActivity("");
+			setMood(0);
+			setTimeStr("");
+		}
+	}, [fetcher.state, fetcher.data]);
+
+	const handleOpen = () => {
+		const now = new Date();
+		const h = now.getHours().toString().padStart(2, "0");
+		const m = (Math.round(now.getMinutes() / 5) * 5).toString().padStart(2, "0");
+		setTimeStr(`${h}:${m}`);
+		setIsOpen(true);
+	};
+
+	if (!isOpen) {
+		return (
+			<button
+				type="button"
+				onClick={handleOpen}
+				className="w-full rounded py-0.5 text-center text-[10px] text-violet-600 transition-colors hover:bg-violet-800/40 hover:text-violet-300"
+			>
+				＋
+			</button>
+		);
+	}
+
+	const fetcherError =
+		fetcher.data && "error" in fetcher.data
+			? (fetcher.data.error as string)
+			: null;
+
+	return (
+		<div className="space-y-1.5">
+			{/* 時刻 */}
+			<input
+				type="time"
+				value={timeStr}
+				onChange={(e) => setTimeStr(e.target.value)}
+				className="w-full rounded border border-violet-700 bg-violet-950 px-1 py-0.5 text-[10px] text-white"
+			/>
+
+			{/* 活動プリセット */}
+			<div className="flex flex-wrap gap-0.5">
+				{WEEK_QUICK_ACTIVITIES.map((a) => (
+					<button
+						key={a}
+						type="button"
+						onClick={() => setActivity(a)}
+						className={`rounded px-1 py-0.5 text-[9px] transition-colors ${
+							activity === a
+								? "bg-violet-600/50 text-white"
+								: "bg-violet-900/50 text-violet-400 hover:bg-violet-800/50"
+						}`}
+					>
+						{a}
+					</button>
+				))}
+			</div>
+
+			{/* 自由入力 */}
+			<input
+				type="text"
+				value={activity}
+				onChange={(e) => setActivity(e.target.value)}
+				placeholder="活動..."
+				className="w-full rounded border border-violet-700 bg-violet-950 px-1 py-0.5 text-[10px] text-white placeholder:text-violet-600"
+			/>
+
+			{/* 気分クイック */}
+			<div className="flex gap-0.5">
+				{[
+					{ v: -5, l: "辛" },
+					{ v: -2, l: "微辛" },
+					{ v: 0, l: "普通" },
+					{ v: 2, l: "微良" },
+					{ v: 5, l: "良" },
+				].map((opt) => (
+					<button
+						key={opt.v}
+						type="button"
+						onClick={() => setMood(opt.v)}
+						className={`flex-1 rounded py-0.5 text-[9px] transition-colors ${
+							mood === opt.v
+								? "bg-violet-600/50 text-white"
+								: "bg-violet-900/50 text-violet-400 hover:bg-violet-800/50"
+						}`}
+					>
+						{opt.l}
+					</button>
+				))}
+			</div>
+
+			{fetcherError && (
+				<div className="text-[9px] text-red-400">{fetcherError}</div>
+			)}
+
+			{/* ボタン */}
+			<div className="flex gap-1">
+				<button
+					type="button"
+					disabled={isSubmitting || !activity || !timeStr}
+					onClick={() => {
+						fetcher.submit(
+							{
+								intent: "create",
+								memberId,
+								date,
+								time: timeStr,
+								activity,
+								mood: String(mood),
+								interpersonal: "0",
+							},
+							{ method: "post" },
+						);
+					}}
+					className="flex-1 rounded bg-violet-600 py-1 text-[10px] font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+				>
+					{isSubmitting ? "..." : "記録"}
+				</button>
+				<button
+					type="button"
+					onClick={() => setIsOpen(false)}
+					className="rounded px-1.5 py-1 text-[10px] text-violet-500 transition-colors hover:bg-violet-800/50"
+				>
+					×
+				</button>
+			</div>
 		</div>
 	);
 }
