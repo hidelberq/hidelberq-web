@@ -139,7 +139,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 			const title = formData.get("title") as string;
 			const note = (formData.get("note") as string) || null;
 
-			if (age < 0 || age > 150 || score < -5 || score > 5 || !title) {
+			if (age < 0 || age > 150 || score < -10 || score > 10 || !title) {
 				return { error: "入力が不正です" };
 			}
 
@@ -161,7 +161,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 			const title = formData.get("title") as string;
 			const note = (formData.get("note") as string) || null;
 
-			if (age < 0 || age > 150 || score < -5 || score > 5 || !title) {
+			if (age < 0 || age > 150 || score < -10 || score > 10 || !title) {
 				return { error: "入力が不正です" };
 			}
 
