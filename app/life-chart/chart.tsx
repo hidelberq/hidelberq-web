@@ -77,7 +77,7 @@ export function LifeChartSVG({
 		[maxAge],
 	);
 	const toY = useCallback(
-		(score: number) => PADDING.top + ((10 - score) / 20) * INNER_H,
+		(score: number) => PADDING.top + ((5 - score) / 10) * INNER_H,
 		[],
 	);
 
@@ -88,7 +88,7 @@ export function LifeChartSVG({
 	for (let age = 0; age <= maxAge; age += 5) {
 		xTicks.push(age);
 	}
-	const yTicks = [-10, -5, 0, 5, 10];
+	const yTicks = [-5, -2, 0, 2, 5];
 
 	const sortedVisible = useMemo(
 		() =>

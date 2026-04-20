@@ -278,16 +278,16 @@ export function EventForm({
 					</label>
 					<input
 						type="range"
-						min={-10}
-						max={10}
+						min={-5}
+						max={5}
 						value={score}
 						onChange={(e) => setScore(Number(e.target.value))}
 						className="w-full accent-blue-500"
 					/>
 					<div className="flex justify-between text-[10px] text-zinc-500">
-						<span>-10</span>
+						<span>-5</span>
 						<span>0</span>
-						<span>+10</span>
+						<span>+5</span>
 					</div>
 				</div>
 			</div>

@@ -287,7 +287,7 @@ export const rhythmEntries = sqliteTable("rhythm_entries", {
 	date: text("date").notNull(), // YYYY-MM-DD
 	time: text("time").notNull(), // HH:MM
 	activity: text("activity").notNull(),
-	mood: integer("mood").notNull(), // -10 ~ +10
+	mood: integer("mood").notNull(), // -5 ~ +5
 	interpersonal: integer("interpersonal").notNull(), // 0 ~ 3
 	note: text("note"),
 	isPrivate: integer("is_private", { mode: "boolean" }).notNull().default(false),
@@ -323,7 +323,7 @@ export const lifeChartEvents = sqliteTable("life_chart_events", {
 	age: integer("age").notNull(),
 	month: integer("month"), // 1-12（任意：その年齢の何月か）
 	day: integer("day"), // 1-31（任意：その月の何日か）
-	score: integer("score").notNull(), // -10 ~ +10
+	score: integer("score").notNull(), // -5 ~ +5
 	category: text("category").notNull(), // education, career, relationship, health, hobby, other
 	title: text("title").notNull(),
 	note: text("note"),
