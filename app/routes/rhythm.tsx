@@ -185,30 +185,30 @@ type Entry = {
 };
 
 function moodColor(mood: number): string {
-	if (mood > 3) return "text-emerald-400";
+	if (mood > 2) return "text-emerald-400";
 	if (mood > 0) return "text-emerald-300/70";
 	if (mood === 0) return "text-violet-300";
-	if (mood >= -3) return "text-amber-400/70";
+	if (mood >= -2) return "text-amber-400/70";
 	return "text-red-400";
 }
 
 function moodBgClass(mood: number): string {
-	if (mood > 3) return "bg-emerald-500/15";
+	if (mood > 2) return "bg-emerald-500/15";
 	if (mood > 0) return "bg-emerald-500/8";
 	if (mood === 0) return "";
-	if (mood >= -3) return "bg-amber-500/8";
+	if (mood >= -2) return "bg-amber-500/8";
 	return "bg-red-500/15";
 }
 
 function moodLabel(mood: number): string {
-	if (mood >= 9) return "最高";
-	if (mood >= 7) return "とても良い";
-	if (mood >= 4) return "良い";
+	if (mood >= 5) return "最高";
+	if (mood >= 4) return "とても良い";
+	if (mood >= 2) return "良い";
 	if (mood >= 1) return "やや良い";
 	if (mood === 0) return "普通";
-	if (mood >= -3) return "やや辛い";
-	if (mood >= -6) return "辛い";
-	if (mood >= -9) return "とても辛い";
+	if (mood >= -1) return "やや辛い";
+	if (mood >= -3) return "辛い";
+	if (mood >= -4) return "とても辛い";
 	return "最悪";
 }
 
@@ -389,8 +389,8 @@ export async function action({ context, request }: Route.ActionArgs) {
 			if (!memberId || !date || !time || !activity) {
 				return { error: "必須項目を入力してください" };
 			}
-			if (mood < -10 || mood > 10) {
-				return { error: "気分は -10 ~ +10 の範囲で入力してください" };
+			if (mood < -5 || mood > 5) {
+				return { error: "気分は -5 ~ +5 の範囲で入力してください" };
 			}
 			if (interpersonal < 0 || interpersonal > 3) {
 				return { error: "対人は 0 ~ 3 の範囲で入力してください" };
@@ -424,8 +424,8 @@ export async function action({ context, request }: Route.ActionArgs) {
 			if (!id || !memberId || !date || !time || !activity) {
 				return { error: "必須項目を入力してください" };
 			}
-			if (mood < -10 || mood > 10) {
-				return { error: "気分は -10 ~ +10 の範囲で入力してください" };
+			if (mood < -5 || mood > 5) {
+				return { error: "気分は -5 ~ +5 の範囲で入力してください" };
 			}
 			if (interpersonal < 0 || interpersonal > 3) {
 				return { error: "対人は 0 ~ 3 の範囲で入力してください" };
@@ -971,18 +971,18 @@ function EntryForm({
 						<input
 							type="range"
 							name="mood"
-							min="-10"
-							max="10"
+							min="-5"
+							max="5"
 							value={mood}
 							onChange={(e) => setMood(Number(e.target.value))}
 							className="w-full accent-violet-500"
 						/>
 						<div className="flex justify-between text-xs text-violet-500">
-							<span>-10 最悪</span>
-							<span>-5 辛い</span>
+							<span>-5 最悪</span>
+							<span>-2 辛い</span>
 							<span>0 普通</span>
-							<span>+5 良い</span>
-							<span>+10 最高</span>
+							<span>+2 良い</span>
+							<span>+5 最高</span>
 						</div>
 					</div>
 
@@ -1272,8 +1272,8 @@ function EditEntryForm({
 				<input
 					type="range"
 					name="mood"
-					min="-10"
-					max="10"
+					min="-5"
+					max="5"
 					value={mood}
 					onChange={(e) => setMood(Number(e.target.value))}
 					className="w-full accent-violet-500"

@@ -287,7 +287,7 @@ export const rhythmEntries = sqliteTable("rhythm_entries", {
 	date: text("date").notNull(), // YYYY-MM-DD
 	time: text("time").notNull(), // HH:MM
 	activity: text("activity").notNull(),
-	mood: integer("mood").notNull(), // -10 ~ +10
+	mood: integer("mood").notNull(), // -5 ~ +5
 	interpersonal: integer("interpersonal").notNull(), // 0 ~ 3
 	note: text("note"),
 	isPrivate: integer("is_private", { mode: "boolean" }).notNull().default(false),
