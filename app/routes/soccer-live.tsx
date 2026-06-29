@@ -68,8 +68,12 @@ export default function SoccerLive() {
 	const [addingGoalFor, setAddingGoalFor] = useState<"home" | "away" | null>(
 		null,
 	);
+	const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+	const [editGoalScorer, setEditGoalScorer] = useState("");
+	const [editGoalMinute, setEditGoalMinute] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);
 	const timeInputRef = useRef<HTMLInputElement>(null);
+	const goalScorerInputRef = useRef<HTMLInputElement>(null);
 
 	const homeScore = goals.filter((g) => g.team === "home").length;
 	const awayScore = goals.filter((g) => g.team === "away").length;
@@ -92,6 +96,13 @@ export default function SoccerLive() {
 			timeInputRef.current.select();
 		}
 	}, [editingTime]);
+
+	// ゴール編集時のフォーカス
+	useEffect(() => {
+		if (editingGoalId && goalScorerInputRef.current) {
+			goalScorerInputRef.current.select();
+		}
+	}, [editingGoalId]);
 
 	// チーム名編集時のフォーカス
 	useEffect(() => {
@@ -155,6 +166,29 @@ export default function SoccerLive() {
 
 	const handleRemoveGoal = (id: string) => {
 		setGoals((prev) => prev.filter((g) => g.id !== id));
+	};
+
+	const handleStartEditGoal = (goal: Goal) => {
+		setEditingGoalId(goal.id);
+		setEditGoalScorer(goal.scorer);
+		setEditGoalMinute(String(goal.minute));
+	};
+
+	const handleConfirmEditGoal = () => {
+		if (!editingGoalId) return;
+		const minute = Number.parseInt(editGoalMinute, 10);
+		setGoals((prev) =>
+			prev.map((g) =>
+				g.id === editingGoalId
+					? {
+							...g,
+							scorer: editGoalScorer.trim() || g.scorer,
+							minute: Number.isNaN(minute) ? g.minute : minute,
+						}
+					: g,
+			),
+		);
+		setEditingGoalId(null);
 	};
 
 	const handleStartEditTime = () => {
@@ -446,24 +480,74 @@ export default function SoccerLive() {
 								key={goal.id}
 								className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-[#1a0a2e] border border-amber-500/10"
 							>
-								<div className="flex items-center gap-3">
-									<span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
-										{goal.minute}'
-									</span>
-									<span className="text-sm font-bold text-white/90">
-										{goal.team === "home" ? homeTeam : awayTeam}
-									</span>
-									<span className="text-sm text-white/50">
-										{goal.scorer}
-									</span>
-								</div>
-								<button
-									type="button"
-									onClick={() => handleRemoveGoal(goal.id)}
-									className="text-white/20 hover:text-red-400 text-xs cursor-pointer transition-colors"
-								>
-									取消
-								</button>
+								{editingGoalId === goal.id ? (
+									<div className="flex items-center gap-2 flex-1">
+										<input
+											type="text"
+											value={editGoalMinute}
+											onChange={(e) => setEditGoalMinute(e.target.value)}
+											onKeyDown={(e) => {
+												if (e.key === "Enter") handleConfirmEditGoal();
+												if (e.key === "Escape") setEditingGoalId(null);
+											}}
+											className="w-12 bg-[#2d1050] text-amber-400 text-xs font-mono font-bold px-2 py-1 rounded outline-none focus:ring-2 focus:ring-amber-500 text-center"
+										/>
+										<span className="text-xs text-white/30">'</span>
+										<span className="text-sm font-bold text-white/90">
+											{goal.team === "home" ? homeTeam : awayTeam}
+										</span>
+										<input
+											ref={goalScorerInputRef}
+											type="text"
+											value={editGoalScorer}
+											onChange={(e) => setEditGoalScorer(e.target.value)}
+											onKeyDown={(e) => {
+												if (e.key === "Enter") handleConfirmEditGoal();
+												if (e.key === "Escape") setEditingGoalId(null);
+											}}
+											className="flex-1 bg-[#2d1050] text-white text-sm px-2 py-1 rounded outline-none focus:ring-2 focus:ring-amber-500"
+										/>
+										<button
+											type="button"
+											onClick={handleConfirmEditGoal}
+											className="text-amber-400 hover:text-amber-300 text-xs font-bold cursor-pointer transition-colors"
+										>
+											OK
+										</button>
+										<button
+											type="button"
+											onClick={() => setEditingGoalId(null)}
+											className="text-white/20 hover:text-white/50 text-xs cursor-pointer transition-colors"
+										>
+											取消
+										</button>
+									</div>
+								) : (
+									<>
+										<button
+											type="button"
+											onClick={() => handleStartEditGoal(goal)}
+											className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+										>
+											<span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
+												{goal.minute}'
+											</span>
+											<span className="text-sm font-bold text-white/90">
+												{goal.team === "home" ? homeTeam : awayTeam}
+											</span>
+											<span className="text-sm text-white/50">
+												{goal.scorer}
+											</span>
+										</button>
+										<button
+											type="button"
+											onClick={() => handleRemoveGoal(goal.id)}
+											className="text-white/20 hover:text-red-400 text-xs cursor-pointer transition-colors"
+										>
+											取消
+										</button>
+									</>
+								)}
 							</div>
 						))}
 					</div>
