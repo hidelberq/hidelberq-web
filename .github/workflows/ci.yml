@@ -44,11 +44,6 @@ jobs:
       - name: Build
         run: bun run build
 
-      - name: Run D1 migrations
-        run: bun run db:migrate:production
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-
       - name: Strip production-only config for preview
         run: jq 'del(.triggers, .routes)' build/server/wrangler.json > build/server/wrangler.tmp.json && mv build/server/wrangler.tmp.json build/server/wrangler.json
 
