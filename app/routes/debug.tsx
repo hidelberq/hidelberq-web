@@ -487,10 +487,17 @@ export async function action({ request, context }: Route.ActionArgs) {
 		try {
 			const audioData = await audioFile.arrayBuffer();
 
+			// モバイルブラウザは空やnon-standardなMIMEタイプを送ることがある
+			// 拡張子ベースの判定を優先し、MIMEタイプはフォールバックとして使用
+			const fileName = audioFile.name.toLowerCase();
 			const isM4a =
+				fileName.endsWith(".m4a") ||
+				fileName.endsWith(".m4p") ||
+				fileName.endsWith(".aac") ||
 				audioFile.type === "audio/mp4" ||
 				audioFile.type === "audio/x-m4a" ||
-				audioFile.name.endsWith(".m4a");
+				audioFile.type === "audio/aac" ||
+				audioFile.type === "audio/m4a";
 			const ext = isM4a ? "m4a" : "mp3";
 			const audioContentType = isM4a ? "audio/mp4" : "audio/mpeg";
 			const r2Key = `hiphop/${date}/rap.${ext}`;
